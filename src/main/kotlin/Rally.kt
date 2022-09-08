@@ -24,7 +24,7 @@ class TimetableCommand : CliktCommand() {
     ).inputStream().defaultStdin()
 
     override fun run() {
-        val parser = InputRoadmapParser()
+        val parser = InputRoadmapParser(DefaultModifierValidator())
         val input = input.use {
             parser.parseRoadmap(it.reader())
         }
