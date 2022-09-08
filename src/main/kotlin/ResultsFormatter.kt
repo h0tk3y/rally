@@ -38,15 +38,19 @@ class ResultsFormatter {
             append(times.values.dropLast(1).reversed().joinToString(", ", " (", ")") { it.toMinSec().toString() })
         }
 
-        when (line) {
-            is PositionLine.SetAvgSpeed -> append(" - setavg ${line.avgspeed}")
-            is PositionLine.EndAvgSpeed -> append(" - endavg ${line.avgspeed}")
-            else -> Unit
+        if (line.modifiers.isNotEmpty()) {
+            append(" " + line.modifiers.joinToString(" ", transform = ::formatModifier))
         }
         val goAtAvgSpd = result.goAtAvgSpeed[line.lineNumber]
         if (goAtAvgSpd != null) {
             append(" – go at $goAtAvgSpd")
         }
+    }
+
+    private fun formatModifier(modifier: PositionLineModifier): String = when (modifier) {
+        is PositionLineModifier.SetAvgSpeed -> "setavg ${modifier.setavg}"
+        is PositionLineModifier.EndAvgSpeed -> "endavg ${modifier.endavg}"
+        is PositionLineModifier.ThenAvgSpeed -> "thenavg ${modifier.endavg}"
     }
 }
 
