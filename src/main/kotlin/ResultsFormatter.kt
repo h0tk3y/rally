@@ -6,12 +6,20 @@ class ResultsFormatter {
     fun formatResults(
         input: Iterable<RoadmapInputLine>,
         result: RallyTimesResult,
+        calculatedAverages: Map<LineNumber, SpeedKmh>,
         calibrationCoefficient: Double?
     ): String = buildString {
         input.forEach { line ->
             when (line) {
                 is PositionLine -> {
-                    appendLine(formatPositionLine(line, result, calibrationCoefficient))
+                    appendLine(
+                        formatPositionLine(
+                            line,
+                            result,
+                            calibrationCoefficient,
+                            calculatedAverages[line.lineNumber]
+                        )
+                    )
                 } 
                 is CommentLine -> {
                     appendLine("${CommentLine.commentPrefix} ${line.commentText}")
@@ -23,10 +31,11 @@ class ResultsFormatter {
     private fun formatPositionLine(
         line: PositionLine,
         result: RallyTimesResult,
-        calibrationCoefficient: Double?
+        calibrationCoefficient: Double?,
+        average: SpeedKmh?
     ): String = buildString {
         val atKm = line.atKm
-        val times = result.timeVectorsAtRoadmapLine.getValue(line.lineNumber)
+        val times = result.timeVectorsAtRoadmapLine[line.lineNumber] ?: TimeHrVector.of(TimeHr.zero)
         append(atKm.valueKm.strRound3().padEnd(7, ' '))
         if (calibrationCoefficient != null) {
             append(" (")
@@ -39,18 +48,30 @@ class ResultsFormatter {
         }
 
         if (line.modifiers.isNotEmpty()) {
-            append(" " + line.modifiers.joinToString(" ", transform = ::formatModifier))
+            append(
+                line.modifiers.joinToString(" ", transform = ::formatModifier)
+                    .let { str -> if (str.isNotEmpty()) " $str" else str })
         }
+
+
         val goAtAvgSpd = result.goAtAvgSpeed[line.lineNumber]
-        if (goAtAvgSpd != null) {
+        if (goAtAvgSpd != null && goAtAvgSpd != line.modifier<PositionLineModifier.SetAvg>()?.setavg) {
             append(" – go at $goAtAvgSpd")
+        }
+        if (average != null) {
+            append(" - avg $average")
         }
     }
 
     private fun formatModifier(modifier: PositionLineModifier): String = when (modifier) {
         is PositionLineModifier.SetAvgSpeed -> "setavg ${modifier.setavg}"
         is PositionLineModifier.EndAvgSpeed -> "endavg ${modifier.endavg}"
-        is PositionLineModifier.ThenAvgSpeed -> "thenavg ${modifier.endavg}"
+        is PositionLineModifier.ThenAvgSpeed -> "thenavg ${modifier.setavg}"
+        is PositionLineModifier.Here -> "here ${modifier.atTime.toMinSec()}"
+        PositionLineModifier.IsSynthetic -> "(S)"
+        is PositionLineModifier.AddSynthetic -> ""
+        is PositionLineModifier.CalculateAverage -> "- avg below"
+        is PositionLineModifier.EndCalculateAverage -> ""
     }
 }
 

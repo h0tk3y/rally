@@ -27,6 +27,7 @@ data class SpeedKmh(val valueKmh: Double) {
 
 data class DistanceKm(val valueKm: Double) {
     operator fun plus(other: DistanceKm) = DistanceKm(valueKm + other.valueKm)
+    operator fun times(other: Double) = DistanceKm(valueKm * other)
     operator fun minus(other: DistanceKm) = DistanceKm(valueKm - other.valueKm)
 
     companion object {
@@ -51,6 +52,8 @@ data class TimeHr(val timeHours: Double) {
 
         val zero = TimeHr(0.0)
     }
+
+    override fun toString(): String = "TimeHr(hr = $timeHours, minSec = ${toMinSec()})"
 }
 
 data class TimeHrVector(val values: List<TimeHr>) {

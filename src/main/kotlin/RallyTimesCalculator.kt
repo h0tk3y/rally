@@ -6,23 +6,42 @@ data class RallyTimesResult(
 )
 
 class RallyTimesCalculator {
+    private data class RecursiveCallResult(
+        val endInclusive: Int,
+        val totalTime: TimeHr,
+    )
+
+    companion object {
+        private fun getExemptDistance(
+            roadmap: List<PositionLine>,
+            subs: Map<Int, RecursiveCallResult>,
+            from: Int
+        ): DistanceKm =
+            subs.entries
+                .filter { it.key > from }
+                .map { (from, sub) -> roadmap[sub.endInclusive].atKm - roadmap[from].atKm }
+                .fold(DistanceKm.zero, DistanceKm::plus)
+
+        private fun getExemptTime(subs: Map<Int, RecursiveCallResult>, from: Int): TimeHr =
+            subs.entries
+                .filter { it.key > from }
+                .map { (_, sub) -> sub.totalTime }
+                .fold(TimeHr.zero, TimeHr::plus)
+    }
+
     fun rallyTimes(roadmap: List<PositionLine>): RallyTimesResult {
-        val timeAtPositions = mutableMapOf<LineNumber, TimeHrVector>()
+        val timeByLine = mutableMapOf<LineNumber, TimeHrVector>()
         val pureSpeedAtSubs = mutableMapOf<LineNumber, SpeedKmh>()
 
-        data class CallResult(
-            val endInclusive: Int,
-            val indexAfterSub: Int,
-            val totalTime: TimeHr
-        )
+        fun nextIndex(sub: RecursiveCallResult) =
+            if (roadmap[sub.endInclusive].isThenAvg) sub.endInclusive else sub.endInclusive + 1
 
-        fun recurse(startAtIndex: Int): CallResult {
-            val from = roadmap[startAtIndex]
-            val avg = from.modifier<PositionLineModifier.SetAvgSpeed>()?.setavg
-            
-            val subs = mutableMapOf<Int, CallResult>()
+        fun recurse(roadmap: List<PositionLine>, startAtIndex: Int, from: PositionLine?): RecursiveCallResult {
+            val avg = from?.modifier<PositionLineModifier.SetAvg>()?.setavg
 
-            var endIndexInclusive = -1
+            val subs = mutableMapOf<Int, RecursiveCallResult>()
+
+            var endInclusive = -1
             // first, make all recursive calls for the sub-intervals; those will calculate their local times
             // also, find the matching endavg for the given setavg
             run {
@@ -30,100 +49,141 @@ class RallyTimesCalculator {
                 while (i <= roadmap.lastIndex /* but will likely break earlier */) {
                     val line = roadmap[i]
 
-                    if (i != startAtIndex && line.isSetAvg) {
-                        val sub = recurse(i)
-                        subs[i] = sub
-                        i = sub.indexAfterSub
-                    } else if (line.isEndAvg) {
-                        endIndexInclusive = i
-                        checkNotNull(avg) { "found sub end at ${line.lineNumber}, but there is no setavg before" }
-                        val endavg = line.modifier<PositionLineModifier.EndAvg>()?.endavg
-                        if (endavg != null) {
-                            check(avg == endavg) { "unmatched endavg, expected ${avg} " }
-                        }
-                        break
-                    } else {
-                        checkNotNull(avg) { "found a mark ${line.atKm} at ${line.lineNumber} with no setavg before" }
-                        ++i
-                    }
-                }
-            }
-
-            if (endIndexInclusive == -1 && startAtIndex == 0) {
-                endIndexInclusive = roadmap.lastIndex
-            }
-
-            val allDst = roadmap[endIndexInclusive].atKm - roadmap[startAtIndex].atKm
-            val pureDst = run {
-                val exemptDistance = subs.entries
-                    .map { (from, sub) -> roadmap[sub.endInclusive].atKm - roadmap[from].atKm }
-                    .fold(DistanceKm.zero, DistanceKm::plus)
-                allDst - exemptDistance
-            }
-
-            val allTime = TimeHr.byMoving(allDst, checkNotNull(avg))
-            val pureTime = run {
-                allTime - subs.values.fold(TimeHr.zero) { acc, it -> acc + it.totalTime }
-            }
-
-            val pureSpeed = SpeedKmh.averageAt(pureDst, pureTime)
-            pureSpeedAtSubs[roadmap[startAtIndex].lineNumber] = pureSpeed
-
-            // iterate over the positions not handled by the nested recursive calls, calculate the time for them: 
-            run {
-                var localTime = TimeHr.zero
-                var i = startAtIndex
-
-                while (i <= endIndexInclusive) {
-                    val line = roadmap[i]
-                    val lineNumber = line.lineNumber
-
-                    timeAtPositions[lineNumber]
-                    val prevAtKm = run {
-                        val prevIndex = when (i) {
-                            startAtIndex -> startAtIndex // we want to have "moved 0km" at the start of each sub
-                            else -> i - 1
-                        }
-                        roadmap[prevIndex].atKm
-                    }
-                    val intervalDistance = line.atKm - prevAtKm
-                    val intervalTime = TimeHr.byMoving(intervalDistance, pureSpeed)
-                    localTime += intervalTime
-
-                    when (val sub = subs[i]) {
-                        null -> {
-                            timeAtPositions.compute(lineNumber) { _, old ->
-                                check(old == null)
-                                TimeHrVector.of(localTime)
+                    when {
+                        i != startAtIndex && line.isEndAvg -> {
+                            endInclusive = i
+                            checkNotNull(avg) { "found sub end at ${line.lineNumber}, but there is no setavg before" }
+                            val endavg = line.modifier<PositionLineModifier.EndAvg>()?.endavg
+                            if (endavg != null) {
+                                check(avg == endavg) { "unmatched endavg, expected ${avg} " }
                             }
-                            ++i
+                            break
+                        }
+
+                        (i != startAtIndex || from == null) && line.isSetAvg -> {
+                            do {
+                                val sub = recurse(roadmap, i, roadmap[i])
+                                subs[i] = sub
+                                i = nextIndex(sub)
+                            } while (roadmap[sub.endInclusive].isThenAvg)
                         }
 
                         else -> {
-                            val subEnd = sub.endInclusive
-                            for (j in i..subEnd) {
-                                timeAtPositions.compute(roadmap[j].lineNumber) { _, old ->
-                                    checkNotNull(old)
-                                    old.rebased(localTime)
-                                }
-                            }
-                            val endLineNumber = roadmap[subEnd].lineNumber
-                            localTime = timeAtPositions.getValue(endLineNumber).outer
-                            pureSpeedAtSubs[endLineNumber] = pureSpeed
-                            i = sub.indexAfterSub
+                            checkNotNull(avg) { "found a mark ${line.atKm} at ${line.lineNumber} with no setavg before" }
+                            ++i
                         }
                     }
                 }
             }
-            return CallResult(
-                endInclusive = endIndexInclusive,
-                indexAfterSub =  if (roadmap[endIndexInclusive].isThenAvg) endIndexInclusive else endIndexInclusive + 1,
-                allTime
+
+            if (endInclusive == -1) {
+                endInclusive = roadmap.lastIndex
+            }
+
+            // iterate over the positions not handled by the nested recursive calls, calculate the time for them: 
+            var pureSpeed = SpeedKmh(0.0)
+            var localTime = TimeHr.zero
+            var isCoveredBySubs = false
+
+            fun updatePureSpeed(roadmap: List<PositionLine>, endInclusive: Int, startAtIndex: Int, atIndex: Int) {
+                val start = roadmap[startAtIndex]
+                val end = roadmap[endInclusive]
+                val allDst = end.atKm - start.atKm
+                val at = roadmap[atIndex]
+                val passed = at.atKm - start.atKm
+                val pureDst = allDst - passed - getExemptDistance(roadmap, subs, startAtIndex)
+                if (pureDst.valueKm < 0.01) {
+                    isCoveredBySubs = true
+                    return
+                }
+
+                val allTime = TimeHr.byMoving(allDst, checkNotNull(avg))
+                val exemptTime = getExemptTime(subs, startAtIndex)
+                val pureTime = (allTime - localTime - exemptTime)
+                if (pureTime.timeHours < 0.0001) {
+                    println(
+                        "\n(!!!) Impossible to get in time; subs from ${start.lineNumber} to ${end.lineNumber} take ${exemptTime.toMinSec()}, while available time is ${allTime.toMinSec()}\n"
+                    )
+                }
+
+                pureSpeed = SpeedKmh.averageAt(pureDst, pureTime)
+                pureSpeedAtSubs[at.lineNumber] = pureSpeed
+            }
+
+            if (avg != null) {
+                updatePureSpeed(roadmap, endInclusive, startAtIndex, startAtIndex)
+            } else {
+                check(
+                    subs.map { it.key..it.value.endInclusive }.flatten().toSet()
+                        .containsAll((startAtIndex..endInclusive).toList())
+                )
+                isCoveredBySubs = true
+            }
+            var i = startAtIndex
+
+            while (i <= endInclusive) {
+                val line = roadmap[i]
+                val lineNumber = line.lineNumber
+
+                val prevAtKm = run {
+                    val prevIndex = when (i) {
+                        startAtIndex -> startAtIndex // we want to have "moved 0km" at the start of each sub
+                        else -> i - 1
+                    }
+                    roadmap[prevIndex].atKm
+                }
+                val intervalDistance = line.atKm - prevAtKm
+                val intervalTime = if (isCoveredBySubs) TimeHr.zero else TimeHr.byMoving(intervalDistance, pureSpeed)
+                localTime += intervalTime
+
+                line.modifier<PositionLineModifier.Here>()?.let { here ->
+                    localTime = here.atTime
+                    updatePureSpeed(roadmap, endInclusive, startAtIndex, i)
+                }
+
+                when (val sub = subs[i]) {
+                    null -> {
+                        timeByLine.compute(lineNumber) { key, old ->
+                            check(old == null || i == startAtIndex)
+                            old ?: TimeHrVector.of(localTime)
+                        }
+                        ++i
+                    }
+
+                    else -> {
+                        val subEnd = sub.endInclusive
+                        for (j in i..subEnd) {
+                            if (j != i || !roadmap[i].isThenAvg) {
+                                timeByLine.compute(roadmap[j].lineNumber) { _, old ->
+                                    checkNotNull(old)
+                                    if (isCoveredBySubs && subs.size == 1) 
+                                        old 
+                                    else
+                                        old.rebased(localTime)
+                                }
+                            }
+                        }
+                        val endLineNumber = roadmap[subEnd].lineNumber
+                        localTime = timeByLine.getValue(endLineNumber).outer
+                        if (!isCoveredBySubs && 
+                            subEnd != endInclusive && 
+                            !roadmap[subEnd].isThenAvg &&
+                            (roadmap[subEnd + 1].atKm - roadmap[subEnd].atKm).valueKm >= 0.1
+                        ) {
+                            pureSpeedAtSubs[endLineNumber] = pureSpeed
+                        }
+                        i = nextIndex(sub)
+                    }
+                }
+            }
+            return RecursiveCallResult(
+                endInclusive = endInclusive,
+                timeByLine.getValue(roadmap[endInclusive].lineNumber).outer - timeByLine.getValue(roadmap[startAtIndex].lineNumber).outer
             )
         }
 
-        recurse(0)
+        recurse(roadmap, 0, null)
 
-        return RallyTimesResult(timeAtPositions, pureSpeedAtSubs)
+        return RallyTimesResult(timeByLine, pureSpeedAtSubs)
     }
 }

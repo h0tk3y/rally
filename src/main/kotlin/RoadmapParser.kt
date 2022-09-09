@@ -2,16 +2,11 @@ package com.h0tk3y.rally
 
 import java.io.InputStreamReader
 
-interface ModifiersValidator {
-    data class Problem(val message: String?)
 
-    fun validateModifiers(modifiers: Collection<PositionLineModifier>): Problem?
-}
-
-class InputRoadmapParser(val modifiersValidator: ModifiersValidator) {
-    fun parseRoadmap(input: InputStreamReader): Iterable<RoadmapInputLine> {
+class InputRoadmapParser(private val modifiersValidator: ModifiersValidator) {
+    fun parseRoadmap(input: InputStreamReader): List<RoadmapInputLine> {
         return input.buffered().lineSequence().withIndex().map { (index, value) ->
-            parseLine(value, LineNumber(index + 1))
+            parseLine(value, LineNumber(index + 1, 0))
         }.toList()
     }
 
@@ -19,7 +14,7 @@ class InputRoadmapParser(val modifiersValidator: ModifiersValidator) {
         if (line.startsWith(CommentLine.commentPrefix)) {
             return CommentLine(line.removePrefix(CommentLine.commentPrefix).trim(), lineNumber)
         }
-        val parts = line.trim().split(" ", limit = 3)
+        val parts = line.trim().split(" ")
         val dst = parts.first().toDoubleOrNull() ?: error("failed to parse dst in line $lineNumber: $line")
         val d = DistanceKm(dst)
 
@@ -75,7 +70,17 @@ class InputRoadmapParser(val modifiersValidator: ModifiersValidator) {
     private val parsers = listOf<ModifierParser<*>>(
         ByWord("setavg", 1) { (arg) -> PositionLineModifier.SetAvgSpeed(parseAvgSpeed(arg)) },
         ByWord("endavg", 1) { (arg) -> PositionLineModifier.EndAvgSpeed(parseAvgSpeed(arg)) },
-        ByWord("thenavg", 1) { (arg) -> PositionLineModifier.ThenAvgSpeed(parseAvgSpeed(arg)) }
+        ByWord("thenavg", 1) { (arg) -> PositionLineModifier.ThenAvgSpeed(parseAvgSpeed(arg)) },
+        ByWord("here", 1) { (arg) ->
+            PositionLineModifier.Here(TimeMinSec.parse(arg)?.toHr() ?: error("failed to parse time"))
+        },
+        ByWord("s", 2) { (distance, count) -> 
+            val dst = distance.toDoubleOrNull() ?: error("failed to parse distance for synthetics")
+            val cnt = count.toIntOrNull() ?: error("failed to parse count for synthetics")
+            PositionLineModifier.AddSynthetic(DistanceKm(dst), cnt)
+        },
+        ByWord("calc", 0) { PositionLineModifier.CalculateAverage },
+        ByWord("endcalc", 0) { PositionLineModifier.EndCalculateAverage }
     )
 }
 
@@ -89,19 +94,9 @@ private fun parseAvgSpeed(string: String): SpeedKmh {
             SpeedKmh.averageAt(DistanceKm(d), t.toHr())
         }
 
-        s.endsWith(".") && s.removeSuffix(".").toDoubleOrNull() != null ->
-            parseAvgSpeed(s.removeSuffix(".") + SpeedKmh.kmhSuffix)
+        s.toDoubleOrNull() != null ->
+            parseAvgSpeed(s + SpeedKmh.kmhSuffix)
 
         else -> SpeedKmh.parse(s) ?: error("failed to parse avgspd notation $string")
-    }
-}
-
-class DefaultModifierValidator : ModifiersValidator {
-    override fun validateModifiers(modifiers: Collection<PositionLineModifier>): ModifiersValidator.Problem? {
-        val avg = modifiers.filter { it is PositionLineModifier.SetAvg || it is PositionLineModifier.EndAvg }
-        if (avg.size > 1) {
-            return ModifiersValidator.Problem("more than one setavg/endavg modifiers found")
-        }
-        return null
     }
 }

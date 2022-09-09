@@ -25,16 +25,18 @@ class TimetableCommand : CliktCommand() {
 
     override fun run() {
         val parser = InputRoadmapParser(DefaultModifierValidator())
-        val input = input.use {
+        val input: List<RoadmapInputLine> = input.use {
             parser.parseRoadmap(it.reader())
         }
         validateRoadmap(input)
+        val preprocessed = preprocessRoadmap(input)
 
         val calculator = RallyTimesCalculator()
-        val result = calculator.rallyTimes(input.filterIsInstance<PositionLine>())
+        val result = calculator.rallyTimes(preprocessed.filterIsInstance<PositionLine>())
         
         val formatter = ResultsFormatter()
-        println(formatter.formatResults(input, result, calibrationFactor))
+        val calculatedAverages = calculateAverages(preprocessed, result)
+        println(formatter.formatResults(preprocessed, result, calculatedAverages, calibrationFactor))
     }
 }
 
