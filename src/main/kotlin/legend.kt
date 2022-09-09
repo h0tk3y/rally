@@ -1,9 +1,11 @@
 package com.h0tk3y.rally
 
-data class LineNumber(val number: Int) {
+data class LineNumber(val number: Int, val subNumber: Int) {
     init {
         require(number >= 1) { "line numbers should be positive" }
     }
+
+    override fun toString(): String = "#$number"
 }
 
 sealed interface RoadmapInputLine {
@@ -56,6 +58,20 @@ sealed interface PositionLineModifier {
     data class EndAvgSpeed(
         override val endavg: SpeedKmh?,
     ) : EndAvg
+    
+    data class Here(
+        val atTime: TimeHr
+    ) : PositionLineModifier
+    
+    data class AddSynthetic(
+        val interval: DistanceKm,
+        val count: Int
+    ) : PositionLineModifier
+    
+    object IsSynthetic : PositionLineModifier
+    
+    object CalculateAverage : PositionLineModifier
+    object EndCalculateAverage : PositionLineModifier
 }
 
 val PositionLine.isSetAvg: Boolean
