@@ -25,25 +25,25 @@ class TimetableCommand : CliktCommand() {
 
     override fun run() {
         val parser = InputRoadmapParser(DefaultModifierValidator())
+        val formatter = ResultsFormatter()
+        
         val input: List<RoadmapInputLine> = input.use {
             parser.parseRoadmap(it.reader())
         }
-        validateRoadmap(input)
         val preprocessed = preprocessRoadmap(input)
 
         val calculator = RallyTimesCalculator()
         val result = calculator.rallyTimes(preprocessed.filterIsInstance<PositionLine>())
-        
-        val formatter = ResultsFormatter()
-        val calculatedAverages = calculateAverages(preprocessed, result)
-        println(formatter.formatResults(preprocessed, result, calculatedAverages, calibrationFactor))
-    }
-}
 
-private fun validateRoadmap(roadmap: Iterable<RoadmapInputLine>) {
-    roadmap.filterIsInstance<PositionLine>().zipWithNext().forEach { (a, b) ->
-        check(b.atKm.valueKm - a.atKm.valueKm >= 0) {
-            "the roadmap line ${b.lineNumber} is at a smaller distance than the previous line"
+        when (result) {
+            is RallyTimesResultSuccess -> {
+                val calculatedAverages = calculateAverages(preprocessed, result)
+                println(formatter.formatResults(preprocessed, result, calculatedAverages, calibrationFactor))
+            }
+
+            is RallyTimesResultFailure -> {
+                println(formatter.formatFailures(result))
+            }
         }
     }
 }

@@ -1,6 +1,7 @@
 pluginManagement {
     fun RepositoryHandler.setup() {
         mavenCentral()
+        google()
         if (this == pluginManagement.repositories) {
             gradlePluginPortal()
         }
@@ -10,16 +11,22 @@ pluginManagement {
         repositories.setup()
         versionCatalogs {
             create("libs") {
-                val kotlinVersion = version("kotlin", "1.7.10")
-                plugin("kotlin.jvm", "org.jetbrains.kotlin.jvm").versionRef(kotlinVersion)
-                plugin("kotlin.multiplatform", "org.jetbrains.kotlin.multiplatform").versionRef(kotlinVersion)
-                
                 library("clikt", "com.github.ajalt.clikt:clikt:3.5.0")
             }
         }
     }
 
     plugins {
-        kotlin("jvm").version("1.7.10")
+        kotlin("jvm").version("1.9.0")
+        kotlin("multiplatform").version(extra["kotlin.version"] as String)
+        kotlin("android").version(extra["kotlin.version"] as String)
+        id("com.android.application").version(extra["agp.version"] as String)
+        id("com.android.library").version(extra["agp.version"] as String)
+        id("org.jetbrains.compose").version(extra["compose.version"] as String)
+        id("app.cash.sqldelight") version "2.0.0-alpha05"
     }
 }
+
+include(":cli")
+include(":common")
+include(":android")

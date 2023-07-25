@@ -2,7 +2,7 @@ package com.h0tk3y.rally
 
 fun calculateAverages(
     input: Collection<RoadmapInputLine>,
-    result: RallyTimesResult
+    result: RallyTimesResultSuccess
 ): Map<LineNumber, SpeedKmh> = buildMap { 
     var startDst = DistanceKm.zero
     var startTime = TimeHr.zero

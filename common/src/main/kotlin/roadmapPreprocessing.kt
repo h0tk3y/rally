@@ -40,6 +40,8 @@ fun preprocessRoadmap(input: Collection<RoadmapInputLine>): Collection<RoadmapIn
                 }.orEmpty()
                 syntheticQueue.addAll(addSyn)
             }
+
+            else -> error("unexpected line $e")
         }
     }
 }
