@@ -35,11 +35,11 @@ data class DistanceKm(val valueKm: Double) {
     }
 }
 
-data class TimeHr(val timeHours: Double) {
+data class TimeHr(val timeHours: Double): Comparable<TimeHr> {
     fun toMinSec(): TimeMinSec {
-        val sec = timeHours * 3600
-        val min = (sec / 60).toInt()
-        val remSec = (sec % 60).toInt()
+        val sec = (timeHours * 3600).roundToInt()
+        val min = (sec / 60)
+        val remSec = (sec % 60)
         return TimeMinSec(min, remSec)
     }
 
@@ -53,11 +53,16 @@ data class TimeHr(val timeHours: Double) {
         val zero = TimeHr(0.0)
     }
 
+    override fun compareTo(other: TimeHr): Int = compareValues(timeHours, other.timeHours)
+
     override fun toString(): String = "TimeHr(hr = $timeHours, minSec = ${toMinSec()})"
 }
 
 data class TimeHrVector(val values: List<TimeHr>) {
     fun rebased(base: TimeHr) = TimeHrVector(values + (values.lastOrNull()?.plus(base) ?: base))
+    fun mapOuter(mapFn: (outer: TimeHr) -> TimeHr) =
+        TimeHrVector(values.dropLast(1) + if (values.isNotEmpty()) listOf(values.last().let(mapFn)) else emptyList())
+    
     val outer: TimeHr get() = values.last()
     companion object {
         fun of(timeHr: TimeHr) = TimeHrVector(listOf(timeHr))
@@ -78,5 +83,45 @@ data class TimeMinSec(val min: Int, val sec: Int) {
             }
             return TimeMinSec(m, s)
         }
+    }
+}
+
+interface RelativeSubTimesTree {
+    fun put(position: PositionLine, relativeTo: PositionLine, time: TimeHr)
+    fun get(position: PositionLine, relativeTo: PositionLine): TimeHr
+    fun relativesChain(position: PositionLine): List<PositionLine>
+    fun globalTime(position: PositionLine): TimeHr
+}
+
+class RelativeSubTimesTreeImpl(globalStart: PositionLine) : RelativeSubTimesTree {
+    private class Node(val position: PositionLine, var parent: PositionLine?) {
+        val children: MutableMap<Node, TimeHr> = mutableMapOf()
+    }
+    
+    private val nodeByPosition: MutableMap<PositionLine, Node> = mutableMapOf()
+    
+    private fun addNode(node: Node, withRelativeTime: TimeHr) {
+        nodeByPosition[node.position] = node
+        node.parent?.let { parent ->
+            nodeByPosition.getValue(parent).children.put(node, withRelativeTime)
+        }
+    }
+    
+    private val root = Node(globalStart, parent = null).apply { addNode(this, TimeHr.zero) }
+    
+    override fun put(position: PositionLine, relativeTo: PositionLine, time: TimeHr) {
+        TODO()
+    }
+
+    override fun get(position: PositionLine, relativeTo: PositionLine): TimeHr {
+        TODO("Not yet implemented")
+    }
+
+    override fun relativesChain(position: PositionLine): List<PositionLine> {
+        TODO("Not yet implemented")
+    }
+
+    override fun globalTime(position: PositionLine): TimeHr {
+        TODO("Not yet implemented")
     }
 }
