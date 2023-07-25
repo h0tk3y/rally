@@ -1,10 +1,9 @@
 package com.h0tk3y.rally
 
-import java.io.InputStreamReader
-
+import java.io.Reader
 
 class InputRoadmapParser(private val modifiersValidator: ModifiersValidator) {
-    fun parseRoadmap(input: InputStreamReader): List<RoadmapInputLine> {
+    fun parseRoadmap(input: Reader): List<RoadmapInputLine> {
         return input.buffered().lineSequence().withIndex().map { (index, value) ->
             parseLine(value, LineNumber(index + 1, 0))
         }.toList()
@@ -54,6 +53,7 @@ class InputRoadmapParser(private val modifiersValidator: ModifiersValidator) {
     private class ByWord<T : PositionLineModifier>(
         private val word: String,
         private val consumeParts: Int,
+        private val partsAreNumbers: Boolean = true,
         private val buildModifier: (List<String>) -> T?
     ) : ModifierParser<T> {
         override fun parse(parts: List<String>): ModifierParseResult<T> =
@@ -61,8 +61,13 @@ class InputRoadmapParser(private val modifiersValidator: ModifiersValidator) {
                 parts[0] != word -> ModifierParseResult.None
                 parts.size - 1 < consumeParts -> ModifierParseResult.None
                 else -> {
-                    val result = ModifierParseResult(buildModifier(parts.subList(1, parts.size)), consumeParts + 1)
-                    result.takeIf { it.modifier != null } ?: ModifierParseResult.None
+                    val subList = parts.subList(1, parts.size)
+                    if (partsAreNumbers && subList.take(consumeParts).any { it.toDoubleOrNull() == null }) {
+                        ModifierParseResult.None
+                    } else {
+                        val result = ModifierParseResult(buildModifier(subList), consumeParts + 1)
+                        result.takeIf { it.modifier != null } ?: ModifierParseResult.None
+                    }
                 }
             }
     }
@@ -70,6 +75,7 @@ class InputRoadmapParser(private val modifiersValidator: ModifiersValidator) {
     private val parsers = listOf<ModifierParser<*>>(
         ByWord("setavg", 1) { (arg) -> PositionLineModifier.SetAvgSpeed(parseAvgSpeed(arg)) },
         ByWord("endavg", 1) { (arg) -> PositionLineModifier.EndAvgSpeed(parseAvgSpeed(arg)) },
+        ByWord("endavg", 0) { (_) -> PositionLineModifier.EndAvgSpeed(null) },
         ByWord("thenavg", 1) { (arg) -> PositionLineModifier.ThenAvgSpeed(parseAvgSpeed(arg)) },
         ByWord("here", 1) { (arg) ->
             PositionLineModifier.Here(TimeMinSec.parse(arg)?.toHr() ?: error("failed to parse time"))

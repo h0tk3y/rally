@@ -1,11 +1,45 @@
 package com.h0tk3y.rally
 
-data class RallyTimesResult(
+sealed interface RallyTimesResult
+
+data class RallyTimesResultSuccess(
     val timeVectorsAtRoadmapLine: Map<LineNumber, TimeHrVector>,
-    val goAtAvgSpeed: Map<LineNumber, SpeedKmh?>
+    val goAtAvgSpeed: Map<LineNumber, SpeedKmh?>,
+    val warnings: List<CalculationWarning>
+) : RallyTimesResult
+
+data class RallyTimesResultFailure(
+    val failures: List<CalculationFailure>
+) : RallyTimesResult
+
+data class CalculationWarning(
+    val line: RoadmapInputLine,
+    val reason: WarningReason
 )
 
-class RallyTimesCalculator {
+sealed interface WarningReason {
+    data class ImpossibleToGetInTime(val start: RoadmapInputLine, val takes: TimeHr, val available: TimeHr) :
+        WarningReason
+}
+
+data class CalculationFailure(
+    val line: RoadmapInputLine,
+    val reason: FailureReason
+)
+
+sealed interface FailureReason {
+    object AverageSpeedUnknown : FailureReason
+    object UnexpectedAverageEnd : FailureReason
+    object NonMatchingAverageEnd : FailureReason
+    object OuterIntervalNotCovered : FailureReason
+    data class DistanceIsNotIncreasing(val shouldBeAtLeast: DistanceKm) : FailureReason
+}
+
+interface RallyTimes {
+    fun rallyTimes(roadmap: List<PositionLine>): RallyTimesResult
+}
+
+class RallyTimesCalculator : RallyTimes {
     private data class RecursiveCallResult(
         val endInclusive: Int,
         val totalTime: TimeHr,
@@ -29,9 +63,17 @@ class RallyTimesCalculator {
                 .fold(TimeHr.zero, TimeHr::plus)
     }
 
-    fun rallyTimes(roadmap: List<PositionLine>): RallyTimesResult {
+    override fun rallyTimes(roadmap: List<PositionLine>): RallyTimesResult {
+        val preResult = validateRoadmap(roadmap)
+        if (preResult is RallyTimesResultFailure) {
+            return preResult
+        }
+        
         val timeByLine = mutableMapOf<LineNumber, TimeHrVector>()
         val pureSpeedAtSubs = mutableMapOf<LineNumber, SpeedKmh>()
+
+        val failures: MutableList<CalculationFailure> = mutableListOf()
+        val warnings: MutableList<CalculationWarning> = mutableListOf()
 
         fun nextIndex(sub: RecursiveCallResult) =
             if (roadmap[sub.endInclusive].isThenAvg) sub.endInclusive else sub.endInclusive + 1
@@ -40,6 +82,10 @@ class RallyTimesCalculator {
             val avg = from?.modifier<PositionLineModifier.SetAvg>()?.setavg
 
             val subs = mutableMapOf<Int, RecursiveCallResult>()
+
+            if (roadmap.isEmpty()) {
+                return RecursiveCallResult(startAtIndex, TimeHr.zero)
+            }
 
             var endInclusive = -1
             // first, make all recursive calls for the sub-intervals; those will calculate their local times
@@ -52,10 +98,12 @@ class RallyTimesCalculator {
                     when {
                         i != startAtIndex && line.isEndAvg -> {
                             endInclusive = i
-                            checkNotNull(avg) { "found sub end at ${line.lineNumber}, but there is no setavg before" }
+                            if (avg == null) {
+                                failures.add(CalculationFailure(line, FailureReason.UnexpectedAverageEnd))
+                            }
                             val endavg = line.modifier<PositionLineModifier.EndAvg>()?.endavg
                             if (endavg != null) {
-                                check(avg == endavg) { "unmatched endavg, expected ${avg} " }
+                                failures.add(CalculationFailure(line, FailureReason.NonMatchingAverageEnd))
                             }
                             break
                         }
@@ -69,7 +117,6 @@ class RallyTimesCalculator {
                         }
 
                         else -> {
-                            checkNotNull(avg) { "found a mark ${line.atKm} at ${line.lineNumber} with no setavg before" }
                             ++i
                         }
                     }
@@ -92,15 +139,19 @@ class RallyTimesCalculator {
                 val at = roadmap[atIndex]
                 val passed = at.atKm - start.atKm
                 val pureDst = allDst - passed - getExemptDistance(roadmap, subs, startAtIndex)
-                if (pureDst.valueKm < 0.01) {
+                if (pureDst.valueKm < 0.001) {
                     isCoveredBySubs = true
                     return
                 }
 
-                val allTime = TimeHr.byMoving(allDst, checkNotNull(avg))
+                val allTime = TimeHr.byMoving(allDst, avg ?: SpeedKmh(999.0))
                 val exemptTime = getExemptTime(subs, startAtIndex)
                 val pureTime = (allTime - localTime - exemptTime)
                 if (pureTime.timeHours < 0.0001) {
+                    warnings.add(
+                        CalculationWarning(end, WarningReason.ImpossibleToGetInTime(start, exemptTime, allTime))
+                    )
+
                     println(
                         "\n(!!!) Impossible to get in time; subs from ${start.lineNumber} to ${end.lineNumber} take ${exemptTime.toMinSec()}, while available time is ${allTime.toMinSec()}\n"
                     )
@@ -113,11 +164,15 @@ class RallyTimesCalculator {
             if (avg != null) {
                 updatePureSpeed(roadmap, endInclusive, startAtIndex, startAtIndex)
             } else {
-                check(
-                    subs.map { it.key..it.value.endInclusive }.flatten().toSet()
-                        .containsAll((startAtIndex..endInclusive).toList())
-                )
-                isCoveredBySubs = true
+                val positionsInSubs = subs.map { it.key..it.value.endInclusive }.flatten().toSet()
+                val positionsNotInSubs = (startAtIndex..endInclusive).filter { it !in positionsInSubs }
+                if (positionsNotInSubs.isEmpty()) {
+                    isCoveredBySubs = true
+                } else {
+                    failures.addAll(positionsNotInSubs.map {
+                        CalculationFailure(roadmap[it], FailureReason.AverageSpeedUnknown)
+                    })
+                }
             }
             var i = startAtIndex
 
@@ -143,7 +198,7 @@ class RallyTimesCalculator {
 
                 when (val sub = subs[i]) {
                     null -> {
-                        timeByLine.compute(lineNumber) { key, old ->
+                        timeByLine.compute(lineNumber) { _, old ->
                             check(old == null || i == startAtIndex)
                             old ?: TimeHrVector.of(localTime)
                         }
@@ -152,8 +207,9 @@ class RallyTimesCalculator {
 
                     else -> {
                         val subEnd = sub.endInclusive
+                        val subIsThenAvg = roadmap[i].isThenAvg
                         for (j in i..subEnd) {
-                            if (j != i || !roadmap[i].isThenAvg) {
+                            if (j != i || !subIsThenAvg) {
                                 timeByLine.compute(roadmap[j].lineNumber) { _, old ->
                                     checkNotNull(old)
                                     if (isCoveredBySubs && subs.size == 1) 
@@ -178,12 +234,46 @@ class RallyTimesCalculator {
             }
             return RecursiveCallResult(
                 endInclusive = endInclusive,
-                timeByLine.getValue(roadmap[endInclusive].lineNumber).outer - timeByLine.getValue(roadmap[startAtIndex].lineNumber).outer
+                timeByLine.getValue(roadmap[endInclusive].lineNumber).outer/* - timeByLine.getValue(roadmap[startAtIndex].lineNumber).outer*/
             )
         }
 
         recurse(roadmap, 0, null)
 
-        return RallyTimesResult(timeByLine, pureSpeedAtSubs)
+        if (failures.isNotEmpty()) {
+            return RallyTimesResultFailure(failures)
+        }
+
+        return RallyTimesResultSuccess(timeByLine, pureSpeedAtSubs, warnings)
     }
+
+}
+
+fun validateRoadmap(roadmap: Iterable<RoadmapInputLine>): RallyTimesResultFailure? {
+    val failures = mutableListOf<CalculationFailure>()
+    var max = Double.NEGATIVE_INFINITY
+    roadmap.filterIsInstance<PositionLine>().forEach {
+        if (it.atKm.valueKm < max - 0.0001) {
+            failures.add(CalculationFailure(it, FailureReason.DistanceIsNotIncreasing(DistanceKm(max))))
+        }
+        max = maxOf(max, it.atKm.valueKm)
+    }
+    
+    var depth = 0
+    roadmap.filterIsInstance<PositionLine>().forEach {
+        if (it.isSetAvg) {
+            depth++
+        } else if (it.isEndAvg) {
+            depth--
+            if (depth < 0) {
+                failures.add(CalculationFailure(it, FailureReason.UnexpectedAverageEnd))
+            }
+        } else if (depth <= 0) {
+            failures.add(CalculationFailure(it, FailureReason.AverageSpeedUnknown))
+        }
+    }
+    
+    return if (failures.isNotEmpty())
+        RallyTimesResultFailure(failures)
+    else null
 }

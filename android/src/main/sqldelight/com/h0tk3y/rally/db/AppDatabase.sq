@@ -1,0 +1,32 @@
+CREATE TABLE Section (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    serializedPositions TEXT NOT NULL
+);
+
+selectAllSections:
+SELECT Section.* FROM Section;
+
+selectSectionByExactName:
+SELECT (Section.id) FROM Section WHERE Section.name = ?;
+
+selectSectionById:
+SELECT Section.* FROM Section WHERE Section.id = ?;
+
+updatePositions:
+UPDATE Section SET serializedPositions = ? WHERE id = ?;
+
+updateName:
+UPDATE Section SET name = ? WHERE id = ?;
+
+deleteSection:
+DELETE FROM Section WHERE id = ?;
+
+lastInsertedId:
+SELECT last_insert_rowid();
+
+createEmptySection:
+INSERT OR IGNORE INTO Section(id, name, serializedPositions) VALUES (?, ?, "");
+
+createSection:
+INSERT OR IGNORE INTO Section(id, name, serializedPositions) VALUES (?, ?, ?);

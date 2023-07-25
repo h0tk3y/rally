@@ -1,16 +1,10 @@
 @Suppress("DSL_SCOPE_VIOLATION") // https://youtrack.jetbrains.com/issue/KTIJ-19369
 plugins {
-    alias(libs.plugins.kotlin.jvm)
-    application
+    kotlin("multiplatform") apply false
+    kotlin("android") apply false
+    id("com.android.application") apply false
+    id("com.android.library") apply false
+    id("org.jetbrains.compose") apply false
 }
 
 group = "com.h0tk3y.rally"
-version = "1.0"
-
-dependencies {
-    implementation(libs.clikt)
-}
-
-application {
-    mainClass.set("com.h0tk3y.rally.RallyKt")
-}

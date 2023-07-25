@@ -1,11 +1,17 @@
 package com.h0tk3y.rally
 
-data class LineNumber(val number: Int, val subNumber: Int) {
+data class LineNumber(val number: Int, val subNumber: Int) : Comparable<LineNumber> {
     init {
         require(number >= 1) { "line numbers should be positive" }
+        require(subNumber >= 0) { "line numbers should be non-negative" }
     }
 
-    override fun toString(): String = "#$number"
+    override fun toString(): String = "#$number" + subNumber.let { if (it > 0) ":$it" else "" }
+
+    override operator fun compareTo(other: LineNumber) =
+        if (other.number != number)
+            other.number - number
+        else other.subNumber - subNumber
 }
 
 sealed interface RoadmapInputLine {
@@ -25,7 +31,10 @@ data class PositionLine(
     val atKm: DistanceKm,
     override val lineNumber: LineNumber,
     val modifiers: List<PositionLineModifier>
-) : RoadmapInputLine
+) : RoadmapInputLine {
+    override fun toString(): String =
+        atKm.valueKm.strRound3() + " " + ResultsFormatter().modifiersString(this)
+}
 
 inline fun <reified T> PositionLine.modifier(): T? =
     modifiers.filterIsInstance<T>().let { matching ->
@@ -40,11 +49,11 @@ sealed interface PositionLineModifier {
     sealed interface SetAvg : PositionLineModifier {
         val setavg: SpeedKmh
     }
-    
+
     sealed interface EndAvg : PositionLineModifier {
         val endavg: SpeedKmh?
     }
-    
+
     data class SetAvgSpeed(
         override val setavg: SpeedKmh,
     ) : SetAvg
@@ -58,18 +67,18 @@ sealed interface PositionLineModifier {
     data class EndAvgSpeed(
         override val endavg: SpeedKmh?,
     ) : EndAvg
-    
+
     data class Here(
         val atTime: TimeHr
     ) : PositionLineModifier
-    
+
     data class AddSynthetic(
         val interval: DistanceKm,
         val count: Int
     ) : PositionLineModifier
-    
+
     object IsSynthetic : PositionLineModifier
-    
+
     object CalculateAverage : PositionLineModifier
     object EndCalculateAverage : PositionLineModifier
 }

@@ -5,7 +5,7 @@ import kotlin.math.roundToInt
 class ResultsFormatter {
     fun formatResults(
         input: Iterable<RoadmapInputLine>,
-        result: RallyTimesResult,
+        result: RallyTimesResultSuccess,
         calculatedAverages: Map<LineNumber, SpeedKmh>,
         calibrationCoefficient: Double?
     ): String = buildString {
@@ -28,9 +28,27 @@ class ResultsFormatter {
         }
     }
 
+    fun formatFailures(
+        result: RallyTimesResultFailure
+    ): String {
+        return result.failures.joinToString("\n") { formatFailureLine(it) }
+    }
+
+    private fun formatFailureLine(
+        failure: CalculationFailure
+    ): String {
+        return "" + failure.line.lineNumber + " " + when (failure.reason) {
+            is FailureReason.DistanceIsNotIncreasing -> "distance is not increasing"
+            is FailureReason.NonMatchingAverageEnd -> "endavg speed does not match the set average"
+            is FailureReason.AverageSpeedUnknown -> "position out of any interval with known speed"
+            is FailureReason.UnexpectedAverageEnd -> "average ending found but no setavg"
+            is FailureReason.OuterIntervalNotCovered -> "outer interval not covered by subs"
+        }
+    }
+
     private fun formatPositionLine(
         line: PositionLine,
-        result: RallyTimesResult,
+        result: RallyTimesResultSuccess,
         calibrationCoefficient: Double?,
         average: SpeedKmh?
     ): String = buildString {
@@ -48,9 +66,7 @@ class ResultsFormatter {
         }
 
         if (line.modifiers.isNotEmpty()) {
-            append(
-                line.modifiers.joinToString(" ", transform = ::formatModifier)
-                    .let { str -> if (str.isNotEmpty()) " $str" else str })
+            append(modifiersString(line))
         }
 
 
@@ -63,9 +79,13 @@ class ResultsFormatter {
         }
     }
 
+    fun modifiersString(line: PositionLine): String =
+        line.modifiers.joinToString(" ", transform = ::formatModifier)
+            .let { str -> if (str.isNotEmpty()) " $str" else str }
+
     private fun formatModifier(modifier: PositionLineModifier): String = when (modifier) {
         is PositionLineModifier.SetAvgSpeed -> "setavg ${modifier.setavg}"
-        is PositionLineModifier.EndAvgSpeed -> "endavg ${modifier.endavg}"
+        is PositionLineModifier.EndAvgSpeed -> "endavg ${modifier.endavg?.toString() ?: ""}"
         is PositionLineModifier.ThenAvgSpeed -> "thenavg ${modifier.setavg}"
         is PositionLineModifier.Here -> "here ${modifier.atTime.toMinSec()}"
         PositionLineModifier.IsSynthetic -> "(S)"
@@ -75,5 +95,8 @@ class ResultsFormatter {
     }
 }
 
-private fun Double.strRound3(): String =
+fun Double.strRound3(): String =
     ((this * 1000).roundToInt() / 1000.0).toString()
+
+fun Double.strRound1(): String =
+    ((this * 10).roundToInt() / 10.0).toString()

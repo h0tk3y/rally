@@ -1,12 +1,10 @@
-0 thenavg 60 calc s 0.3 100
-0.06 thenavg 40
-0.57 thenavg 60
-1.8 thenavg 40
-1.94 thenavg 60
-4.67 thenavg 20
-5.7 thenavg 60 
-6.53 thenavg 40
-8.07 thenavg 60
-8.3 thenavg 40
-8.46 thenavg 60
-11.1
+0.0 setavg 60
+0.5 setavg 0
+0.5 setavg 40
+1.0 endavg
+1.0 setavg 120
+3.0 endavg
+3.0 setavg 40 s 0.05 5
+3.5 endavg
+3.5 endavg 
+4.0 endavg
