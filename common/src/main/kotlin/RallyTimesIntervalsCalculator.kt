@@ -39,12 +39,17 @@ internal data class Interval(
     val totalDistance: DistanceKm = end.atKm - start.atKm
 
     val pureDistance: DistanceKm = DistanceKm(pureFragments.sumOf { it.distance.valueKm })
-    val targetTime: TimeHr = TimeHr.byMoving(totalDistance, targetAverageSpeedKmh)
+    val targetTime: TimeHr = TimeHr.byMovingOrZero(start.atKm, end.atKm, targetAverageSpeedKmh)
 
     val exemptTime: TimeHr = TimeHr(subIntervals.sumOf { it.targetTime.timeHours })
-    val pureTime: TimeHr = targetTime - exemptTime
+    val pureTime: TimeHr = maxOf(if (targetTime.timeHours.isInfinite()) targetTime else targetTime - exemptTime, TimeHr.zero)
 
     val pureSpeed: SpeedKmh = SpeedKmh.averageAt(pureDistance, pureTime)
+}
+
+private fun TimeHr.Companion.byMovingOrZero(startKm: DistanceKm, endKm: DistanceKm, speedKmh: SpeedKmh) = when {
+    startKm == endKm -> TimeHr(0.0)
+    else -> byMoving(endKm - startKm, speedKmh)
 }
 
 internal class IntervalTimesEvaluator {
