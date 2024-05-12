@@ -94,6 +94,76 @@ data class TimeMinSec(val min: Int, val sec: Int, val isInfinity: Boolean) {
     }
 }
 
+data class TimeOfDay(val dayOverflow: Int = 0, val hr: Int, val min: Int, val sec: Int) {
+    init {
+        require(hr in 0..23)
+        require(min in 0..59)
+        require(sec in 0..59)
+        require(dayOverflow >= 0)
+    }
+
+    operator fun plus(timeMinSec: TimeMinSec): TimeOfDay {
+        val newSecRaw = sec + timeMinSec.sec
+        val newSec = newSecRaw % 60
+        val secOverflowMin = newSecRaw / 60
+
+        val newMinRaw = min + timeMinSec.min + secOverflowMin
+        val newMin = newMinRaw % 60
+        val minOverflowHr = newMinRaw / 60
+
+        val newHrRaw = hr + minOverflowHr
+        val newHr = newHrRaw % 24
+        val hrOverflowDay = newHrRaw / 24
+
+        val newDayOverflow = dayOverflow + hrOverflowDay
+
+        return TimeOfDay(newDayOverflow, newHr, newMin, newSec)
+    }
+
+    operator fun plus(other: TimeOfDay): TimeOfDay {
+        val newSecRaw = sec + other.sec
+        val newSec = newSecRaw % 60
+        val secOverflowMin = newSecRaw / 60
+
+        val newMinRaw = min + other.min + secOverflowMin
+        val newMin = newMinRaw % 60
+        val minOverflowHr = newMinRaw / 60
+
+        val newHrRaw = hr + other.hr + minOverflowHr
+        val newHr = newHrRaw / 24
+        val hrOverflowDay = newHrRaw % 24
+
+        val newDayOverflow = dayOverflow + other.dayOverflow + hrOverflowDay
+
+        return TimeOfDay(newDayOverflow, newHr, newMin, newSec)
+    }
+
+    fun timeStrNoDayOverflow(): String =
+        "${hr.toString().padStart(2, '0')}:" +
+                "${min.toString().padStart(2, '0')}:" +
+                "${sec.toString().padStart(2, '0')}"
+
+    fun timeStr(): String = "$dayOverflow:" + timeStrNoDayOverflow()
+
+    companion object {
+        fun parse(string: String): TimeOfDay {
+            val parts = string.split(":")
+            if (parts.size == 3) {
+                return TimeOfDay(0, parts[0].toInt(), parts[1].toInt(), parts[2].toInt())
+            } else if (parts.size == 4) {
+                return TimeOfDay(
+                    parts[0].toInt(),
+                    parts[1].toInt(),
+                    parts[2].toInt(),
+                    parts[3].toInt()
+                )
+            } else {
+                throw IllegalArgumentException("expected time of day, got $string")
+            }
+        }
+    }
+}
+
 interface RelativeSubTimesTree {
     fun put(position: PositionLine, relativeTo: PositionLine, time: TimeHr)
     fun get(position: PositionLine, relativeTo: PositionLine): TimeHr

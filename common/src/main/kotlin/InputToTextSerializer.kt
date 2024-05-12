@@ -22,6 +22,7 @@ object InputToTextSerializer {
                                 if (modifier.endavg != null) {
                                     " " + modifier.endavg.valueKmh.strRound3()
                                 } else ""
+                            is AstroTime -> "atime ${modifier.timeOfDay.timeStr()}"
 
                             is ThenAvgSpeed -> "thenavg " + modifier.setavg.valueKmh.strRound3()
                             is Here -> "here " + modifier.atTime.toMinSec()

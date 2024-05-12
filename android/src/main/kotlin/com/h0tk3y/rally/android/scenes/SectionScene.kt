@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.rounded.Done
 import androidx.compose.material.icons.rounded.Edit
@@ -23,6 +24,7 @@ import com.h0tk3y.rally.android.PreferenceRepository
 import com.h0tk3y.rally.android.db.Database
 import com.h0tk3y.rally.android.db.SectionInsertOrRenameResult
 import com.h0tk3y.rally.android.scenes.DataKind.*
+import com.h0tk3y.rally.android.scenes.DataKind.AstroTime
 import com.h0tk3y.rally.android.scenes.TimeAllowance.BY_TEN_FULL
 import com.h0tk3y.rally.android.scenes.TimeAllowance.BY_TEN_FULL_PLUS_ONE
 import com.h0tk3y.rally.android.views.GridKey
@@ -48,7 +50,7 @@ fun SectionScene(
     val results by model.results.collectAsState(RallyTimesResultFailure(emptyList()))
     val subsMatch by model.subsMatching.collectAsState(SubsMatch.EMPTY)
     val editorState by model.editorState.collectAsState(
-        EditorState(false, true, true, true, true, true, true, true)
+        EditorState(false, true, true, 9, true, true, true, true)
     )
     val editorFocus by model.editorFocus.collectAsState()
     val allowance by model.timeAllowance.collectAsState(null)
@@ -86,7 +88,7 @@ fun SectionScene(
                 DialogKind.RENAME,
                 currentSection.value,
                 { showRenameDialog = false },
-                { newName -> 
+                { newName ->
                     when (val result = database.renameSection(sectionId, newName)) {
                         is SectionInsertOrRenameResult.AlreadyExists -> ItemSaveResult.AlreadyExists
                         is SectionInsertOrRenameResult.Success -> {
@@ -115,7 +117,7 @@ fun SectionScene(
                 },
                 navigationIcon = {
                     IconButton(onClick = { onBack() }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = null)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
                     }
                 },
                 actions = {
@@ -265,6 +267,7 @@ data class EditorState(
     val isEnabled: Boolean = true,
     val canEnterDot: Boolean = true,
     val canEnterDigits: Boolean = true,
+    val maxDigit: Int = 9,
     val canMoveUp: Boolean = true,
     val canMoveDown: Boolean = true,
     val canMoveLeft: Boolean = true,
@@ -278,7 +281,7 @@ data class EditorFocus(
 )
 
 enum class DataKind {
-    Distance, AverageSpeed, SyntheticCount, SyntheticInterval,
+    Distance, AverageSpeed, SyntheticCount, SyntheticInterval, AstroTime
 }
 
 fun itemText(line: RoadmapInputLine, dataKind: DataKind): String? =
@@ -289,6 +292,7 @@ fun itemText(line: RoadmapInputLine, dataKind: DataKind): String? =
         AverageSpeed -> line.modifier<SetAvg>()?.setavg?.valueKmh?.strRound3()
         SyntheticCount -> line.modifier<AddSynthetic>()?.count.toString()
         SyntheticInterval -> line.modifier<AddSynthetic>()?.interval?.valueKm?.strRound3()
+        AstroTime -> line.modifier<PositionLineModifier.AstroTime>()?.timeOfDay?.timeStrNoDayOverflow()
     }
 
 fun presentFields(item: PositionLine) = buildList {
@@ -299,6 +303,9 @@ fun presentFields(item: PositionLine) = buildList {
     if (item.modifier<AddSynthetic>() != null) {
         add(SyntheticCount)
         add(SyntheticInterval)
+    }
+    if (item.modifier<PositionLineModifier.AstroTime>() != null) {
+        add(AstroTime)
     }
 }
 

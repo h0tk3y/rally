@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import moe.tlaster.precompose.viewmodel.ViewModel
 import moe.tlaster.precompose.viewmodel.viewModelScope
+import kotlin.math.sign
 
 class SectionViewModel(
     private val sectionId: Long,
@@ -106,7 +107,7 @@ class SectionViewModel(
                 cursor = reasonableEditorStartPosition(itemText(item, newKind).orEmpty()),
                 kind = newKind
             )
-            updateFocus(newFocus)
+            updateFocus(sanitizeFocus(newFocus))
         }
 
     }
@@ -119,7 +120,7 @@ class SectionViewModel(
 
     override fun keyPress(key: GridKey) {
         when (key) {
-            GridKey.SETAVG, GridKey.THENAVG, GridKey.ENDAVG, GridKey.SYNTH -> focusOrSwitchModifier(key)
+            GridKey.SETAVG, GridKey.THENAVG, GridKey.ENDAVG, GridKey.SYNTH, GridKey.ATIME -> focusOrSwitchModifier(key)
             GridKey.N_1, GridKey.N_2, GridKey.N_3, GridKey.N_4, GridKey.N_5, GridKey.N_6, GridKey.N_7, GridKey.N_8, GridKey.N_9, GridKey.N_0 -> enterCharacter(
                 key.name.last()
             )
@@ -188,6 +189,20 @@ class SectionViewModel(
             if (currentText != null) {
                 val cursor = editorFocus.cursor
                 when {
+                    editorFocus.kind == DataKind.AstroTime -> {
+                        if (cursor != 0) {
+                            val isAfterColon = currentText.getOrNull(cursor - 1) == ':'
+                            val takeChars = if (isAfterColon) cursor - 2 else cursor - 1
+                            val dropChars = cursor
+                            updateCurrentText(
+                                item,
+                                editorFocus,
+                                currentText.take(takeChars) + '0' + (if (isAfterColon) ":" else "") + currentText.drop(dropChars)
+                            )
+                        }
+                        moveCursor(if (currentText.getOrNull(cursor - 1) == ':') -2 else -1)
+                    }
+
                     currentText.indexOf('.') == 1 && cursor == 1 -> {
                         val newText = "0" + currentText.drop(1)
                         updateCurrentText(item, editorFocus, newText)
@@ -221,6 +236,10 @@ class SectionViewModel(
             if (currentText != null) {
                 val cursor = editorFocus.cursor
                 val newText = when {
+                    // ATIME:
+                    editorFocus.kind == DataKind.AstroTime -> fixTimeAfterEntered(currentText.take(cursor) + char + currentText.drop(cursor + 1))
+
+                    // Others:
                     char.isDigit() -> currentText.take(cursor) + char + currentText.drop(cursor)
                     char == '.' -> currentText.take(cursor).replace(".", "") + char + currentText.drop(cursor)
                         .replace(".", "")
@@ -228,6 +247,11 @@ class SectionViewModel(
                     else -> currentText
                 }
                 val newCursor = when {
+                    // ATIME:
+                    char.isDigit() && currentText.getOrNull(cursor + 1) == ':' -> cursor + 2
+                    editorFocus.kind == DataKind.AstroTime -> cursor + 1
+
+                    // Others:
                     char.isDigit() && cursor == 1 && currentText.startsWith("0.") -> cursor
                     char.isDigit() && currentText.indexOf('.')
                         .let { it != -1 && cursor < it } && currentText.startsWith("0") ->
@@ -246,11 +270,21 @@ class SectionViewModel(
         }
     }
 
+    private fun fixTimeAfterEntered(timeString: String): String {
+        val parts = timeString.split(":")
+        val resultParts = parts.toMutableList()
+        if (parts[0].toInt() > 23) resultParts[0] = "23"
+        return resultParts.joinToString(":")
+    }
+
     private val currentItem: PositionLine?
         get() = currentItems.find { it.lineNumber == _selectedLineNumber.value } as? PositionLine
 
     private fun updateFocus(editorFocus: EditorFocus) {
-        _editorFocus.value = editorFocus
+        val focusWithSanitizedCursor = if (editorFocus.kind == DataKind.AstroTime) {
+            if (editorFocus.cursor == 2 || editorFocus.cursor == 5) editorFocus.copy(cursor = editorFocus.cursor + 1) else editorFocus
+        } else editorFocus
+        _editorFocus.value = focusWithSanitizedCursor
     }
 
     private fun maybePreprocess(positions: List<RoadmapInputLine>): List<RoadmapInputLine> =
@@ -273,6 +307,14 @@ class SectionViewModel(
                     indexDelta > 0 && current.cursor == currentText?.length && currentFieldIndex < fields.size -> {
                         val newField = fields[currentFieldIndex + 1]
                         updateFocus(current.copy(reasonableEditorStartPosition(itemText(item, newField)!!), newField))
+                    }
+
+                    current.kind == DataKind.AstroTime -> {
+                        if (currentText?.getOrNull(current.cursor + indexDelta) == ':') {
+                            moveCursor(indexDelta + indexDelta.sign)
+                        } else {
+                            moveCursor(indexDelta)
+                        }
                     }
 
                     else -> moveCursor(indexDelta)
@@ -306,7 +348,9 @@ class SectionViewModel(
         }
 
     private fun reasonableEditorStartPosition(text: String): Int =
-        if (text.endsWith(".0")) text.indexOf(".") else text.length
+        if (text.contains(":")) 0 else
+            if (text.endsWith(".0")) text.indexOf(".")
+            else text.length
 
     private fun updateEditorConstraints() {
         val current = _editorState.value
@@ -322,6 +366,7 @@ class SectionViewModel(
         var canMoveLeft = current.canMoveLeft
         var canMoveRight = current.canMoveRight
         var canEnterDigits = current.canEnterDigits
+        var maxDigit = 9
         var canEnterDot = current.canEnterDot
 
         currentItem?.let { item ->
@@ -333,9 +378,20 @@ class SectionViewModel(
             )?.let { focus.cursor != it.length || it.indexOf('.') == -1 || it.substringAfterLast(".").length < 3 }
                 ?: canEnterDigits
 
+            if (focus.kind == DataKind.AstroTime) {
+                item.modifier<PositionLineModifier.AstroTime>()?.timeOfDay?.let { time ->
+                    when (focus.cursor) {
+                        0 -> maxDigit = 2
+                        1 -> if (time.hr >= 20) maxDigit = 3
+                        3 -> maxDigit = 5
+                        6 -> maxDigit = 5
+                    }
+                }
+            }
+
             canEnterDot =
-                focus.kind == DataKind.Distance || 
-                        focus.kind == DataKind.AverageSpeed || 
+                focus.kind == DataKind.Distance ||
+                        focus.kind == DataKind.AverageSpeed ||
                         focus.kind == DataKind.SyntheticInterval
         }
 
@@ -348,6 +404,7 @@ class SectionViewModel(
                 canMoveLeft = canMoveLeft,
                 canMoveRight = canMoveRight,
                 canEnterDigits = canEnterDigits,
+                maxDigit = maxDigit
             )
     }
 
@@ -365,6 +422,7 @@ class SectionViewModel(
                 GridKey.THENAVG -> item.modifier<PositionLineModifier.ThenAvgSpeed>()
                 GridKey.ENDAVG -> item.modifier<PositionLineModifier.EndAvgSpeed>()
                 GridKey.SYNTH -> item.modifier<PositionLineModifier.AddSynthetic>()
+                GridKey.ATIME -> item.modifier<PositionLineModifier.AstroTime>()
                 else -> return
             }
 
@@ -372,6 +430,7 @@ class SectionViewModel(
                 val focusTarget = when (key) {
                     GridKey.SETAVG, GridKey.THENAVG -> DataKind.AverageSpeed
                     GridKey.SYNTH -> DataKind.SyntheticCount
+                    GridKey.ATIME -> DataKind.AstroTime
                     else -> null
                 }
                 if (focusTarget != null) {
@@ -384,16 +443,19 @@ class SectionViewModel(
 
             val modifiers = item.modifiers
             if (modifier != null) {
-                val shouldRemove = when (key) {
-                    GridKey.SETAVG, GridKey.THENAVG -> focus.kind == DataKind.AverageSpeed
-                    GridKey.ENDAVG -> true
-                    GridKey.SYNTH -> focus.kind == DataKind.SyntheticCount || focus.kind == DataKind.SyntheticInterval
-                    else -> false
+                val dataToRemove = when (key) {
+                    GridKey.SETAVG, GridKey.THENAVG -> DataKind.AverageSpeed.takeIf(focus.kind::equals)?.let(::listOf)
+                    GridKey.ENDAVG -> listOf<DataKind>()
+                    GridKey.SYNTH -> listOf(DataKind.SyntheticInterval, DataKind.SyntheticCount).takeIf { focus.kind in it }
+                    GridKey.ATIME -> DataKind.AstroTime.takeIf(focus.kind::equals)?.let(::listOf)
+                    else -> null
                 }
-                if (shouldRemove) {
+                if (dataToRemove != null) {
                     val newItem = item.copy(modifiers = modifiers.filterNot { it == modifier })
                     updateInputPositions(currentItems.toMutableList().apply { set(indexOf(item), newItem) })
-                    updateFocus(sanitizeFocus(focus))
+                    if (focus.kind in dataToRemove) {
+                        updateFocus(sanitizeFocus(focus.copy(kind = presentFields(item).takeWhile { it !in dataToRemove }.last())))
+                    }
                 } else {
                     moveFocusToModifier(item)
                 }
@@ -402,6 +464,8 @@ class SectionViewModel(
                 val modifierToAdd = when (key) {
                     GridKey.SETAVG -> PositionLineModifier.SetAvgSpeed(existingAvg ?: SpeedKmh(0.0))
                     GridKey.THENAVG -> PositionLineModifier.ThenAvgSpeed(existingAvg ?: SpeedKmh(0.0))
+                    GridKey.ATIME -> PositionLineModifier.AstroTime(TimeOfDay(0, 0, 0, 0))
+
                     GridKey.ENDAVG -> PositionLineModifier.EndAvgSpeed(null)
                     GridKey.SYNTH -> PositionLineModifier.AddSynthetic(DistanceKm(0.1), 10)
                     else -> null
@@ -412,12 +476,21 @@ class SectionViewModel(
                             modifiers.filter { it !is PositionLineModifier.SetAvg && it !is PositionLineModifier.EndAvgSpeed }
                         else modifiers
                     val newItem = item.copy(modifiers = filteredModifiers + modifierToAdd)
-                    updateInputPositions(currentItems.toMutableList()
-                        .apply { set(indexOf(item), newItem) })
+                    updateInputPositions(currentItems.toMutableList().apply {
+                        if (modifierToAdd is PositionLineModifier.AstroTime) {
+                            indices.forEach { set(it, removeAtime(get(it))) }
+                        }
+                        set(indexOf(item), newItem)
+                    })
                     moveFocusToModifier(newItem)
                 }
             }
         }
+    }
+
+    private fun removeAtime(inputLine: RoadmapInputLine) = when (inputLine) {
+        is CommentLine -> inputLine
+        is PositionLine -> inputLine.copy(modifiers = inputLine.modifiers.filterNot { it is PositionLineModifier.AstroTime })
     }
 
     private fun recalculateLineNumbers(lines: Collection<RoadmapInputLine>) =
@@ -452,8 +525,11 @@ class SectionViewModel(
     }
 
     private fun sanitizeText(original: String, dataKind: DataKind) = when (dataKind) {
-        DataKind.Distance, DataKind.AverageSpeed, DataKind.SyntheticInterval -> original.toDouble3Digits().toString()
+        DataKind.Distance, DataKind.AverageSpeed, DataKind.SyntheticInterval -> original.toDouble3Digits()
+            .toString()
+
         DataKind.SyntheticCount -> (original.toIntOrNull()?.coerceAtMost(1000) ?: "0").toString()
+        DataKind.AstroTime -> original
     }
 
     private fun updateCurrentText(item: PositionLine, editorFocus: EditorFocus, newText: String): String {
@@ -476,6 +552,10 @@ class SectionViewModel(
 
             DataKind.SyntheticCount -> item.copy(modifiers = modifiers.map {
                 if (it is PositionLineModifier.AddSynthetic) it.copy(count = sanitizedText.toInt()) else it
+            })
+
+            DataKind.AstroTime -> item.copy(modifiers = modifiers.map {
+                if (it is PositionLineModifier.AstroTime) it.copy(timeOfDay = TimeOfDay.parse(newText)) else it
             })
         }
         updateInputPositions(currentItems.toMutableList().apply { set(indexOfCurrentItem, newItem) })
