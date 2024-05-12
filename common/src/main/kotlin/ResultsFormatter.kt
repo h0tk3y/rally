@@ -88,6 +88,7 @@ class ResultsFormatter {
         is PositionLineModifier.EndAvgSpeed -> "endavg ${modifier.endavg?.toString() ?: ""}"
         is PositionLineModifier.ThenAvgSpeed -> "thenavg ${modifier.setavg}"
         is PositionLineModifier.Here -> "here ${modifier.atTime.toMinSec()}"
+        is PositionLineModifier.AstroTime -> "atime ${modifier.timeOfDay.timeStrNoDayOverflow()}"
         PositionLineModifier.IsSynthetic -> "(S)"
         is PositionLineModifier.AddSynthetic -> ""
         is PositionLineModifier.CalculateAverage -> "- avg below"

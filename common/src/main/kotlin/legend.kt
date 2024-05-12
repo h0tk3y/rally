@@ -1,5 +1,7 @@
 package com.h0tk3y.rally
 
+import java.util.Objects
+
 data class LineNumber(val number: Int, val subNumber: Int) : Comparable<LineNumber> {
     init {
         require(number >= 1) { "line numbers should be positive" }
@@ -10,8 +12,8 @@ data class LineNumber(val number: Int, val subNumber: Int) : Comparable<LineNumb
 
     override operator fun compareTo(other: LineNumber) =
         if (other.number != number)
-            other.number - number
-        else other.subNumber - subNumber
+            compareValues(number, other.number)
+        else compareValues(subNumber, other.subNumber)
 }
 
 sealed interface RoadmapInputLine {
@@ -67,6 +69,10 @@ sealed interface PositionLineModifier {
     data class EndAvgSpeed(
         override val endavg: SpeedKmh?,
     ) : EndAvg
+
+    data class AstroTime(
+        val timeOfDay: TimeOfDay
+    ) : PositionLineModifier
 
     data class Here(
         val atTime: TimeHr
