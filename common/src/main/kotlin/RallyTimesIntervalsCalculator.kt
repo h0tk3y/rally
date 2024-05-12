@@ -36,7 +36,6 @@ internal data class Interval(
     val subIntervals: List<Interval>,
     val targetAverageSpeedKmh: SpeedKmh
 ) {
-    val totalDistance: DistanceKm = end.atKm - start.atKm
 
     val pureDistance: DistanceKm = DistanceKm(pureFragments.sumOf { it.distance.valueKm })
     val targetTime: TimeHr = TimeHr.byMovingOrZero(start.atKm, end.atKm, targetAverageSpeedKmh)
@@ -53,10 +52,6 @@ private fun TimeHr.Companion.byMovingOrZero(startKm: DistanceKm, endKm: Distance
 }
 
 internal class IntervalTimesEvaluator {
-    data class TimeEvaluationResult(
-        val timeVectors: Map<PositionLine, TimeHrVector>,
-        val warnings: List<CalculationWarning>
-    )
 
     fun evaluate(rootInterval: Interval, last: PositionLine): RallyTimesResult {
         val timeHrMap = mutableMapOf<PositionLine, TimeHrVector>()
@@ -64,7 +59,7 @@ internal class IntervalTimesEvaluator {
         val goAtMap = mutableMapOf<PositionLine, SpeedKmh>()
 
         fun putInnermostTime(positionLine: PositionLine, time: TimeHr) {
-            timeHrMap.compute(positionLine) { _, old ->
+            timeHrMap.compute(positionLine) { key, old ->
                 check(old == null) { "Expected this time to be the innermost" }
                 TimeHrVector.of(time)
             }
@@ -96,7 +91,7 @@ internal class IntervalTimesEvaluator {
                 sortBy { it.startDistance.valueKm }
             }
 
-            if (interval.pureTime.timeHours < 0.0) {
+            if (interval.exemptTime > interval.targetTime) {
                 warnings.add(
                     CalculationWarning(
                         interval.end,
@@ -137,7 +132,7 @@ internal class IntervalTimesEvaluator {
                             goAtMap[subInterval.end] = interval.pureSpeed
                         }
 
-                        localTime += subTime - subStartTime
+                        localTime += if (subTime.timeHours.isInfinite()) subTime else subTime - subStartTime
                         lastSubTime = subTime
                     }
                 }
@@ -170,8 +165,7 @@ internal class IntervalTimesEvaluator {
 internal class IntervalBuilder {
     sealed interface BuildIntervalResult {
         data class Result(val interval: Interval) : BuildIntervalResult
-        data class Failure(val failure: CalculationFailure) :
-            BuildIntervalResult // todo report details?
+        data class Failure(val failure: CalculationFailure) : BuildIntervalResult
     }
 
     fun buildInterval(roadmap: List<PositionLine>, startAt: Int, endAt: Int): BuildIntervalResult {
@@ -209,7 +203,7 @@ internal class IntervalBuilder {
                         val sub = recurse(index, currentPosition.modifier<SetAvg>()!!.setavg)
                         subs += sub.interval
 
-                        prev = roadmap[sub.endIndex]
+                        prev = roadmap[sub.endIndex.coerceAtMost(endAt)]
                         afterSub = true
                         index = sub.endIndex
                     } else {
@@ -217,16 +211,13 @@ internal class IntervalBuilder {
                         prev = currentPosition
                         index++
                     }
-                    
-                    if (index > endAt) {
-                        index = endAt
-                        break
-                    }
                 }
                 
                 index
             }
-            return IntervalResult(Interval(start, roadmap[endIndex], pureFragments, subs, avgSpeed), endIndex)
+            return IntervalResult(
+                Interval(start, roadmap[endIndex.coerceAtMost(endAt)], pureFragments, subs, avgSpeed), endIndex
+            )
         }
 
         var outermost: Interval? = null
@@ -236,7 +227,7 @@ internal class IntervalBuilder {
                 ?: return BuildIntervalResult.Failure(
                     CalculationFailure(
                         roadmap[current],
-                        FailureReason.AverageSpeedUnknown
+                        FailureReason.OuterIntervalNotCovered
                     )
                 )
 
@@ -245,7 +236,7 @@ internal class IntervalBuilder {
                 outermost =
                     outermost.copy(end = call.interval.end, subIntervals = outermost.subIntervals + call.interval)
             }
-            if (call.endIndex == endAt) {
+            if (call.endIndex >= endAt) {
                 return BuildIntervalResult.Result(outermost ?: call.interval)
             } else {
                 outermost = outermost
@@ -266,16 +257,16 @@ internal class IntervalBuilder {
                 return BuildIntervalResult.Failure(CalculationFailure(b.end, FailureReason.OuterIntervalNotCovered))
             }
         }
-        return BuildIntervalResult.Result(outermost!!)
+        return BuildIntervalResult.Result(outermost)
     }
 }
 
 fun main() {
     val input = """
     0.0 setavg 60.0
-    2.0 setavg 120
-    3.0 endavg
-    10.0 endavg
+    0.5 setavg 50.0
+    0.6 setavg 0.0
+    10.0 endavg 
     """.trimIndent()
 
     val roadmap =
