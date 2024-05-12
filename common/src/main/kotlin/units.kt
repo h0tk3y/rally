@@ -22,13 +22,13 @@ data class SpeedKmh(val valueKmh: Double) {
         const val kmhSuffix = "kmh"
     }
 
-    override fun toString(): String = "${(valueKmh * 100).roundToInt() / 100.0}$kmhSuffix"
+    override fun toString(): String = if (valueKmh.isInfinite()) "∞" else "${(valueKmh * 100).roundToInt() / 100.0}$kmhSuffix"
 }
 
 data class DistanceKm(val valueKm: Double) {
     operator fun plus(other: DistanceKm) = DistanceKm(valueKm + other.valueKm)
     operator fun times(other: Double) = DistanceKm(valueKm * other)
-    operator fun minus(other: DistanceKm) = DistanceKm(valueKm - other.valueKm)
+    operator fun minus(other: DistanceKm) = DistanceKm(valueKm.minusWithInf(other.valueKm))
 
     companion object {
         val zero = DistanceKm(0.0)
@@ -36,15 +36,23 @@ data class DistanceKm(val valueKm: Double) {
 }
 
 data class TimeHr(val timeHours: Double): Comparable<TimeHr> {
+    init {
+        if (timeHours.isNaN())
+            throw IllegalStateException()
+    }
+    
     fun toMinSec(): TimeMinSec {
+        if (timeHours.isNaN()) {
+            return TimeMinSec(-1, -1, false)
+        }
         val sec = (timeHours * 3600).roundToInt()
         val min = (sec / 60)
         val remSec = (sec % 60)
-        return TimeMinSec(min, remSec)
+        return TimeMinSec(min, remSec, timeHours.isInfinite())
     }
 
     operator fun plus(other: TimeHr) = TimeHr(timeHours + other.timeHours)
-    operator fun minus(other: TimeHr) = TimeHr(timeHours - other.timeHours)
+    operator fun minus(other: TimeHr) = TimeHr(timeHours.minusWithInf(other.timeHours))
 
     companion object {
         fun byMoving(distance: DistanceKm, atSpeedKmh: SpeedKmh) =
@@ -69,8 +77,8 @@ data class TimeHrVector(val values: List<TimeHr>) {
     }
 }
 
-data class TimeMinSec(val min: Int, val sec: Int) {
-    override fun toString(): String = "$min".padStart(2, '0') + ":" + "$sec".padStart(2, '0')
+data class TimeMinSec(val min: Int, val sec: Int, val isInfinity: Boolean) {
+    override fun toString(): String = if (isInfinity) "∞" else "$min".padStart(2, '0') + ":" + "$sec".padStart(2, '0')
     fun toHr(): TimeHr = TimeHr((min * 60 + sec) / 3600.0)
 
     companion object {
@@ -81,7 +89,7 @@ data class TimeMinSec(val min: Int, val sec: Int) {
             if (m == null || s == null) {
                 return null
             }
-            return TimeMinSec(m, s)
+            return TimeMinSec(m, s, false)
         }
     }
 }
@@ -125,3 +133,5 @@ class RelativeSubTimesTreeImpl(globalStart: PositionLine) : RelativeSubTimesTree
         TODO("Not yet implemented")
     }
 }
+
+fun Double.minusWithInf(other: Double) = if (this.isInfinite()) this else this - other

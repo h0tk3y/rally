@@ -95,8 +95,14 @@ class ResultsFormatter {
     }
 }
 
-fun Double.strRound3(): String =
-    ((this * 1000).roundToInt() / 1000.0).toString()
+fun Double.strRound3(): String = when (this) {
+    Double.POSITIVE_INFINITY -> "∞"
+    Double.NEGATIVE_INFINITY -> "-∞"
+    else -> ((this * 1000).roundToInt() / 1000.0).toString()
+}
 
-fun Double.strRound1(): String =
-    ((this * 10).roundToInt() / 10.0).toString()
+fun Double.strRound1(): String = when (this) {
+    Double.POSITIVE_INFINITY -> "∞"
+    Double.NEGATIVE_INFINITY -> "-∞"
+    else -> ((this * 10).roundToInt() / 10.0).toString() 
+}

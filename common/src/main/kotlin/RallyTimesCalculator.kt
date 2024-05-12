@@ -1,5 +1,7 @@
 package com.h0tk3y.rally
 
+import com.h0tk3y.rally.PositionLineModifier.SetAvgSpeed
+
 sealed interface RallyTimesResult
 
 data class RallyTimesResultSuccess(
@@ -18,8 +20,7 @@ data class CalculationWarning(
 )
 
 sealed interface WarningReason {
-    data class ImpossibleToGetInTime(val start: RoadmapInputLine, val takes: TimeHr, val available: TimeHr) :
-        WarningReason
+    data class ImpossibleToGetInTime(val start: RoadmapInputLine, val takes: TimeHr, val available: TimeHr) : WarningReason
 }
 
 data class CalculationFailure(
@@ -260,6 +261,7 @@ fun validateRoadmap(roadmap: Iterable<RoadmapInputLine>): RallyTimesResultFailur
     }
     
     var depth = 0
+    var distance = DistanceKm.zero
     roadmap.filterIsInstance<PositionLine>().forEach {
         if (it.isSetAvg) {
             depth++
@@ -268,9 +270,10 @@ fun validateRoadmap(roadmap: Iterable<RoadmapInputLine>): RallyTimesResultFailur
             if (depth < 0) {
                 failures.add(CalculationFailure(it, FailureReason.UnexpectedAverageEnd))
             }
-        } else if (depth <= 0) {
+        } else if (depth <= 0 && !(it.atKm == distance && it.modifier<SetAvgSpeed>() != null)) {
             failures.add(CalculationFailure(it, FailureReason.AverageSpeedUnknown))
         }
+        distance = it.atKm
     }
     
     return if (failures.isNotEmpty())
