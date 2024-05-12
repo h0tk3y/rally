@@ -9,10 +9,11 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.Divider
 import androidx.compose.material.LocalTextStyle
-import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -25,7 +26,6 @@ import com.h0tk3y.rally.PositionLineModifier.IsSynthetic
 import com.h0tk3y.rally.android.scenes.*
 import com.h0tk3y.rally.android.scenes.DataKind.*
 import com.h0tk3y.rally.android.theme.LocalCustomColorsPalette
-import kotlinx.coroutines.coroutineScope
 
 @Composable
 fun PositionsListView(
@@ -35,7 +35,9 @@ fun PositionsListView(
     editorControls: EditorControls,
     editorState: EditorState,
     editorFocus: EditorFocus,
-    results: RallyTimesResult
+    results: RallyTimesResult,
+    subsMatch: SubsMatch,
+    allowance: TimeAllowance?
 ) {
     val isEditorEnabled = editorState.isEnabled
 
@@ -57,12 +59,17 @@ fun PositionsListView(
                 }
             }
         }
+        val errorsByLine = remember {
+            if (results is RallyTimesResultFailure) results.failures.groupBy { it.line } else emptyMap()
+        }
         LazyColumn(state = listState) {
+
             itemsIndexed(positionsList) { _, line ->
                 val isSelectedLine = line.lineNumber == selectedLineIndex
 
                 val background =
                     if (isSelectedLine) Modifier.background(LocalCustomColorsPalette.current.selection) else Modifier
+
                 Row(
                     modifier = background.padding(8.dp).fillMaxWidth()
                         .clickable(
@@ -85,10 +92,34 @@ fun PositionsListView(
                                 isSelectedLine,
                                 editorFocus,
                                 editorControls,
-                                editorState
+                                editorState,
+                                subsMatch
                             )
                             if (line.modifier<PositionLineModifier.EndAvgSpeed>() != null) {
-                                LabelForField("endavg")
+                                val matchId = subsMatch.subNumbers[line]
+                                val matchSpeed = subsMatch.endSubMatch[line]?.modifier<PositionLineModifier.SetAvg>()
+                                LabelForField(buildString {
+                                    append("endavg")
+                                    if (matchId != null) append(matchId)
+                                })
+
+                                if (matchSpeed != null) {
+                                    FocusedTextFieldWithoutKeyboard(
+                                        matchSpeed.setavg.valueKmh.strRound3(),
+                                        AverageSpeed,
+                                        modifier = Modifier.alpha(0.5f),
+                                        textStyle = LocalTextStyle.current.copy(
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 18.sp,
+                                        ),
+                                        selectionPosition = position,
+                                        focused = false,
+                                        onTextChange = { },
+                                        onFocused = { },
+                                        onPositionChange = { },
+                                        enabled = false
+                                    )
+                                }
                             }
                             presentFields(line).filter { it != Distance && shouldBeDisplayed(it, editorState) }
                                 .forEach { field ->
@@ -100,14 +131,15 @@ fun PositionsListView(
                                         isSelectedLine,
                                         editorFocus,
                                         editorControls,
-                                        editorState
+                                        editorState,
+                                        subsMatch
                                     )
                                 }
 
                             Row(modifier = Modifier.weight(1.0f), horizontalArrangement = Arrangement.End) {
                                 when (results) {
                                     is RallyTimesResultFailure -> {
-                                        val failuresInCurrentLine = results.failures.filter { it.line == line }
+                                        val failuresInCurrentLine = errorsByLine[line].orEmpty()
                                         if (failuresInCurrentLine.isNotEmpty()) {
                                             Column(horizontalAlignment = Alignment.End) {
                                                 failuresInCurrentLine.forEach {
@@ -135,32 +167,38 @@ fun PositionsListView(
                                             val go = results.goAtAvgSpeed[line.lineNumber]
                                             if (warningsInCurrentLine.isNotEmpty() || go != null) {
                                                 Column(horizontalAlignment = Alignment.End) {
-                                                    if (go != null && warningsInCurrentLine.none { it.reason is WarningReason.ImpossibleToGetInTime }) {
+                                                    if (go != null && go.valueKmh >= 0) {
                                                         Text(
                                                             modifier = Modifier.alpha(0.5f),
-                                                            text = "→${go.valueKmh.strRound1()}",
+                                                            text = "➠${go.valueKmh.strRound1()}",
                                                         )
                                                     }
                                                     warningsInCurrentLine.forEach {
-                                                        if (!editorState.isEnabled) {
-                                                            val text = when (val reason = it.reason) {
-                                                                is WarningReason.ImpossibleToGetInTime -> "impossible, ${(reason.takes - reason.available).toMinSec()} late"
-                                                            }
-                                                            Text(
-                                                                text = text,
-                                                                color = LocalCustomColorsPalette.current.dangerous
-                                                            )
+                                                        val text = when (val reason = it.reason) {
+                                                            is WarningReason.ImpossibleToGetInTime -> "impossible, ${(reason.takes - reason.available).toMinSec()} late"
                                                         }
+                                                        Text(
+                                                            text = text,
+                                                            color = LocalCustomColorsPalette.current.dangerous
+                                                        )
                                                     }
                                                 }
                                             }
                                             val currentLineTimes = results.timeVectorsAtRoadmapLine[line.lineNumber]
                                             if (currentLineTimes != null) {
-                                                for (value in currentLineTimes.values) {
+                                                val timeValues = currentLineTimes.values
+                                                for ((index, value) in timeValues.withIndex()) {
                                                     Text(
                                                         text = value.toMinSec().toString(),
                                                         modifier = Modifier.padding(start = 8.dp, end = 8.dp)
                                                     )
+                                                    if (allowance != null && index == timeValues.lastIndex) {
+                                                        val allowanceTime = allowance(allowance, value)
+                                                        Text(
+                                                            text = "-$allowanceTime",
+                                                            modifier = Modifier.padding(start = 0.dp, end = 8.dp)
+                                                        )
+                                                    }
                                                 }
                                             }
                                         }
@@ -183,6 +221,16 @@ fun PositionsListView(
     }
 }
 
+fun allowance(allowance: TimeAllowance?, time: TimeHr): Int {
+    val sec = time.toMinSec().min * 60 + time.toMinSec().sec
+    val minutes = sec / 60.0
+    return when (allowance) {
+        TimeAllowance.BY_TEN_FULL -> (minutes / 10).toInt()
+        TimeAllowance.BY_TEN_FULL_PLUS_ONE -> Math.ceil(minutes / 10.0).toInt()
+        null -> 0
+    }
+}
+
 @Composable
 private fun DataField(
     field: DataKind,
@@ -192,9 +240,10 @@ private fun DataField(
     isSelectedLine: Boolean,
     editorFocus: EditorFocus,
     editorControls: EditorControls,
-    editorState: EditorState
+    editorState: EditorState,
+    subsMatch: SubsMatch
 ) {
-    LabelForField(field, line)
+    LabelForField(field, line, subsMatch.subNumbers[line])
     val text = itemText(line, field) ?: ""
 
     FocusedTextFieldWithoutKeyboard(
@@ -230,15 +279,18 @@ fun labelAfterField(kind: DataKind) {
 }
 
 @Composable
-fun LabelForField(kind: DataKind, line: PositionLine) {
+fun LabelForField(kind: DataKind, line: PositionLine, matchId: Int?) {
     val padding = Modifier.padding(end = 4.dp)
+    val matchStr = if (kind == AverageSpeed) matchId?.toString().orEmpty() else ""
     when (kind) {
         Distance -> Unit
         AverageSpeed -> {
             val modifier = line.modifier<PositionLineModifier.SetAvg>()
             if (modifier != null) {
                 LabelForField(
-                    text = if (modifier is PositionLineModifier.SetAvgSpeed) "setavg" else if (modifier is PositionLineModifier.ThenAvgSpeed) "thenavg" else "???",
+                    text = if (modifier is PositionLineModifier.SetAvgSpeed) "setavg$matchStr" else
+                        if (modifier is PositionLineModifier.ThenAvgSpeed) "thenavg$matchStr"
+                        else "???",
                 )
             } else Unit
         }

@@ -22,7 +22,11 @@ import moe.tlaster.precompose.navigation.rememberNavigator
 import moe.tlaster.precompose.navigation.transition.NavTransition
 
 @Composable
-fun App(database: Database, applyTheme: @Composable (@Composable () -> Unit) -> Unit) {
+fun App(
+    database: Database,
+    userPreferences: PreferenceRepository,
+    applyTheme: @Composable (@Composable () -> Unit) -> Unit
+) {
     val navigator = rememberNavigator()
     MaterialTheme(if (isSystemInDarkTheme()) darkColors() else lightColors()) {
         applyTheme {
@@ -42,14 +46,15 @@ fun App(database: Database, applyTheme: @Composable (@Composable () -> Unit) -> 
                         SectionScene(
                             sectionId,
                             database,
+                            userPreferences,
                             onDeleteSection = {
                                 database.deleteSectionById(sectionId)
                                 navigator.goBack()
                             },
                             onNavigateToNewSection = { id ->
                                 navigator.navigate("/section/$id", NavOptions(popUpTo = PopUpTo("/home")))
-                            },
-                            onBack = { navigator.goBack() })
+                            }
+                        ) { navigator.goBack() }
                     }
                 }
             }
