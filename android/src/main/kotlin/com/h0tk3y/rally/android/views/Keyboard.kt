@@ -30,7 +30,11 @@ fun Keyboard(
             RIGHT to canMoveRight,
             REMOVE to canDelete,
             NOP to false,
-        ) + GridKey.values().filter { it.name.startsWith("N_") }.map { it to canEnterDigits }
+        ) + GridKey.values().filter { it.name.startsWith("N_") }.map {
+            val n = it.name.substringAfter("N_").toInt()
+            val canEnter = n <= maxDigit
+            it to canEnter
+        }
 
         keyboardButtonsOrder.forEach{ row ->
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
@@ -61,9 +65,9 @@ fun Keyboard(
 
 private val keyboardButtonsOrder = listOf(
     null,
-    listOf(REMOVE, NOP, ADD_ABOVE, ADD_BELOW),
+    listOf(REMOVE, SYNTH, ADD_ABOVE, ADD_BELOW),
     null,
-    listOf(SYNTH, SETAVG, THENAVG, ENDAVG),
+    listOf(ATIME, SETAVG, THENAVG, ENDAVG),
     null,
     listOf(UP, DOWN, LEFT, RIGHT),
     null,
@@ -76,7 +80,7 @@ private val keyboardButtonsOrder = listOf(
 fun isDangerous(gridKey: GridKey): Boolean = gridKey === REMOVE || gridKey === DEL
 
 enum class GridKey(val text: String, val isStub: Boolean = false) {
-    SETAVG("SETAVG"), THENAVG("THENAVG"), ENDAVG("ENDAVG"), SYNTH("SYNTH"),
+    SETAVG("SETAVG"), THENAVG("THENAVG"), ENDAVG("ENDAVG"), SYNTH("SYNTH"), ATIME("ATIME"),
     N_1("1"), N_2("2"), N_3("3"),
     N_4("4"), N_5("5"), N_6("6"),
     N_7("7"), N_8("8"), N_9("9"),

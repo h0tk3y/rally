@@ -1,5 +1,6 @@
 plugins {
     kotlin("android")
+    kotlin("plugin.compose")
     id("org.jetbrains.compose")
     id("com.android.application")
     id("app.cash.sqldelight")
@@ -26,7 +27,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.6.2")
 
     implementation(project(":common"))
-    implementation("androidx.activity:activity-compose:1.8.1")
+    implementation("androidx.activity:activity-compose:1.9.0")
     implementation("com.google.accompanist:accompanist-webview:0.31.2-alpha")
     implementation("com.google.accompanist:accompanist-systemuicontroller:0.27.0")
     implementation("com.google.accompanist:accompanist-insets:0.27.0")
@@ -48,11 +49,14 @@ android {
         minSdk = 24
         targetSdk = 34
     }
+    buildFeatures {
+        compose = true
+    }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
     }
     kotlin {
-        jvmToolchain(17)
+        jvmToolchain(11)
     }
 }

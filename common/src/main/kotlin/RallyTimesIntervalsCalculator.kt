@@ -17,10 +17,12 @@ class RallyTimesIntervalsCalculator : RallyTimes {
 
         val result = IntervalTimesEvaluator().evaluate(rootInterval.interval, rootInterval.interval.end)
         check(result is RallyTimesResultSuccess)
-        
-        return result
+
+        return result.copy(astroTimeAtRoadmapLine = AstroTimeCalculator.calculateAstroTimes(roadmap = roadmap, timeHrMap = result.timeVectorsAtRoadmapLine))
     }
 }
+
+
 
 internal data class PureFragment(
     val start: PositionLine,
@@ -34,7 +36,8 @@ internal data class Interval(
     val end: PositionLine,
     val pureFragments: List<PureFragment>,
     val subIntervals: List<Interval>,
-    val targetAverageSpeedKmh: SpeedKmh
+    val targetAverageSpeedKmh: SpeedKmh,
+    val isSynthRoot: Boolean = false
 ) {
 
     val pureDistance: DistanceKm = DistanceKm(pureFragments.sumOf { it.distance.valueKm })
@@ -91,7 +94,7 @@ internal class IntervalTimesEvaluator {
                 sortBy { it.startDistance.valueKm }
             }
 
-            if (interval.exemptTime > interval.targetTime) {
+            if (interval.exemptTime > interval.targetTime && !interval.isSynthRoot) {
                 warnings.add(
                     CalculationWarning(
                         interval.end,
@@ -143,7 +146,7 @@ internal class IntervalTimesEvaluator {
 
         recurse(rootInterval, TimeHr.zero)
         return RallyTimesResultSuccess(
-            timeHrMap.mapKeys { it.key.lineNumber }, goAtMap.mapKeys { it.key.lineNumber }, warnings
+            timeHrMap.mapKeys { it.key.lineNumber }, emptyMap(), goAtMap.mapKeys { it.key.lineNumber }, warnings
         )
     }
 
@@ -212,7 +215,7 @@ internal class IntervalBuilder {
                         index++
                     }
                 }
-                
+
                 index
             }
             return IntervalResult(
@@ -222,6 +225,7 @@ internal class IntervalBuilder {
 
         var outermost: Interval? = null
         var current = startAt
+        var hasSynthRoot = false
         do {
             val setAvg = roadmap[current].modifier<SetAvg>()
                 ?: return BuildIntervalResult.Failure(
@@ -235,9 +239,10 @@ internal class IntervalBuilder {
             if (outermost != null) {
                 outermost =
                     outermost.copy(end = call.interval.end, subIntervals = outermost.subIntervals + call.interval)
+                hasSynthRoot = true
             }
             if (call.endIndex >= endAt) {
-                return BuildIntervalResult.Result(outermost ?: call.interval)
+                return BuildIntervalResult.Result(outermost?.maybeAsSynthRoot(hasSynthRoot) ?: call.interval)
             } else {
                 outermost = outermost
                     ?: Interval(
@@ -257,9 +262,11 @@ internal class IntervalBuilder {
                 return BuildIntervalResult.Failure(CalculationFailure(b.end, FailureReason.OuterIntervalNotCovered))
             }
         }
-        return BuildIntervalResult.Result(outermost)
+        return BuildIntervalResult.Result(outermost.maybeAsSynthRoot(hasSynthRoot))
     }
 }
+
+private fun Interval.maybeAsSynthRoot(hasSynthRoot: Boolean) = if (hasSynthRoot) copy(isSynthRoot = true) else this
 
 fun main() {
     val input = """

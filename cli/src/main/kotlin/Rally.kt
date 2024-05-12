@@ -32,7 +32,7 @@ class TimetableCommand : CliktCommand() {
         }
         val preprocessed = preprocessRoadmap(input)
 
-        val calculator = RallyTimesCalculator()
+        val calculator = RallyTimesIntervalsCalculator()
         val result = calculator.rallyTimes(preprocessed.filterIsInstance<PositionLine>())
 
         when (result) {
