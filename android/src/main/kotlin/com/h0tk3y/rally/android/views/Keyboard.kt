@@ -51,7 +51,7 @@ fun Keyboard(
                             Text(
                                 it.text,
                                 modifier = Modifier.padding(4.dp),
-                                fontSize = if (it == DOT || it == DEL) 24.sp else 16.sp,
+                                fontSize = if (it == DOT || it == DEL  || it.name.startsWith("N_")) 24.sp else 14.sp,
                                 style = TextStyle(
                                     color = if (isDangerous(it)) LocalCustomColorsPalette.current.dangerous else Color.Unspecified
                                 )
@@ -67,7 +67,7 @@ private val keyboardButtonsOrder = listOf(
     null,
     listOf(REMOVE, SYNTH, ADD_ABOVE, ADD_BELOW),
     null,
-    listOf(ATIME, SETAVG, THENAVG, ENDAVG),
+    listOf(ATIME, ODO, SETAVG, THENAVG, ENDAVG),
     null,
     listOf(UP, DOWN, LEFT, RIGHT),
     null,
@@ -80,7 +80,7 @@ private val keyboardButtonsOrder = listOf(
 fun isDangerous(gridKey: GridKey): Boolean = gridKey === REMOVE || gridKey === DEL
 
 enum class GridKey(val text: String, val isStub: Boolean = false) {
-    SETAVG("SETAVG"), THENAVG("THENAVG"), ENDAVG("ENDAVG"), SYNTH("SYNTH"), ATIME("ATIME"),
+    SETAVG("SETAVG"), THENAVG("THENAVG"), ENDAVG("ENDAVG"), SYNTH("SYNTH"), ATIME("ATIME"), ODO("ODO"),
     N_1("1"), N_2("2"), N_3("3"),
     N_4("4"), N_5("5"), N_6("6"),
     N_7("7"), N_8("8"), N_9("9"),

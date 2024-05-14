@@ -17,6 +17,7 @@ object InputToTextSerializer {
                 if (roadmapInputLine.modifiers.isNotEmpty()) {
                     append(roadmapInputLine.modifiers.joinToString(prefix = " ", separator = " ") { modifier ->
                         when (modifier) {
+                            is OdoDistance -> "odo ${modifier.distanceKm.valueKm.strRound3()}"
                             is SetAvgSpeed -> "setavg ${modifier.setavg.valueKmh.strRound3()}"
                             is EndAvgSpeed -> "endavg" +
                                 if (modifier.endavg != null) {

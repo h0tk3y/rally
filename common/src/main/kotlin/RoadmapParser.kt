@@ -73,6 +73,7 @@ class InputRoadmapParser(private val modifiersValidator: ModifiersValidator) {
     }
 
     private val parsers = listOf<ModifierParser<*>>(
+        ByWord("odo", 1) { (arg) -> PositionLineModifier.OdoDistance(DistanceKm(arg.toDouble())) },
         ByWord("setavg", 1) { (arg) -> PositionLineModifier.SetAvgSpeed(parseAvgSpeed(arg)) },
         ByWord("endavg", 1) { (arg) -> PositionLineModifier.EndAvgSpeed(parseAvgSpeed(arg)) },
         ByWord("endavg", 0) { (_) -> PositionLineModifier.EndAvgSpeed(null) },
