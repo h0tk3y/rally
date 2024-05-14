@@ -25,12 +25,16 @@ import com.h0tk3y.rally.android.db.Database
 import com.h0tk3y.rally.android.db.SectionInsertOrRenameResult
 import com.h0tk3y.rally.android.scenes.DataKind.*
 import com.h0tk3y.rally.android.scenes.DataKind.AstroTime
+import com.h0tk3y.rally.android.scenes.DataKind.OdoDistance
 import com.h0tk3y.rally.android.scenes.TimeAllowance.BY_TEN_FULL
 import com.h0tk3y.rally.android.scenes.TimeAllowance.BY_TEN_FULL_PLUS_ONE
 import com.h0tk3y.rally.android.views.GridKey
 import com.h0tk3y.rally.android.views.Keyboard
 import com.h0tk3y.rally.android.views.PositionsListView
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import moe.tlaster.precompose.viewmodel.viewModel
+import moe.tlaster.precompose.viewmodel.viewModelScope
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -48,15 +52,18 @@ fun SectionScene(
     val selectedLineIndex by model.selectedLineIndex.collectAsState(LineNumber(1, 0))
     val preprocessed by model.preprocessedPositions.collectAsState(emptyList())
     val results by model.results.collectAsState(RallyTimesResultFailure(emptyList()))
+    val odoValues by model.odoValues.collectAsState(emptyMap())
     val subsMatch by model.subsMatching.collectAsState(SubsMatch.EMPTY)
     val editorState by model.editorState.collectAsState(
         EditorState(false, true, true, 9, true, true, true, true)
     )
     val editorFocus by model.editorFocus.collectAsState()
     val allowance by model.timeAllowance.collectAsState(null)
+    val calibration by model.calibration.collectAsState(null)
 
     var showDuplicateDialog by rememberSaveable { mutableStateOf(false) }
     var showRenameDialog by rememberSaveable { mutableStateOf(false) }
+    var showCalibrationDialog by rememberSaveable { mutableStateOf(false) }
 
     var showMenu by rememberSaveable { mutableStateOf(false) }
 
@@ -98,6 +105,13 @@ fun SectionScene(
                     }
                 }
             )
+        }
+
+        if (showCalibrationDialog) {
+            CalibrationFactorDialog({ showCalibrationDialog = false }, calibration ?: 1.0, {
+                model.setCalibration(it)
+                showCalibrationDialog = false
+            })
         }
     }
 
@@ -194,6 +208,13 @@ fun SectionScene(
                                 Text("⌈t/10⌉")
                             }
                         }
+                        Divider()
+                        DropdownMenuItem(onClick = {
+                            showCalibrationDialog = true
+                        }) {
+                            Icon(Icons.Default.LocationOn, "Calibration")
+                            Text("ODO calibration: $calibration")
+                        }
                     }
                 }
             )
@@ -227,6 +248,7 @@ fun SectionScene(
                             val listState = rememberLazyListState()
                             PositionsListView(
                                 listState,
+                                odoValues,
                                 positionsToDisplay,
                                 selectedLineIndex,
                                 model,
@@ -281,7 +303,7 @@ data class EditorFocus(
 )
 
 enum class DataKind {
-    Distance, AverageSpeed, SyntheticCount, SyntheticInterval, AstroTime
+    Distance, OdoDistance, AverageSpeed, SyntheticCount, SyntheticInterval, AstroTime
 }
 
 fun itemText(line: RoadmapInputLine, dataKind: DataKind): String? =
@@ -289,6 +311,7 @@ fun itemText(line: RoadmapInputLine, dataKind: DataKind): String? =
         null
     else when (dataKind) {
         Distance -> line.atKm.valueKm.strRound3()
+        DataKind.OdoDistance -> line.modifier<PositionLineModifier.OdoDistance>()?.distanceKm?.valueKm?.strRound3()
         AverageSpeed -> line.modifier<SetAvg>()?.setavg?.valueKmh?.strRound3()
         SyntheticCount -> line.modifier<AddSynthetic>()?.count.toString()
         SyntheticInterval -> line.modifier<AddSynthetic>()?.interval?.valueKm?.strRound3()
@@ -303,6 +326,9 @@ fun presentFields(item: PositionLine) = buildList {
     if (item.modifier<AddSynthetic>() != null) {
         add(SyntheticCount)
         add(SyntheticInterval)
+    }
+    if (item.modifier<PositionLineModifier.OdoDistance>() != null) {
+        add(OdoDistance)
     }
     if (item.modifier<PositionLineModifier.AstroTime>() != null) {
         add(AstroTime)

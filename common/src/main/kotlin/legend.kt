@@ -74,6 +74,10 @@ sealed interface PositionLineModifier {
         val timeOfDay: TimeOfDay
     ) : PositionLineModifier
 
+    data class OdoDistance(
+        val distanceKm: DistanceKm
+    ) : PositionLineModifier
+
     data class Here(
         val atTime: TimeHr
     ) : PositionLineModifier

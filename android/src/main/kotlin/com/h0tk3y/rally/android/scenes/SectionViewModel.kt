@@ -9,7 +9,11 @@ import com.h0tk3y.rally.db.Section
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.combineTransform
+import kotlinx.coroutines.flow.lastOrNull
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.zip
 import kotlinx.coroutines.launch
 import moe.tlaster.precompose.viewmodel.ViewModel
 import moe.tlaster.precompose.viewmodel.viewModelScope
@@ -27,9 +31,12 @@ class SectionViewModel(
     private val _selectedLineNumber: MutableStateFlow<LineNumber> = MutableStateFlow(LineNumber(1, 0))
     private val _preprocessedPositions: MutableStateFlow<List<RoadmapInputLine>> = MutableStateFlow(emptyList())
     private val _results: MutableStateFlow<RallyTimesResult> = MutableStateFlow(RallyTimesResultFailure(emptyList()))
+    private val _odoValues: MutableStateFlow<Map<LineNumber, DistanceKm>> = MutableStateFlow(emptyMap())
     private val _editorFocus: MutableStateFlow<EditorFocus> = MutableStateFlow(EditorFocus(0, DataKind.Distance))
     private val _editorState: MutableStateFlow<EditorState> = MutableStateFlow(EditorState(false))
     private val _subsMatching: MutableStateFlow<SubsMatch> = MutableStateFlow(SubsMatch.EMPTY)
+
+    val calibration = prefs.userPreferencesFlow.map { it.calibration }
 
     init {
         viewModelScope.launch {
@@ -56,10 +63,18 @@ class SectionViewModel(
             }
         }
         viewModelScope.launch {
-            _preprocessedPositions.collectLatest {
+            combineTransform(_preprocessedPositions, calibration) { a, b -> emit(a to b) }.collectLatest { (it, calibrationFactor) ->
                 val lines = it.filterIsInstance<PositionLine>()
-                val rallyTimes = RallyTimesIntervalsCalculator().rallyTimes(lines)
-                _results.value = rallyTimes
+                launch {
+                    val odo = OdoDistanceCalculator.calculateOdoDistances(
+                        lines.filterIsInstance<PositionLine>(),
+                        calibrationFactor
+                    )
+                    _odoValues.value = odo
+
+                    val rallyTimes = RallyTimesIntervalsCalculator().rallyTimes(lines)
+                    _results.value = rallyTimes
+                }
             }
         }
         viewModelScope.launch {
@@ -77,6 +92,7 @@ class SectionViewModel(
     val inputPositions = _inputPositions.asStateFlow()
     val preprocessedPositions = _preprocessedPositions.asStateFlow()
     val results = _results.asStateFlow()
+    val odoValues = _odoValues.asStateFlow()
     val subsMatching = _subsMatching.asStateFlow()
     val timeAllowance = prefs.userPreferencesFlow.map { it.allowance }
 
@@ -120,7 +136,7 @@ class SectionViewModel(
 
     override fun keyPress(key: GridKey) {
         when (key) {
-            GridKey.SETAVG, GridKey.THENAVG, GridKey.ENDAVG, GridKey.SYNTH, GridKey.ATIME -> focusOrSwitchModifier(key)
+            GridKey.SETAVG, GridKey.THENAVG, GridKey.ENDAVG, GridKey.SYNTH, GridKey.ATIME, GridKey.ODO -> focusOrSwitchModifier(key)
             GridKey.N_1, GridKey.N_2, GridKey.N_3, GridKey.N_4, GridKey.N_5, GridKey.N_6, GridKey.N_7, GridKey.N_8, GridKey.N_9, GridKey.N_0 -> enterCharacter(
                 key.name.last()
             )
@@ -178,6 +194,12 @@ class SectionViewModel(
     fun setAllowance(timeAllowance: TimeAllowance?) {
         viewModelScope.launch {
             prefs.saveTimeAllowance(timeAllowance)
+        }
+    }
+
+    fun setCalibration(calibration: Double) {
+        viewModelScope.launch {
+            prefs.saveCalibrationFactor(calibration)
         }
     }
 
@@ -391,6 +413,7 @@ class SectionViewModel(
 
             canEnterDot =
                 focus.kind == DataKind.Distance ||
+                        focus.kind == DataKind.OdoDistance ||
                         focus.kind == DataKind.AverageSpeed ||
                         focus.kind == DataKind.SyntheticInterval
         }
@@ -423,6 +446,7 @@ class SectionViewModel(
                 GridKey.ENDAVG -> item.modifier<PositionLineModifier.EndAvgSpeed>()
                 GridKey.SYNTH -> item.modifier<PositionLineModifier.AddSynthetic>()
                 GridKey.ATIME -> item.modifier<PositionLineModifier.AstroTime>()
+                GridKey.ODO -> item.modifier<PositionLineModifier.OdoDistance>()
                 else -> return
             }
 
@@ -431,6 +455,7 @@ class SectionViewModel(
                     GridKey.SETAVG, GridKey.THENAVG -> DataKind.AverageSpeed
                     GridKey.SYNTH -> DataKind.SyntheticCount
                     GridKey.ATIME -> DataKind.AstroTime
+                    GridKey.ODO -> DataKind.OdoDistance
                     else -> null
                 }
                 if (focusTarget != null) {
@@ -448,6 +473,7 @@ class SectionViewModel(
                     GridKey.ENDAVG -> listOf<DataKind>()
                     GridKey.SYNTH -> listOf(DataKind.SyntheticInterval, DataKind.SyntheticCount).takeIf { focus.kind in it }
                     GridKey.ATIME -> DataKind.AstroTime.takeIf(focus.kind::equals)?.let(::listOf)
+                    GridKey.ODO -> DataKind.OdoDistance.takeIf(focus.kind::equals)?.let(::listOf)
                     else -> null
                 }
                 if (dataToRemove != null) {
@@ -462,6 +488,7 @@ class SectionViewModel(
             } else {
                 val existingAvg = item.modifier<PositionLineModifier.SetAvg>()?.setavg
                 val modifierToAdd = when (key) {
+                    GridKey.ODO -> PositionLineModifier.OdoDistance(item.atKm)
                     GridKey.SETAVG -> PositionLineModifier.SetAvgSpeed(existingAvg ?: SpeedKmh(0.0))
                     GridKey.THENAVG -> PositionLineModifier.ThenAvgSpeed(existingAvg ?: SpeedKmh(0.0))
                     GridKey.ATIME -> PositionLineModifier.AstroTime(TimeOfDay(0, 0, 0, 0))
@@ -525,8 +552,7 @@ class SectionViewModel(
     }
 
     private fun sanitizeText(original: String, dataKind: DataKind) = when (dataKind) {
-        DataKind.Distance, DataKind.AverageSpeed, DataKind.SyntheticInterval -> original.toDouble3Digits()
-            .toString()
+        DataKind.Distance, DataKind.OdoDistance, DataKind.AverageSpeed, DataKind.SyntheticInterval -> original.toDouble3Digits().toString()
 
         DataKind.SyntheticCount -> (original.toIntOrNull()?.coerceAtMost(1000) ?: "0").toString()
         DataKind.AstroTime -> original
@@ -538,6 +564,10 @@ class SectionViewModel(
         val sanitizedText = sanitizeText(newText, editorFocus.kind)
         val newItem = when (editorFocus.kind) {
             DataKind.Distance -> item.copy(atKm = DistanceKm(sanitizedText.toDouble()))
+            DataKind.OdoDistance -> item.copy(modifiers = modifiers.map {
+                if (it is PositionLineModifier.OdoDistance) it.copy(distanceKm = DistanceKm(sanitizedText.toDouble3Digits())) else it
+            })
+
             DataKind.AverageSpeed -> item.copy(modifiers = modifiers.map {
                 when (it) {
                     is PositionLineModifier.SetAvgSpeed -> it.copy(SpeedKmh(sanitizedText.toDouble()))
@@ -557,6 +587,7 @@ class SectionViewModel(
             DataKind.AstroTime -> item.copy(modifiers = modifiers.map {
                 if (it is PositionLineModifier.AstroTime) it.copy(timeOfDay = TimeOfDay.parse(newText)) else it
             })
+
         }
         updateInputPositions(currentItems.toMutableList().apply { set(indexOfCurrentItem, newItem) })
         return sanitizedText

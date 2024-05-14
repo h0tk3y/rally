@@ -19,6 +19,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.unit.dp
 import com.h0tk3y.rally.*
 import com.h0tk3y.rally.PositionLineModifier.IsSynthetic
+import com.h0tk3y.rally.android.db.SectionInsertOrRenameResult
 import com.h0tk3y.rally.android.scenes.*
 import com.h0tk3y.rally.android.scenes.DataKind.*
 import com.h0tk3y.rally.android.theme.LocalCustomColorsPalette
@@ -27,6 +28,7 @@ import com.h0tk3y.rally.android.theme.LocalCustomColorsPalette
 @Composable
 fun PositionsListView(
     listState: LazyListState,
+    odoDistances: Map<LineNumber, DistanceKm>,
     positionsList: List<RoadmapInputLine>,
     selectedLineIndex: LineNumber,
     editorControls: EditorControls,
@@ -73,18 +75,34 @@ fun PositionsListView(
                     if (line is PositionLine) {
                         val position = editorFocus.cursor
 
-                        DataField(
-                            Distance,
-                            line,
-                            position,
-                            isEditorEnabled,
-                            isSelectedLine,
-                            editorFocus,
-                            editorControls,
-                            editorState,
-                            subsMatch,
-                            Modifier.align(Alignment.CenterVertically)
-                        )
+                        Column(modifier = Modifier.align(Alignment.CenterVertically)) {
+                            val currentLineOdo = odoDistances.get(line.lineNumber)
+                            DataField(
+                                Distance,
+                                line,
+                                position,
+                                isEditorEnabled,
+                                isSelectedLine,
+                                editorFocus,
+                                editorControls,
+                                editorState,
+                                subsMatch,
+                                Modifier.align(Alignment.Start)
+                            )
+                            if (currentLineOdo != null) {
+                                FocusedTextFieldWithoutKeyboard(
+                                    currentLineOdo.valueKm.strRound3(),
+                                    AverageSpeed,
+                                    modifier = Modifier.alpha(0.5f).align(Alignment.Start),
+                                    selectionPosition = position,
+                                    focused = false,
+                                    onTextChange = { },
+                                    onFocused = { },
+                                    onPositionChange = { },
+                                    enabled = false
+                                )
+                            }
+                        }
                     }
                     FlowRow {
                         when (line) {
@@ -265,7 +283,7 @@ private fun DataField(
 fun showFailureInEditor(reason: FailureReason) = reason is FailureReason.DistanceIsNotIncreasing
 
 fun shouldBeDisplayed(field: DataKind, editorState: EditorState): Boolean =
-    editorState.isEnabled || field in listOf(Distance, AverageSpeed, AstroTime)
+    editorState.isEnabled || field in listOf(Distance, OdoDistance, AverageSpeed, AstroTime)
 
 @Composable
 fun LabelForField(kind: DataKind, line: PositionLine, matchId: Int?, modifier: Modifier) {
@@ -273,6 +291,7 @@ fun LabelForField(kind: DataKind, line: PositionLine, matchId: Int?, modifier: M
     val matchStr = if (kind == AverageSpeed) matchId?.toString().orEmpty() else ""
     when (kind) {
         Distance -> Unit
+        OdoDistance -> Text("odo", padding)
         AverageSpeed -> {
             val setavg = line.modifier<PositionLineModifier.SetAvg>()
             if (setavg != null) {

@@ -84,6 +84,7 @@ class ResultsFormatter {
             .let { str -> if (str.isNotEmpty()) " $str" else str }
 
     private fun formatModifier(modifier: PositionLineModifier): String = when (modifier) {
+        is PositionLineModifier.OdoDistance -> "odo ${modifier.distanceKm.valueKm.strRound3()}"
         is PositionLineModifier.SetAvgSpeed -> "setavg ${modifier.setavg}"
         is PositionLineModifier.EndAvgSpeed -> "endavg ${modifier.endavg?.toString() ?: ""}"
         is PositionLineModifier.ThenAvgSpeed -> "thenavg ${modifier.setavg}"
