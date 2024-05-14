@@ -15,9 +15,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import com.h0tk3y.rally.*
+import com.h0tk3y.rally.InputToTextSerializer.serializeToText
 import com.h0tk3y.rally.PositionLineModifier.*
 import com.h0tk3y.rally.android.LoadState
 import com.h0tk3y.rally.android.PreferenceRepository
@@ -74,7 +77,7 @@ fun SectionScene(
                 DialogKind.DUPLICATE,
                 currentSection.value,
                 { showDuplicateDialog = false },
-                { newName ->
+                { newName, _ ->
                     val serializedPositions = InputToTextSerializer.serializeToText(positions)
                     when (val result = database.createSection(newName, serializedPositions)) {
                         is SectionInsertOrRenameResult.AlreadyExists -> {
@@ -95,7 +98,7 @@ fun SectionScene(
                 DialogKind.RENAME,
                 currentSection.value,
                 { showRenameDialog = false },
-                { newName ->
+                { newName, _ ->
                     when (val result = database.renameSection(sectionId, newName)) {
                         is SectionInsertOrRenameResult.AlreadyExists -> ItemSaveResult.AlreadyExists
                         is SectionInsertOrRenameResult.Success -> {
@@ -186,6 +189,16 @@ fun SectionScene(
                                 Icon(Icons.Default.Edit, "Rename this section")
                                 Spacer(Modifier.width(8.dp))
                                 Text("Rename this section")
+                            }
+
+                            val clipboardManager = LocalClipboardManager.current
+                            DropdownMenuItem(onClick = {
+                                clipboardManager.setText(AnnotatedString(currentSection.value.serializedPositions))
+                                showMenu = false
+                            }) {
+                                Icon(Icons.Default.Share, "Export as text")
+                                Spacer(Modifier.width(8.dp))
+                                Text("Copy as text")
                             }
                         }
                         Divider()

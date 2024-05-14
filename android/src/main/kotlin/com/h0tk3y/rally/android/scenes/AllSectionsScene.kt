@@ -2,19 +2,26 @@ package com.h0tk3y.rally.android.scenes
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.Divider
+import androidx.compose.material.DropdownMenu
+import androidx.compose.material.DropdownMenuItem
 import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
 import androidx.compose.material.Scaffold
 import androidx.compose.material.Text
 import androidx.compose.material.TopAppBar
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Create
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -38,15 +45,33 @@ fun AllSectionsScene(
     onSelectSection: (Section) -> Unit
 ) {
     var showNewListDialog by rememberSaveable { mutableStateOf(false) }
+    var showImportDialog by rememberSaveable { mutableStateOf(false) }
+    var showMenu by rememberSaveable { mutableStateOf(false) }
+
 
     if (showNewListDialog) {
-        CreateOrRenameSectionDialog(DialogKind.CREATE, existing = null, onDismiss = { showNewListDialog = false }, onSave = {
-            when (val result = database.createEmptySection(it)) {
+        CreateOrRenameSectionDialog(DialogKind.CREATE, existing = null, onDismiss = { showNewListDialog = false }, onSave = { name, _ ->
+            when (val result = database.createEmptySection(name)) {
                 is SectionInsertOrRenameResult.Success -> {
                     onSelectSection(result.section)
                     showNewListDialog = false
                     ItemSaveResult.Ok(result.section)
                 }
+
+                SectionInsertOrRenameResult.AlreadyExists -> ItemSaveResult.AlreadyExists
+            }
+        })
+    }
+
+    if (showImportDialog) {
+        CreateOrRenameSectionDialog(DialogKind.IMPORT, existing = null, onDismiss = { showImportDialog = false }, onSave = { name, content ->
+            when (val result = database.createSection(name, content)) {
+                is SectionInsertOrRenameResult.Success -> {
+                    onSelectSection(result.section)
+                    showImportDialog = false
+                    ItemSaveResult.Ok(result.section)
+                }
+
                 SectionInsertOrRenameResult.AlreadyExists -> ItemSaveResult.AlreadyExists
             }
         })
@@ -59,6 +84,19 @@ fun AllSectionsScene(
                 actions = {
                     IconButton(onClick = { showNewListDialog = true }) {
                         Icon(imageVector = Icons.Rounded.Add, contentDescription = "Create section")
+                    }
+                    IconButton(onClick = { showMenu = true }) {
+                        Icon(Icons.Default.MoreVert, "Show menu")
+                    }
+                    DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                        DropdownMenuItem(onClick = {
+                            showImportDialog = true
+                            showMenu = false
+                        }) {
+                            Icon(Icons.Default.Create, "Import section")
+                            Spacer(Modifier.width(8.dp))
+                            Text("Import section")
+                        }
                     }
                 }
             )
@@ -106,8 +144,8 @@ fun SectionsListView(
 }
 
 
-
-@Composable fun CenterTextBox(text: String) {
+@Composable
+fun CenterTextBox(text: String) {
     Box(Modifier.fillMaxSize()) {
         Text(
             text = text,
