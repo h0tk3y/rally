@@ -45,6 +45,11 @@ android {
     namespace = "com.h0tk3y.rally"
     compileSdk = 34
     sourceSets["main"].manifest.srcFile("src/androidMain/AndroidManifest.xml")
+    buildTypes {
+        debug {
+            applicationIdSuffix = ".debug"
+        }
+    }
     defaultConfig {
         minSdk = 24
         targetSdk = 34

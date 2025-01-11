@@ -9,8 +9,8 @@ data class SpeedKmh(val valueKmh: Double) {
 
         fun parse(fromString: String): SpeedKmh? {
             return when {
-                fromString.endsWith(kmhSuffix) -> {
-                    val valueKmh = fromString.substringBeforeLast(kmhSuffix).toDoubleOrNull()
+                fromString.endsWith(KMH_SUFFIX) -> {
+                    val valueKmh = fromString.substringBeforeLast(KMH_SUFFIX).toDoubleOrNull()
                         ?: return null
                     SpeedKmh(valueKmh)
                 }
@@ -19,10 +19,10 @@ data class SpeedKmh(val valueKmh: Double) {
             }
         }
         
-        const val kmhSuffix = "kmh"
+        const val KMH_SUFFIX = "kmh"
     }
 
-    override fun toString(): String = if (valueKmh.isInfinite()) "∞" else "${(valueKmh * 100).roundToInt() / 100.0}$kmhSuffix"
+    override fun toString(): String = if (valueKmh.isInfinite()) "∞" else "${(valueKmh * 100).roundToInt() / 100.0}$KMH_SUFFIX"
 }
 
 data class DistanceKm(val valueKm: Double) {

@@ -1,19 +1,34 @@
 package com.h0tk3y.rally.android.scenes
 
-import com.h0tk3y.rally.*
+import com.h0tk3y.rally.CommentLine
+import com.h0tk3y.rally.DefaultModifierValidator
+import com.h0tk3y.rally.DistanceKm
+import com.h0tk3y.rally.InputRoadmapParser
+import com.h0tk3y.rally.InputToTextSerializer
+import com.h0tk3y.rally.LineNumber
+import com.h0tk3y.rally.OdoDistanceCalculator
+import com.h0tk3y.rally.PositionLine
+import com.h0tk3y.rally.PositionLineModifier
+import com.h0tk3y.rally.RallyTimesIntervalsCalculator
+import com.h0tk3y.rally.RallyTimesResult
+import com.h0tk3y.rally.RallyTimesResultFailure
+import com.h0tk3y.rally.RoadmapInputLine
+import com.h0tk3y.rally.SpeedKmh
+import com.h0tk3y.rally.SubsMatch
+import com.h0tk3y.rally.SubsMatcher
+import com.h0tk3y.rally.TimeOfDay
 import com.h0tk3y.rally.android.LoadState
 import com.h0tk3y.rally.android.PreferenceRepository
 import com.h0tk3y.rally.android.db.Database
 import com.h0tk3y.rally.android.views.GridKey
 import com.h0tk3y.rally.db.Section
+import com.h0tk3y.rally.modifier
+import com.h0tk3y.rally.preprocessRoadmap
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.combineTransform
-import kotlinx.coroutines.flow.lastOrNull
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.zip
 import kotlinx.coroutines.launch
 import moe.tlaster.precompose.viewmodel.ViewModel
 import moe.tlaster.precompose.viewmodel.viewModelScope
@@ -66,10 +81,7 @@ class SectionViewModel(
             combineTransform(_preprocessedPositions, calibration) { a, b -> emit(a to b) }.collectLatest { (it, calibrationFactor) ->
                 val lines = it.filterIsInstance<PositionLine>()
                 launch {
-                    val odo = OdoDistanceCalculator.calculateOdoDistances(
-                        lines.filterIsInstance<PositionLine>(),
-                        calibrationFactor
-                    )
+                    val odo = OdoDistanceCalculator.calculateOdoDistances(lines, calibrationFactor)
                     _odoValues.value = odo
 
                     val rallyTimes = RallyTimesIntervalsCalculator().rallyTimes(lines)
@@ -251,7 +263,7 @@ class SectionViewModel(
         }
     }
 
-    fun enterCharacter(char: Char) {
+    private fun enterCharacter(char: Char) {
         currentItem?.let { item ->
             val editorFocus = _editorFocus.value
             val currentText = itemText(item, editorFocus.kind)
