@@ -22,7 +22,7 @@ class ResultsFormatter {
                     )
                 } 
                 is CommentLine -> {
-                    appendLine("${CommentLine.commentPrefix} ${line.commentText}")
+                    appendLine("${CommentLine.COMMENT_PREFIX} ${line.commentText}")
                 }
             }
         }

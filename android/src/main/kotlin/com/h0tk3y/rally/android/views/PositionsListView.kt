@@ -1,6 +1,5 @@
 package com.h0tk3y.rally.android.views
 
-import android.widget.Space
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -19,7 +18,6 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.unit.dp
 import com.h0tk3y.rally.*
 import com.h0tk3y.rally.PositionLineModifier.IsSynthetic
-import com.h0tk3y.rally.android.db.SectionInsertOrRenameResult
 import com.h0tk3y.rally.android.scenes.*
 import com.h0tk3y.rally.android.scenes.DataKind.*
 import com.h0tk3y.rally.android.theme.LocalCustomColorsPalette
@@ -43,7 +41,9 @@ fun PositionsListView(
     val interactionSource = remember { MutableInteractionSource() }
     Column {
         if (!isEditorEnabled && results is RallyTimesResultFailure && results.failures.isNotEmpty()) {
-            Row(modifier = Modifier.fillMaxWidth().background(LocalCustomColorsPalette.current.dangerous)) {
+            Row(modifier = Modifier
+                .fillMaxWidth()
+                .background(LocalCustomColorsPalette.current.dangerous)) {
                 Text(modifier = Modifier.padding(8.dp), text = "Failed to calculate because of errors")
             }
         }
@@ -67,7 +67,9 @@ fun PositionsListView(
                 val background =
                     if (isSelectedLine) Modifier.background(LocalCustomColorsPalette.current.selection) else Modifier
                 Row(
-                    modifier = background.padding(8.dp).fillMaxWidth()
+                    modifier = background
+                        .padding(8.dp)
+                        .fillMaxWidth()
                         .clickable(interactionSource, indication = null, onClick = { editorControls.selectLine(line.lineNumber, null) }),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -93,7 +95,9 @@ fun PositionsListView(
                                 FocusedTextFieldWithoutKeyboard(
                                     currentLineOdo.valueKm.strRound3(),
                                     AverageSpeed,
-                                    modifier = Modifier.alpha(0.5f).align(Alignment.Start),
+                                    modifier = Modifier
+                                        .alpha(0.5f)
+                                        .align(Alignment.Start),
                                     selectionPosition = position,
                                     focused = false,
                                     onTextChange = { },
@@ -107,7 +111,7 @@ fun PositionsListView(
                     FlowRow {
                         when (line) {
                             is PositionLine -> {
-                                val position = editorFocus.cursor
+                                val cursorIndex = editorFocus.cursor
 
                                 if (line.modifier<PositionLineModifier.EndAvgSpeed>() != null) {
                                     val matchId = subsMatch.subNumbers[line]
@@ -123,8 +127,10 @@ fun PositionsListView(
                                         FocusedTextFieldWithoutKeyboard(
                                             matchSpeed.setavg.valueKmh.strRound3(),
                                             AverageSpeed,
-                                            modifier = Modifier.alpha(0.5f).align(Alignment.CenterVertically),
-                                            selectionPosition = position,
+                                            modifier = Modifier
+                                                .alpha(0.5f)
+                                                .align(Alignment.CenterVertically),
+                                            selectionPosition = cursorIndex,
                                             focused = false,
                                             onTextChange = { },
                                             onFocused = { },
@@ -138,7 +144,7 @@ fun PositionsListView(
                                         DataField(
                                             field,
                                             line,
-                                            position,
+                                            cursorIndex,
                                             isEditorEnabled,
                                             isSelectedLine,
                                             editorFocus,
@@ -162,7 +168,11 @@ fun PositionsListView(
                                                         is FailureReason.DistanceIsNotIncreasing -> "< ${reason.shouldBeAtLeast.valueKm.strRound3()}"
                                                         is FailureReason.OuterIntervalNotCovered -> "outer interval not covered by subs"
                                                     }
-                                                    Text(text = text, color = LocalCustomColorsPalette.current.dangerous, modifier = Modifier.padding(start = 4.dp))
+                                                    Text(
+                                                        text = text,
+                                                        color = LocalCustomColorsPalette.current.dangerous,
+                                                        modifier = Modifier.padding(start = 4.dp)
+                                                    )
                                                 }
                                             }
                                         }
@@ -175,7 +185,10 @@ fun PositionsListView(
                                             if (warningsInCurrentLine.isNotEmpty() || go != null) {
                                                 if (go != null && go.valueKmh >= 0) {
                                                     Text(
-                                                        modifier = Modifier.alpha(0.5f).align(Alignment.CenterVertically).padding(start = 4.dp),
+                                                        modifier = Modifier
+                                                            .alpha(0.5f)
+                                                            .align(Alignment.CenterVertically)
+                                                            .padding(start = 4.dp),
                                                         text = "➠${go.valueKmh.strRound1()}",
                                                     )
                                                 }
@@ -184,7 +197,9 @@ fun PositionsListView(
                                                         is WarningReason.ImpossibleToGetInTime -> "🚫late by ${(reason.takes - reason.available).toMinSec()}"
                                                     }
                                                     Text(
-                                                        modifier = Modifier.align(Alignment.CenterVertically).padding(start = 4.dp),
+                                                        modifier = Modifier
+                                                            .align(Alignment.CenterVertically)
+                                                            .padding(start = 4.dp),
                                                         text = text,
                                                         color = LocalCustomColorsPalette.current.dangerous
                                                     )
@@ -253,7 +268,7 @@ fun allowance(allowance: TimeAllowance?, time: TimeHr): Int {
 private fun DataField(
     field: DataKind,
     line: PositionLine,
-    position: Int,
+    cursorIndex: Int,
     isEditorEnabled: Boolean,
     isSelectedLine: Boolean,
     editorFocus: EditorFocus,
@@ -269,13 +284,13 @@ private fun DataField(
         text,
         field,
         modifier = if (line.modifier<IsSynthetic>() != null) elementsModifier.alpha(0.5f) else elementsModifier,
-        selectionPosition = position,
+        selectionPosition = cursorIndex,
         focused = isEditorEnabled && isSelectedLine && field == editorFocus.kind,
         onTextChange = { },
         onFocused = {
             editorControls.selectLine(line.lineNumber, field)
         },
-        onPositionChange = { editorControls.moveCursor(it - position) },
+        onPositionChange = { editorControls.moveCursor(it - cursorIndex) },
         enabled = editorState.isEnabled
     )
 }
@@ -288,11 +303,11 @@ fun shouldBeDisplayed(field: DataKind, editorState: EditorState): Boolean =
 @Composable
 fun LabelForField(kind: DataKind, line: PositionLine, matchId: Int?, modifier: Modifier) {
     val padding = modifier.padding(end = 2.dp)
-    val matchStr = if (kind == AverageSpeed) matchId?.toString().orEmpty() else ""
     when (kind) {
         Distance -> Unit
         OdoDistance -> Text("odo", padding)
         AverageSpeed -> {
+            val matchStr = matchId?.toString().orEmpty()
             val setavg = line.modifier<PositionLineModifier.SetAvg>()
             if (setavg != null) {
                 LabelForField(

@@ -9,7 +9,7 @@ object InputToTextSerializer {
     fun serializeLine(roadmapInputLine: RoadmapInputLine): String =
         when (roadmapInputLine) {
             is CommentLine -> {
-                CommentLine.commentPrefix + roadmapInputLine.commentText
+                CommentLine.COMMENT_PREFIX + roadmapInputLine.commentText
             }
 
             is PositionLine -> buildString {

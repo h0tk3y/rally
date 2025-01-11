@@ -111,6 +111,6 @@ private fun validateCalibrationFactor(string: String): Double? {
 }
 
 sealed interface CalibrationDialogResult{
-    object Ok : CalibrationDialogResult
-    object InvalidValue : CalibrationDialogResult
+    data object Ok : CalibrationDialogResult
+    data object InvalidValue : CalibrationDialogResult
 }

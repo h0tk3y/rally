@@ -10,8 +10,8 @@ class InputRoadmapParser(private val modifiersValidator: ModifiersValidator) {
     }
 
     private fun parseLine(line: String, lineNumber: LineNumber): RoadmapInputLine {
-        if (line.startsWith(CommentLine.commentPrefix)) {
-            return CommentLine(line.removePrefix(CommentLine.commentPrefix).trim(), lineNumber)
+        if (line.startsWith(CommentLine.COMMENT_PREFIX)) {
+            return CommentLine(line.removePrefix(CommentLine.COMMENT_PREFIX).trim(), lineNumber)
         }
         val parts = line.trim().split(" ")
         val dst = parts.first().toDoubleOrNull() ?: error("failed to parse dst in line $lineNumber: $line")
@@ -103,7 +103,7 @@ private fun parseAvgSpeed(string: String): SpeedKmh {
         }
 
         s.toDoubleOrNull() != null ->
-            parseAvgSpeed(s + SpeedKmh.kmhSuffix)
+            parseAvgSpeed(s + SpeedKmh.KMH_SUFFIX)
 
         else -> SpeedKmh.parse(s) ?: error("failed to parse avgspd notation $string")
     }

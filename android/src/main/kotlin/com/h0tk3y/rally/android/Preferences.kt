@@ -43,7 +43,7 @@ class PreferenceRepository(val dataStore: DataStore<Preferences>) {
 private fun mapUserPreferences(preferences: Preferences): UserPreferences {
     // Get the sort order from preferences and convert it to a [SortOrder] object
     val timeAllowance =
-        preferences[PreferencesKeys.ALLOWANCE]?.let { pref -> TimeAllowance.values().find { it.name == pref } }
+        preferences[PreferencesKeys.ALLOWANCE]?.let { pref -> TimeAllowance.entries.find { it.name == pref } }
     val calibration = preferences[PreferencesKeys.CALIBRATION] ?: 1.0
     return UserPreferences(timeAllowance, calibration)
 }
