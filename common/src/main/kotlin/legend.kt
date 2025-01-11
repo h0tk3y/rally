@@ -1,7 +1,5 @@
 package com.h0tk3y.rally
 
-import java.util.Objects
-
 data class LineNumber(val number: Int, val subNumber: Int) : Comparable<LineNumber> {
     init {
         require(number >= 1) { "line numbers should be positive" }
@@ -25,7 +23,7 @@ data class CommentLine(
     override val lineNumber: LineNumber
 ) : RoadmapInputLine {
     companion object {
-        const val commentPrefix = "//"
+        const val COMMENT_PREFIX = "//"
     }
 }
 
