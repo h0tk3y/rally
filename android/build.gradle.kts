@@ -43,7 +43,7 @@ sqldelight {
 
 android {
     namespace = "com.h0tk3y.rally"
-    compileSdk = 34
+    compileSdk = 35
     sourceSets["main"].manifest.srcFile("src/androidMain/AndroidManifest.xml")
     buildTypes {
         debug {

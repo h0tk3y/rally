@@ -1,6 +1,8 @@
 package com.h0tk3y.rally.android.views
 
 import android.util.Log
+import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputConnection
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.*
@@ -11,6 +13,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -20,8 +23,11 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.InterceptPlatformTextInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalTextInputService
+import androidx.compose.ui.platform.PlatformTextInputInterceptor
+import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
@@ -34,7 +40,9 @@ import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import com.h0tk3y.rally.android.scenes.DataKind
 import com.h0tk3y.rally.android.theme.LocalCustomTypography
+import kotlinx.coroutines.awaitCancellation
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun FocusedTextFieldWithoutKeyboard(
     text: String,
@@ -48,9 +56,9 @@ fun FocusedTextFieldWithoutKeyboard(
     onFocused: () -> Unit = {},
     onPositionChange: (Int) -> Unit = {},
 ) {
-    CompositionLocalProvider(
-        LocalTextInputService provides null
-    ) {
+    InterceptPlatformTextInput(interceptor = { request, nextHandler ->
+        awaitCancellation()
+    }) {
         val focusRequester = remember { FocusRequester() }
 
         if (focused) {
