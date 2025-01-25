@@ -29,6 +29,7 @@ fun PositionsListView(
     odoDistances: Map<LineNumber, DistanceKm>,
     positionsList: List<RoadmapInputLine>,
     selectedLineIndex: LineNumber,
+    raceCurrentLineIndex: LineNumber?,
     editorControls: EditorControls,
     editorState: EditorState,
     editorFocus: EditorFocus,
@@ -41,9 +42,11 @@ fun PositionsListView(
     val interactionSource = remember { MutableInteractionSource() }
     Column {
         if (!isEditorEnabled && results is RallyTimesResultFailure && results.failures.isNotEmpty()) {
-            Row(modifier = Modifier
-                .fillMaxWidth()
-                .background(LocalCustomColorsPalette.current.dangerous)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(LocalCustomColorsPalette.current.dangerous)
+            ) {
                 Text(modifier = Modifier.padding(8.dp), text = "Failed to calculate because of errors")
             }
         }
@@ -64,8 +67,12 @@ fun PositionsListView(
 
             itemsIndexed(positionsList) { _, line ->
                 val isSelectedLine = line.lineNumber == selectedLineIndex
-                val background =
-                    if (isSelectedLine) Modifier.background(LocalCustomColorsPalette.current.selection) else Modifier
+                val isRaceCurrentLine = line.lineNumber == raceCurrentLineIndex
+                val background = when {
+                    isSelectedLine -> Modifier.background(LocalCustomColorsPalette.current.selection)
+                    isRaceCurrentLine -> Modifier.background(LocalCustomColorsPalette.current.raceCurrent)
+                    else -> Modifier
+                }
                 Row(
                     modifier = background
                         .padding(8.dp)
