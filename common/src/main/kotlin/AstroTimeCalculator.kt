@@ -1,7 +1,5 @@
 package com.h0tk3y.rally
 
-import java.sql.Time
-
 internal object AstroTimeCalculator {
     fun calculateAstroTimes(
         roadmap: List<PositionLine>,

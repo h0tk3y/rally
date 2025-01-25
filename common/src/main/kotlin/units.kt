@@ -31,6 +31,9 @@ data class DistanceKm(val valueKm: Double) {
     operator fun minus(other: DistanceKm) = DistanceKm(valueKm.minusWithInf(other.valueKm))
 
     companion object {
+        fun byMoving(speedKmh: SpeedKmh, timeHr: TimeHr): DistanceKm {
+            return DistanceKm(speedKmh.valueKmh * timeHr.timeHours)
+        }
         val zero = DistanceKm(0.0)
     }
 }
@@ -141,7 +144,7 @@ data class TimeOfDay(val dayOverflow: Int = 0, val hr: Int, val min: Int, val se
     fun timeStrNoDayOverflow(): String =
         "${hr.toString().padStart(2, '0')}:" +
                 "${min.toString().padStart(2, '0')}:" +
-                "${sec.toString().padStart(2, '0')}"
+                sec.toString().padStart(2, '0')
 
     fun timeStr(): String = "$dayOverflow:" + timeStrNoDayOverflow()
 
@@ -161,46 +164,6 @@ data class TimeOfDay(val dayOverflow: Int = 0, val hr: Int, val min: Int, val se
                 throw IllegalArgumentException("expected time of day, got $string")
             }
         }
-    }
-}
-
-interface RelativeSubTimesTree {
-    fun put(position: PositionLine, relativeTo: PositionLine, time: TimeHr)
-    fun get(position: PositionLine, relativeTo: PositionLine): TimeHr
-    fun relativesChain(position: PositionLine): List<PositionLine>
-    fun globalTime(position: PositionLine): TimeHr
-}
-
-class RelativeSubTimesTreeImpl(globalStart: PositionLine) : RelativeSubTimesTree {
-    private class Node(val position: PositionLine, var parent: PositionLine?) {
-        val children: MutableMap<Node, TimeHr> = mutableMapOf()
-    }
-    
-    private val nodeByPosition: MutableMap<PositionLine, Node> = mutableMapOf()
-    
-    private fun addNode(node: Node, withRelativeTime: TimeHr) {
-        nodeByPosition[node.position] = node
-        node.parent?.let { parent ->
-            nodeByPosition.getValue(parent).children.put(node, withRelativeTime)
-        }
-    }
-    
-    private val root = Node(globalStart, parent = null).apply { addNode(this, TimeHr.zero) }
-    
-    override fun put(position: PositionLine, relativeTo: PositionLine, time: TimeHr) {
-        TODO()
-    }
-
-    override fun get(position: PositionLine, relativeTo: PositionLine): TimeHr {
-        TODO("Not yet implemented")
-    }
-
-    override fun relativesChain(position: PositionLine): List<PositionLine> {
-        TODO("Not yet implemented")
-    }
-
-    override fun globalTime(position: PositionLine): TimeHr {
-        TODO("Not yet implemented")
     }
 }
 
