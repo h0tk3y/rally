@@ -1,68 +1,125 @@
 package com.h0tk3y.rally.android.scenes
 
+import android.content.pm.PackageManager
 import android.content.res.Configuration
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material.*
+import androidx.compose.material.Button
+import androidx.compose.material.Divider
+import androidx.compose.material.DropdownMenu
+import androidx.compose.material.DropdownMenuItem
+import androidx.compose.material.Icon
+import androidx.compose.material.IconButton
+import androidx.compose.material.MaterialTheme
+import androidx.compose.material.RadioButton
+import androidx.compose.material.RadioButtonDefaults
+import androidx.compose.material.Scaffold
+import androidx.compose.material.Text
+import androidx.compose.material.TopAppBar
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.rounded.Done
 import androidx.compose.material.icons.rounded.Edit
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
-import com.h0tk3y.rally.*
-import com.h0tk3y.rally.InputToTextSerializer.serializeToText
-import com.h0tk3y.rally.PositionLineModifier.*
+import androidx.core.app.ActivityCompat
+import com.h0tk3y.rally.InputToTextSerializer
+import com.h0tk3y.rally.LineNumber
+import com.h0tk3y.rally.PositionLine
+import com.h0tk3y.rally.PositionLineModifier
+import com.h0tk3y.rally.PositionLineModifier.AddSynthetic
+import com.h0tk3y.rally.PositionLineModifier.IsSynthetic
+import com.h0tk3y.rally.PositionLineModifier.SetAvg
+import com.h0tk3y.rally.RallyTimesResultFailure
+import com.h0tk3y.rally.RoadmapInputLine
+import com.h0tk3y.rally.SpeedKmh
+import com.h0tk3y.rally.SubsMatch
 import com.h0tk3y.rally.android.LoadState
-import com.h0tk3y.rally.android.PreferenceRepository
 import com.h0tk3y.rally.android.db.Database
 import com.h0tk3y.rally.android.db.SectionInsertOrRenameResult
-import com.h0tk3y.rally.android.scenes.DataKind.*
+import com.h0tk3y.rally.android.permissions.RequiredPermissions
 import com.h0tk3y.rally.android.scenes.DataKind.AstroTime
+import com.h0tk3y.rally.android.scenes.DataKind.AverageSpeed
+import com.h0tk3y.rally.android.scenes.DataKind.Distance
 import com.h0tk3y.rally.android.scenes.DataKind.OdoDistance
+import com.h0tk3y.rally.android.scenes.DataKind.SyntheticCount
+import com.h0tk3y.rally.android.scenes.DataKind.SyntheticInterval
 import com.h0tk3y.rally.android.scenes.TimeAllowance.BY_TEN_FULL
 import com.h0tk3y.rally.android.scenes.TimeAllowance.BY_TEN_FULL_PLUS_ONE
 import com.h0tk3y.rally.android.views.GridKey
 import com.h0tk3y.rally.android.views.Keyboard
 import com.h0tk3y.rally.android.views.PositionsListView
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import moe.tlaster.precompose.viewmodel.viewModel
-import moe.tlaster.precompose.viewmodel.viewModelScope
+import com.h0tk3y.rally.android.views.RaceView
+import com.h0tk3y.rally.modifier
+import com.h0tk3y.rally.strRound3
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun SectionScene(
     sectionId: Long,
     database: Database,
-    userPreferences: PreferenceRepository,
     onDeleteSection: () -> Unit,
     onNavigateToNewSection: (Long) -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    model: SectionViewModel
 ) {
-    val model = viewModel(SectionViewModel::class) { SectionViewModel(sectionId, database, userPreferences) }
     val section by model.section.collectAsState(LoadState.LOADING)
     val positions by model.inputPositions.collectAsState(emptyList())
     val selectedLineIndex by model.selectedLineIndex.collectAsState(LineNumber(1, 0))
+    val raceCurrentLineIndex by model.raceCurrentLineIndex.collectAsState(null)
     val preprocessed by model.preprocessedPositions.collectAsState(emptyList())
     val results by model.results.collectAsState(RallyTimesResultFailure(emptyList()))
     val odoValues by model.odoValues.collectAsState(emptyMap())
     val subsMatch by model.subsMatching.collectAsState(SubsMatch.EMPTY)
     val editorState by model.editorState.collectAsState(
-        EditorState(false, true, true, 9, true, true, true, true)
+        EditorState(
+            isEnabled = false,
+            canEnterDot = true,
+            canEnterDigits = true,
+            maxDigit = 9,
+            canMoveUp = true,
+            canMoveDown = true,
+            canMoveLeft = true,
+            canMoveRight = true
+        )
     )
     val editorFocus by model.editorFocus.collectAsState()
     val allowance by model.timeAllowance.collectAsState(null)
     val calibration by model.calibration.collectAsState(null)
+    val raceState by model.raceState.collectAsState(SectionViewModel.RaceUiState.NotInRaceMode)
 
     var showDuplicateDialog by rememberSaveable { mutableStateOf(false) }
     var showRenameDialog by rememberSaveable { mutableStateOf(false) }
@@ -119,12 +176,13 @@ fun SectionScene(
     }
 
     Scaffold(
+        modifier = Modifier.imePadding(),
         topBar = {
             TopAppBar(
                 backgroundColor = MaterialTheme.colors.surface,
                 title = {
                     Text(
-                        when (val currentSection = section) {
+                        when (currentSection) {
                             is LoadState.Loaded -> currentSection.value.name
                             is LoadState.LOADING -> "Loading"
                             LoadState.EMPTY -> ""
@@ -149,10 +207,49 @@ fun SectionScene(
                             Text(if (editorState.isEnabled) "Calculate" else "Edit")
                         }
                     }
+
+                    Spacer(Modifier.width(4.dp))
+
+                    val context = LocalContext.current
+                    val launchServiceAfterObtainingPermission = permissionRequester(whenObtained = {
+                        model.enterRaceMode(context)
+                    }, whenFailedToObtain = {
+                        Toast.makeText(context, "Please grant the required permissions", Toast.LENGTH_LONG).show()
+                    })
+
                     IconButton(onClick = { showMenu = true }) {
                         Icon(Icons.Default.MoreVert, "Show menu")
                     }
                     DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+
+                        DropdownMenuItem(onClick = {
+                            when (raceState) {
+                                is SectionViewModel.RaceUiState.NotInRaceMode -> launchServiceAfterObtainingPermission()
+                                SectionViewModel.RaceUiState.NoRaceServiceConnection,
+                                is SectionViewModel.RaceUiState.RaceGoing,
+                                is SectionViewModel.RaceUiState.RaceGoingInAnotherSection,
+                                is SectionViewModel.RaceUiState.RaceStopped,
+                                SectionViewModel.RaceUiState.RaceNotStarted -> model.leaveRaceMode()
+                            }
+                            showMenu = false
+                        }) {
+                            Icon(imageVector = Icons.Rounded.PlayArrow, "Race")
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                when (raceState) {
+                                    SectionViewModel.RaceUiState.NoRaceServiceConnection,
+                                    is SectionViewModel.RaceUiState.NotInRaceMode -> "Race mode"
+                                    is SectionViewModel.RaceUiState.RaceGoingInAnotherSection,
+                                    is SectionViewModel.RaceUiState.RaceStopped,
+                                    is SectionViewModel.RaceUiState.RaceGoing -> "Hide race panel"
+                                    SectionViewModel.RaceUiState.RaceNotStarted -> "Leave race mode"
+
+                                }
+                            )
+                        }
+
+                        Divider()
+
                         if (!inDeleteConfirmation) {
                             DropdownMenuItem(onClick = {
                                 inDeleteConfirmation = true
@@ -205,17 +302,26 @@ fun SectionScene(
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text("Allowance")
                             val rbColors = RadioButtonDefaults.colors(MaterialTheme.colors.primary)
-                            Row(Modifier.fillMaxWidth().clickable { model.setAllowance(null) }) {
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable { model.setAllowance(null) }) {
                                 RadioButton(colors = rbColors, selected = allowance == null, onClick = null)
                                 Spacer(Modifier.width(8.dp))
                                 Text("⦰")
                             }
-                            Row(Modifier.fillMaxWidth().clickable { model.setAllowance(BY_TEN_FULL) }) {
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable { model.setAllowance(BY_TEN_FULL) }) {
                                 RadioButton(colors = rbColors, selected = allowance == BY_TEN_FULL, onClick = null)
                                 Spacer(Modifier.width(8.dp))
                                 Text("⌊t/10⌋")
                             }
-                            Row(Modifier.fillMaxWidth().clickable { model.setAllowance(BY_TEN_FULL_PLUS_ONE) }) {
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable { model.setAllowance(BY_TEN_FULL_PLUS_ONE) }) {
                                 RadioButton(colors = rbColors, selected = allowance == BY_TEN_FULL_PLUS_ONE, onClick = null)
                                 Spacer(Modifier.width(8.dp))
                                 Text("⌈t/10⌉")
@@ -237,13 +343,19 @@ fun SectionScene(
             fun layout(content: @Composable (listModifier: Modifier, keyboardModifier: Modifier) -> Unit) {
                 if (LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE) {
                     Row(Modifier.padding(padding)) {
-                        val listModifier = Modifier.fillMaxHeight().weight(1.0f)
-                        val keyboardModifier = Modifier.fillMaxHeight().weight(1.0f)
+                        val listModifier = Modifier
+                            .fillMaxHeight()
+                            .weight(1.0f)
+                        val keyboardModifier = Modifier
+                            .fillMaxHeight()
+                            .weight(1.0f)
                         content(listModifier, keyboardModifier)
                     }
                 } else {
                     Column(Modifier.padding(padding)) {
-                        val listModifier = Modifier.fillMaxWidth().weight(1.0f)
+                        val listModifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1.0f)
                         val keyboardModifier = Modifier.fillMaxWidth()
                         content(listModifier, keyboardModifier)
                     }
@@ -264,6 +376,7 @@ fun SectionScene(
                                 odoValues,
                                 positionsToDisplay,
                                 selectedLineIndex,
+                                raceCurrentLineIndex,
                                 model,
                                 editorState,
                                 editorFocus,
@@ -280,10 +393,50 @@ fun SectionScene(
                 }
                 if (editorState.isEnabled) {
                     Keyboard(editorState, model, keyboardModifier)
+                } else {
+                    if (raceState !is SectionViewModel.RaceUiState.NotInRaceMode) {
+                        RaceView(
+                            raceState,
+                            preprocessed.firstOrNull { it.lineNumber == selectedLineIndex } as? PositionLine,
+                            onStartRace = {
+                                model.startRaceAtCurrentPosition(it)
+                            },
+                            onStopRace = {
+                                model.freezeAndStopRace()
+                            },
+                            onResetRace = {
+                                model.resetRace()
+                            },
+                            onSetDebugSpeed = {
+                                model.setDebugSpeed(SpeedKmh(it.toDouble()))
+                            },
+                            navigateToSection = onNavigateToNewSection,
+                            keyboardModifier
+                        )
+                    }
                 }
             }
         }
     )
+}
+
+@Composable
+private fun permissionRequester(
+    whenObtained: () -> Unit,
+    whenFailedToObtain: () -> Unit
+): () -> Unit {
+    val context = LocalContext.current
+
+    val permissions = RequiredPermissions.permissionsForRaceService(context)
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        if (permissions.all { ActivityCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED }) {
+            whenObtained()
+        } else {
+            whenFailedToObtain()
+        }
+    }
+
+    return { launcher.launch(permissions) }
 }
 
 interface EditorControls {
@@ -324,7 +477,7 @@ fun itemText(line: RoadmapInputLine, dataKind: DataKind): String? =
         null
     else when (dataKind) {
         Distance -> line.atKm.valueKm.strRound3()
-        DataKind.OdoDistance -> line.modifier<PositionLineModifier.OdoDistance>()?.distanceKm?.valueKm?.strRound3()
+        OdoDistance -> line.modifier<PositionLineModifier.OdoDistance>()?.distanceKm?.valueKm?.strRound3()
         AverageSpeed -> line.modifier<SetAvg>()?.setavg?.valueKmh?.strRound3()
         SyntheticCount -> line.modifier<AddSynthetic>()?.count.toString()
         SyntheticInterval -> line.modifier<AddSynthetic>()?.interval?.valueKm?.strRound3()

@@ -1,6 +1,5 @@
 package com.h0tk3y.rally.android.theme
 
-import androidx.annotation.Size
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Typography
@@ -18,7 +17,8 @@ import androidx.compose.ui.unit.sp
 @Immutable
 data class CustomColorsPalette(
     val selection: Color = Color.Unspecified,
-    val dangerous: Color = Color.Unspecified
+    val dangerous: Color = Color.Unspecified,
+    val raceCurrent: Color = Color.Unspecified
 )
 
 @Immutable
@@ -31,12 +31,14 @@ val LocalCustomTypography = staticCompositionLocalOf { CustomTypography() }
 
 val OnLightCustomColorsPalette = CustomColorsPalette(
     selection = Color(color = 0xFFFFFFCC),
-    dangerous = Color.Red
+    dangerous = Color.Red,
+    raceCurrent = Color(color = 0xFF99FF99),
 )
 
 val OnDarkCustomColorsPalette = CustomColorsPalette(
     selection = Color(color = 0xFF666600),
-    dangerous = Color.Red
+    dangerous = Color.Red,
+    raceCurrent = Color(color = 0xFF235523),
 )
 
 val Typography = CustomTypography(TextStyle(fontSize = 16.sp, fontFamily = FontFamily.Monospace))
