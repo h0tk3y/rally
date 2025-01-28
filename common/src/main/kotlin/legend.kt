@@ -69,7 +69,7 @@ sealed interface PositionLineModifier {
     ) : EndAvg
 
     data class AstroTime(
-        val timeOfDay: TimeOfDay
+        val timeOfDay: TimeDayHrMinSec
     ) : PositionLineModifier
 
     data class OdoDistance(

@@ -17,6 +17,7 @@ import com.h0tk3y.rally.OdoDistanceCalculator
 import com.h0tk3y.rally.PositionLine
 import com.h0tk3y.rally.PositionLineModifier
 import com.h0tk3y.rally.RaceService
+import com.h0tk3y.rally.RaceService.BtPublicState
 import com.h0tk3y.rally.RallyTimesIntervalsCalculator
 import com.h0tk3y.rally.RallyTimesResult
 import com.h0tk3y.rally.RallyTimesResultFailure
@@ -24,29 +25,36 @@ import com.h0tk3y.rally.RoadmapInputLine
 import com.h0tk3y.rally.SpeedKmh
 import com.h0tk3y.rally.SubsMatch
 import com.h0tk3y.rally.SubsMatcher
-import com.h0tk3y.rally.TimeOfDay
+import com.h0tk3y.rally.TimeDayHrMinSec
+import com.h0tk3y.rally.TimeHr
 import com.h0tk3y.rally.android.LoadState
 import com.h0tk3y.rally.android.PreferenceRepository
 import com.h0tk3y.rally.android.db.Database
 import com.h0tk3y.rally.android.views.GridKey
+import com.h0tk3y.rally.android.views.StartRaceOption
+import com.h0tk3y.rally.android.views.toTimeDayHrMinSec
 import com.h0tk3y.rally.db.Section
 import com.h0tk3y.rally.model.RaceModel
 import com.h0tk3y.rally.model.RaceState
+import com.h0tk3y.rally.model.duration
 import com.h0tk3y.rally.modifier
 import com.h0tk3y.rally.preprocessRoadmap
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.combineTransform
-import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
+import kotlinx.datetime.LocalTime
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.atStartOfDayIn
+import kotlinx.datetime.atTime
+import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
 import kotlin.math.sign
 
@@ -67,7 +75,10 @@ class SectionViewModel(
     private val _editorFocus: MutableStateFlow<EditorFocus> = MutableStateFlow(EditorFocus(0, DataKind.Distance))
     private val _editorState: MutableStateFlow<EditorState> = MutableStateFlow(EditorState(false))
     private val _subsMatching: MutableStateFlow<SubsMatch> = MutableStateFlow(SubsMatch.EMPTY)
+
+    // Race mode:
     private val _raceState: MutableStateFlow<RaceUiState> = MutableStateFlow(RaceUiState.NotInRaceMode)
+    private val _btState: MutableStateFlow<BtPublicState> = MutableStateFlow(BtPublicState.NotInitialized)
 
     val calibration = prefs.userPreferencesFlow.map { it.calibration }
 
@@ -117,7 +128,7 @@ class SectionViewModel(
     val section = _section.asStateFlow()
 
     val selectedLineIndex = _selectedLineNumber.asStateFlow()
-    val raceCurrentLineIndex = _raceCurrentLineNumber.combine(_raceState) { number, state -> number.takeIf { state is RaceUiState.RaceGoing }}
+    val raceCurrentLineIndex = _raceCurrentLineNumber.combine(_raceState) { number, state -> number.takeIf { state is RaceUiState.RaceGoing } }
     val editorState = _editorState.asStateFlow()
     val editorFocus = _editorFocus.asStateFlow()
     val inputPositions = _inputPositions.asStateFlow()
@@ -125,21 +136,10 @@ class SectionViewModel(
     val results = _results.asStateFlow()
     val odoValues = _odoValues.asStateFlow()
     val subsMatching = _subsMatching.asStateFlow()
-    val raceState = _raceState.asStateFlow().combine(
-        flow {
-            while (true) {
-                val time = Clock.System.now()
-                val currentTime = time.toLocalDateTime(TimeZone.currentSystemDefault())
-                val millisToNextWholeSecond = 1000 - (currentTime.time.toMillisecondOfDay() - currentTime.time.toSecondOfDay() * 1000)
-                emit(currentTime.time.toSecondOfDay())
-                val delayTime = millisToNextWholeSecond.toLong()
-                delay(delayTime)
-            }
-        }
-    ) { state, seconds ->
-        if (state is RaceUiState.RaceGoing) state.copy(serial = state.serial + seconds) else state
-    }
+    val raceState = _raceState.distinctUntilChanged { _, _ -> false }
+    val btState = _btState.asStateFlow()
     val timeAllowance = prefs.userPreferencesFlow.map { it.allowance }
+    val btMac = prefs.userPreferencesFlow.map { it.btMac }
 
     sealed interface RaceUiState {
         data object NotInRaceMode : RaceUiState
@@ -157,14 +157,22 @@ class SectionViewModel(
             val serial: Long
         ) : RaceUiState
 
+        data class RaceGoingAfterFinish(
+            val raceModel: RaceModel,
+            val raceModelAtFinish: RaceModel,
+            val finishedAt: Instant,
+            val serial: Long
+        ) : RaceUiState
+
         data class RaceStopped(
+            val stoppedAt: Instant,
             val raceModel: RaceModel,
         ) : RaceUiState
     }
 
     @SuppressLint("StaticFieldLeak")
     private var service: RaceService? = null
-    
+
     private var serviceRelatedJob: Job? = null
     private var serviceConnector: () -> Unit = { error("no connector") }
     private var serviceDisconnector: () -> Unit = { error("no disconnector") }
@@ -200,8 +208,18 @@ class SectionViewModel(
                 }
             }
             launch {
+                raceService.btPublicState.collectLatest {
+                    _btState.value = it
+                }
+            }
+            launch {
                 calibration.collectLatest {
                     raceService.calibration = it
+                }
+            }
+            launch {
+                btMac.collectLatest {
+                    raceService.setBtMac(it)
                 }
             }
         }
@@ -213,9 +231,68 @@ class SectionViewModel(
         serviceRelatedJob?.cancel()
     }
 
-    fun startRaceAtCurrentPosition(atTime: Instant) {
-        val atKm = currentItem?.atKm ?: return
-        service?.startRace(sectionId, atKm, atTime)
+    fun startRace(startRaceOption: StartRaceOption) {
+        service?.run {
+            val currentRaceState = raceState.value
+            val startDistance = when (startRaceOption) {
+                StartRaceOption.StartAtSelectedPositionAtTime,
+                StartRaceOption.StartAtSelectedPositionNow -> currentItem?.atKm ?: DistanceKm.zero
+
+                StartRaceOption.StartNowFromRaceState -> when (currentRaceState) {
+                    RaceState.NotStarted -> DistanceKm.zero
+                    is RaceState.Finished -> currentRaceState.raceModel.currentDistance
+                    is RaceState.InRace -> currentRaceState.raceModel.currentDistance
+                    is RaceState.Stopped -> currentRaceState.raceModelAtStop.startAtDistance
+                }
+
+                StartRaceOption.StartNowFromStoppedState -> when (val state = currentRaceState) {
+                    is RaceState.Stopped -> state.raceModelAtStop.startAtDistance
+                    is RaceState.Finished -> state.finishedRaceModel.startAtDistance
+                    RaceState.NotStarted,
+                    is RaceState.InRace -> error("unexpected start race option $startRaceOption for race state $currentRaceState")
+                }
+            }
+            maybeCreateItemAtDistance(startDistance)?.let { selectLine(it, null) }
+            if (startRaceOption.isNow) {
+                currentItem?.let {
+                    addModifierToItem(
+                        it,
+                        PositionLineModifier.AstroTime(
+                            TimeHr.duration(
+                                Clock.System.now() - Clock.System.now()
+                                    .toLocalDateTime(TimeZone.currentSystemDefault()).date.atStartOfDayIn(TimeZone.currentSystemDefault())
+                            ).toTimeDayHrMinSec()
+                        )
+                    )
+                }
+            }
+            if (inputPositions.value.none { it is PositionLine && it.atKm == startDistance }) {
+
+            }
+            val startTime = when (startRaceOption) {
+                StartRaceOption.StartAtSelectedPositionAtTime -> {
+                    currentItem?.modifier<PositionLineModifier.AstroTime>()?.timeOfDay?.let { timeOfDay ->
+                        Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date.atTime(
+                            LocalTime(timeOfDay.hr, timeOfDay.min, timeOfDay.sec)
+                        ).toInstant(TimeZone.currentSystemDefault())
+                    } ?: Clock.System.now()
+                }
+
+                StartRaceOption.StartAtSelectedPositionNow,
+                StartRaceOption.StartNowFromRaceState -> Clock.System.now()
+
+                StartRaceOption.StartNowFromStoppedState -> when (val state = currentRaceState) {
+                    is RaceState.Stopped -> state.raceModelAtStop.startAtTime
+                    is RaceState.Finished -> state.finishedRaceModel.startAtTime
+                    RaceState.NotStarted,
+                    is RaceState.InRace -> error("unexpected start race option $startRaceOption for race state $currentRaceState")
+                }
+            }
+            startRace(sectionId, startDistance, startTime)
+            if (startRaceOption is StartRaceOption.StartNowFromStoppedState && currentRaceState is RaceState.Stopped) {
+                setCurrentDistance(currentRaceState.raceModelAtStop.currentDistance)
+            }
+        }
     }
 
     fun setDebugSpeed(speedKmh: SpeedKmh) {
@@ -223,18 +300,21 @@ class SectionViewModel(
     }
 
     private fun raceStateToUiState(raceState: RaceState): RaceUiState = when (raceState) {
-        is RaceState.InRace ->
-            when  {
+        is RaceState.InRace, is RaceState.Finished -> {
+            raceState as RaceState.HasCurrentSection
+            when {
                 raceState.raceSectionId != (section.value as? LoadState.Loaded)?.value?.id ->
                     RaceUiState.RaceGoingInAnotherSection(raceState.raceSectionId)
+
                 _raceState.value is RaceUiState.NotInRaceMode -> RaceUiState.NotInRaceMode
-                else -> {
-                    RaceUiState.RaceGoing(raceState.raceModel, 0L)
-                }
+                raceState is RaceState.Finished -> RaceUiState.RaceGoingAfterFinish(raceState.raceModel, raceState.finishedRaceModel, raceState.finishedAt, 0L)
+                raceState is RaceState.InRace -> RaceUiState.RaceGoing(raceState.raceModel, 0L)
+                else -> error("unexpected race state")
             }
+        }
 
         RaceState.NotStarted -> RaceUiState.RaceNotStarted
-        is RaceState.Stopped -> RaceUiState.RaceStopped(raceState.raceModel)
+        is RaceState.Stopped -> RaceUiState.RaceStopped(raceState.stoppedAt, raceState.raceModelAtStop)
     }
 
     override fun switchEditor() {
@@ -250,13 +330,25 @@ class SectionViewModel(
         val intent = Intent(context, RaceService::class.java)
         ContextCompat.startForegroundService(context, intent)
     }
-    
-    fun freezeAndStopRace() {
+
+    fun finishRace() {
+        service?.finishRace()
+    }
+
+    fun undoFinishRace() {
+        service?.undoFinishRace()
+    }
+
+    fun stopRace() {
         service?.stopRace()
     }
 
     fun resetRace() {
-        _raceState.value = RaceUiState.RaceNotStarted
+        service?.resetRace()
+    }
+
+    fun setGoingForward(isGoingForward: Boolean) {
+        service?.setDistanceGoingUp(isGoingForward)
     }
 
     fun leaveRaceMode() {
@@ -359,6 +451,12 @@ class SectionViewModel(
     fun setAllowance(timeAllowance: TimeAllowance?) {
         viewModelScope.launch {
             prefs.saveTimeAllowance(timeAllowance)
+        }
+    }
+
+    fun setBtMac(mac: String?) {
+        viewModelScope.launch {
+            prefs.saveBtMac(mac)
         }
     }
 
@@ -631,7 +729,6 @@ class SectionViewModel(
                 }
             }
 
-            val modifiers = item.modifiers
             if (modifier != null) {
                 val dataToRemove = when (key) {
                     GridKey.SETAVG, GridKey.THENAVG -> takeIf(focus.kind::equals)?.let(::listOf)
@@ -642,7 +739,7 @@ class SectionViewModel(
                     else -> null
                 }
                 if (dataToRemove != null) {
-                    val newItem = item.copy(modifiers = modifiers.filterNot { it == modifier })
+                    val newItem = item.copy(modifiers = item.modifiers.filterNot { it == modifier })
                     updateInputPositions(currentItems.toMutableList().apply { set(indexOf(item), newItem) })
                     if (focus.kind in dataToRemove) {
                         updateFocus(sanitizeFocus(focus.copy(kind = presentFields(item).takeWhile { it !in dataToRemove }.last())))
@@ -656,28 +753,39 @@ class SectionViewModel(
                     GridKey.ODO -> PositionLineModifier.OdoDistance(item.atKm)
                     GridKey.SETAVG -> PositionLineModifier.SetAvgSpeed(existingAvg ?: SpeedKmh(0.0))
                     GridKey.THENAVG -> PositionLineModifier.ThenAvgSpeed(existingAvg ?: SpeedKmh(0.0))
-                    GridKey.ATIME -> PositionLineModifier.AstroTime(TimeOfDay(0, 0, 0, 0))
+                    GridKey.ATIME -> PositionLineModifier.AstroTime(TimeDayHrMinSec(0, 0, 0, 0))
 
                     GridKey.ENDAVG -> PositionLineModifier.EndAvgSpeed(null)
                     GridKey.SYNTH -> PositionLineModifier.AddSynthetic(DistanceKm(0.1), 10)
                     else -> null
                 }
                 if (modifierToAdd != null) {
-                    val filteredModifiers =
-                        if (modifierToAdd is PositionLineModifier.SetAvg || modifierToAdd is PositionLineModifier.EndAvg)
-                            modifiers.filter { it !is PositionLineModifier.SetAvg && it !is PositionLineModifier.EndAvgSpeed }
-                        else modifiers
-                    val newItem = item.copy(modifiers = filteredModifiers + modifierToAdd)
-                    updateInputPositions(currentItems.toMutableList().apply {
-                        if (modifierToAdd is PositionLineModifier.AstroTime) {
-                            indices.forEach { set(it, removeAtime(get(it))) }
-                        }
-                        set(indexOf(item), newItem)
-                    })
+                    val newItem = addModifierToItem(item, modifierToAdd)
                     moveFocusToModifier(newItem)
                 }
             }
         }
+    }
+
+    private fun addModifierToItem(
+        item: PositionLine,
+        modifierToAdd: PositionLineModifier
+    ): PositionLine {
+        lateinit var result: PositionLine
+        updateInputPositions(inputPositions.value.toMutableList().apply {
+            val indexOfItem = indexOf(item)
+            if (modifierToAdd is PositionLineModifier.AstroTime) {
+                indices.forEach { set(it, removeAtime(get(it))) }
+            }
+            val itemToModify = get(indexOfItem) as PositionLine
+            val filteredModifiers = when (modifierToAdd) {
+                is PositionLineModifier.SetAvg, is PositionLineModifier.EndAvg -> itemToModify.modifiers.filter { it !is PositionLineModifier.SetAvg && it !is PositionLineModifier.EndAvgSpeed }
+                else -> itemToModify.modifiers
+            }
+            result = itemToModify.copy(modifiers = filteredModifiers + modifierToAdd)
+            set(indexOfItem, result)
+        })
+        return result
     }
 
     private fun removeAtime(inputLine: RoadmapInputLine) = when (inputLine) {
@@ -705,6 +813,30 @@ class SectionViewModel(
                         items.drop(selectedIndex + positionRelativeToCurrent)
             )
             val item = positions[selectedIndex + positionRelativeToCurrent]
+            updateInputPositions(positions)
+            return item.lineNumber
+        }
+        return null
+    }
+
+    fun maybeCreateItemAtDistance(distanceKm: DistanceKm, modifiers: List<PositionLineModifier> = emptyList()): LineNumber? {
+        val items = inputPositions.value
+        val indexToInsert = run {
+            val matchingIndex = items.indexOfFirst { it is PositionLine && it.atKm.valueKm >= distanceKm.valueKm }
+            if (matchingIndex == -1) {
+                items.size
+            } else if (items[matchingIndex].let { it is PositionLine && it.atKm == distanceKm }) {
+                -1
+            } else matchingIndex
+        }
+
+        if (indexToInsert != -1) {
+            val positions = recalculateLineNumbers(
+                items.take(indexToInsert) +
+                        PositionLine(distanceKm, LineNumber(1, 0), modifiers) +
+                        items.drop(indexToInsert)
+            )
+            val item = positions[indexToInsert]
             updateInputPositions(positions)
             return item.lineNumber
         }
@@ -750,7 +882,7 @@ class SectionViewModel(
             })
 
             DataKind.AstroTime -> item.copy(modifiers = modifiers.map {
-                if (it is PositionLineModifier.AstroTime) it.copy(timeOfDay = TimeOfDay.parse(newText)) else it
+                if (it is PositionLineModifier.AstroTime) it.copy(timeOfDay = TimeDayHrMinSec.parse(newText)) else it
             })
 
         }
