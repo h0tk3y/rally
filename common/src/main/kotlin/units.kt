@@ -97,33 +97,38 @@ data class TimeMinSec(val min: Int, val sec: Int, val isInfinity: Boolean) {
     }
 }
 
-data class TimeOfDay(val dayOverflow: Int = 0, val hr: Int, val min: Int, val sec: Int) {
+data class TimeDayHrMinSec(val dayOverflow: Int = 0, val hr: Int, val min: Int, val sec: Int) {
     init {
         require(hr in 0..23)
         require(min in 0..59)
         require(sec in 0..59)
-        require(dayOverflow >= 0)
     }
 
-    operator fun plus(timeMinSec: TimeMinSec): TimeOfDay {
+    operator fun plus(timeMinSec: TimeMinSec): TimeDayHrMinSec {
+        fun divModNonNegative(dividend: Int, divisor: Int): Pair<Int, Int> {
+            val quotient = dividend / divisor
+            val remainder = dividend % divisor
+            return when {
+                remainder < 0 -> quotient - 1 to remainder + divisor
+                else -> quotient to remainder
+            }
+        }
+        
         val newSecRaw = sec + timeMinSec.sec
-        val newSec = newSecRaw % 60
-        val secOverflowMin = newSecRaw / 60
+        val (secOverflowMin, newSec) = divModNonNegative(newSecRaw, 60)
 
         val newMinRaw = min + timeMinSec.min + secOverflowMin
-        val newMin = newMinRaw % 60
-        val minOverflowHr = newMinRaw / 60
+        val (minOverflowHr, newMin) = divModNonNegative(newMinRaw, 60)
 
         val newHrRaw = hr + minOverflowHr
-        val newHr = newHrRaw % 24
-        val hrOverflowDay = newHrRaw / 24
+        val (hrOverflowDay, newHr) = divModNonNegative(newHrRaw, 24)
 
         val newDayOverflow = dayOverflow + hrOverflowDay
 
-        return TimeOfDay(newDayOverflow, newHr, newMin, newSec)
+        return TimeDayHrMinSec(newDayOverflow, newHr, newMin, newSec)
     }
 
-    operator fun plus(other: TimeOfDay): TimeOfDay {
+    operator fun plus(other: TimeDayHrMinSec): TimeDayHrMinSec {
         val newSecRaw = sec + other.sec
         val newSec = newSecRaw % 60
         val secOverflowMin = newSecRaw / 60
@@ -138,7 +143,7 @@ data class TimeOfDay(val dayOverflow: Int = 0, val hr: Int, val min: Int, val se
 
         val newDayOverflow = dayOverflow + other.dayOverflow + hrOverflowDay
 
-        return TimeOfDay(newDayOverflow, newHr, newMin, newSec)
+        return TimeDayHrMinSec(newDayOverflow, newHr, newMin, newSec)
     }
 
     fun timeStrNoDayOverflow(): String =
@@ -149,12 +154,12 @@ data class TimeOfDay(val dayOverflow: Int = 0, val hr: Int, val min: Int, val se
     fun timeStr(): String = "$dayOverflow:" + timeStrNoDayOverflow()
 
     companion object {
-        fun parse(string: String): TimeOfDay {
+        fun parse(string: String): TimeDayHrMinSec {
             val parts = string.split(":")
             if (parts.size == 3) {
-                return TimeOfDay(0, parts[0].toInt(), parts[1].toInt(), parts[2].toInt())
+                return TimeDayHrMinSec(0, parts[0].toInt(), parts[1].toInt(), parts[2].toInt())
             } else if (parts.size == 4) {
-                return TimeOfDay(
+                return TimeDayHrMinSec(
                     parts[0].toInt(),
                     parts[1].toInt(),
                     parts[2].toInt(),

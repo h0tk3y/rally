@@ -103,6 +103,19 @@ fun Double.strRound3(): String = when (this) {
     else -> ((this * 1000).roundToInt() / 1000.0).toString()
 }
 
+fun Double.strRound2Exact(): String = when (this) {
+    Double.POSITIVE_INFINITY -> "∞"
+    Double.NEGATIVE_INFINITY -> "-∞"
+    else -> ((this * 100).roundToInt() / 100.0).toString().let { if ('.' !in it) "$it.00" else it + "0".repeat(2 - it.substringAfter(".").length) }
+}
+
+fun Double.strRound3Exact(): String = when (this) {
+    Double.POSITIVE_INFINITY -> "∞"
+    Double.NEGATIVE_INFINITY -> "-∞"
+    else -> ((this * 1000).roundToInt() / 1000.0).toString().let { if ('.' !in it) "$it.000" else it + "0".repeat(3 - it.substringAfter(".").length) }
+}
+
+
 fun Double.strRound1(): String = when (this) {
     Double.POSITIVE_INFINITY -> "∞"
     Double.NEGATIVE_INFINITY -> "-∞"

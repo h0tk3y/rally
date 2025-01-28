@@ -6,7 +6,7 @@ sealed interface RallyTimesResult
 
 data class RallyTimesResultSuccess(
     val timeVectorsAtRoadmapLine: Map<LineNumber, TimeHrVector>,
-    val astroTimeAtRoadmapLine: Map<LineNumber, TimeOfDay>,
+    val astroTimeAtRoadmapLine: Map<LineNumber, TimeDayHrMinSec>,
     val goAtAvgSpeed: Map<LineNumber, SpeedKmh?>,
     val warnings: List<CalculationWarning>
 ) : RallyTimesResult
