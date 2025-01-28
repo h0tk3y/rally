@@ -63,6 +63,7 @@ import com.h0tk3y.rally.PositionLineModifier
 import com.h0tk3y.rally.PositionLineModifier.AddSynthetic
 import com.h0tk3y.rally.PositionLineModifier.IsSynthetic
 import com.h0tk3y.rally.PositionLineModifier.SetAvg
+import com.h0tk3y.rally.RaceService
 import com.h0tk3y.rally.RallyTimesResultFailure
 import com.h0tk3y.rally.RoadmapInputLine
 import com.h0tk3y.rally.SpeedKmh
@@ -120,6 +121,8 @@ fun SectionScene(
     val allowance by model.timeAllowance.collectAsState(null)
     val calibration by model.calibration.collectAsState(null)
     val raceState by model.raceState.collectAsState(SectionViewModel.RaceUiState.NotInRaceMode)
+    val btState by model.btState.collectAsState(RaceService.BtPublicState.NotInitialized)
+    val btMac by model.btMac.collectAsState(null)
 
     var showDuplicateDialog by rememberSaveable { mutableStateOf(false) }
     var showRenameDialog by rememberSaveable { mutableStateOf(false) }
@@ -223,12 +226,19 @@ fun SectionScene(
                     DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
 
                         DropdownMenuItem(onClick = {
-                            when (raceState) {
+                            if (editorState.isEnabled) {
+                                model.switchEditor()
+                                when (raceState) {
+                                    is SectionViewModel.RaceUiState.NotInRaceMode -> launchServiceAfterObtainingPermission()
+                                    else -> Unit
+                                }
+                            } else when (raceState) {
                                 is SectionViewModel.RaceUiState.NotInRaceMode -> launchServiceAfterObtainingPermission()
                                 SectionViewModel.RaceUiState.NoRaceServiceConnection,
                                 is SectionViewModel.RaceUiState.RaceGoing,
                                 is SectionViewModel.RaceUiState.RaceGoingInAnotherSection,
                                 is SectionViewModel.RaceUiState.RaceStopped,
+                                is SectionViewModel.RaceUiState.RaceGoingAfterFinish,
                                 SectionViewModel.RaceUiState.RaceNotStarted -> model.leaveRaceMode()
                             }
                             showMenu = false
@@ -236,15 +246,18 @@ fun SectionScene(
                             Icon(imageVector = Icons.Rounded.PlayArrow, "Race")
                             Spacer(Modifier.width(8.dp))
                             Text(
-                                when (raceState) {
-                                    SectionViewModel.RaceUiState.NoRaceServiceConnection,
-                                    is SectionViewModel.RaceUiState.NotInRaceMode -> "Race mode"
-                                    is SectionViewModel.RaceUiState.RaceGoingInAnotherSection,
-                                    is SectionViewModel.RaceUiState.RaceStopped,
-                                    is SectionViewModel.RaceUiState.RaceGoing -> "Hide race panel"
-                                    SectionViewModel.RaceUiState.RaceNotStarted -> "Leave race mode"
+                                if (editorState.isEnabled) "Race mode" else
+                                    when (raceState) {
+                                        SectionViewModel.RaceUiState.NoRaceServiceConnection,
+                                        is SectionViewModel.RaceUiState.NotInRaceMode -> "Race mode"
 
-                                }
+                                        is SectionViewModel.RaceUiState.RaceGoingInAnotherSection,
+                                        is SectionViewModel.RaceUiState.RaceStopped,
+                                        is SectionViewModel.RaceUiState.RaceGoingAfterFinish,
+                                        is SectionViewModel.RaceUiState.RaceGoing -> "Hide race panel"
+
+                                        SectionViewModel.RaceUiState.RaceNotStarted -> "Leave race mode"
+                                    }
                             )
                         }
 
@@ -397,21 +410,30 @@ fun SectionScene(
                     if (raceState !is SectionViewModel.RaceUiState.NotInRaceMode) {
                         RaceView(
                             raceState,
+                            btState,
+                            btMac,
+                            model::setBtMac,
                             preprocessed.firstOrNull { it.lineNumber == selectedLineIndex } as? PositionLine,
-                            onStartRace = {
-                                model.startRaceAtCurrentPosition(it)
-                            },
-                            onStopRace = {
-                                model.freezeAndStopRace()
-                            },
-                            onResetRace = {
-                                model.resetRace()
-                            },
+                            onStartRace = model::startRace,
+                            onFinishRace = model::finishRace,
+                            onUndoFinishRace = model::undoFinishRace,
+                            onStopRace = model::stopRace,
+                            onResetRace = model::resetRace,
+                            onSetGoingForward = model::setGoingForward,
                             onSetDebugSpeed = {
                                 model.setDebugSpeed(SpeedKmh(it.toDouble()))
                             },
                             navigateToSection = onNavigateToNewSection,
-                            keyboardModifier
+                            keyboardModifier,
+                            applyLimit = { speed ->
+                                val currentRaceState = raceState
+                                if (currentRaceState is SectionViewModel.RaceUiState.RaceGoing) {
+                                    model.maybeCreateItemAtDistance(
+                                        currentRaceState.raceModel.currentDistance,
+                                        listOfNotNull(speed?.let(PositionLineModifier::ThenAvgSpeed))
+                                    )
+                                }
+                            }
                         )
                     }
                 }

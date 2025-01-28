@@ -4,7 +4,7 @@ internal object AstroTimeCalculator {
     fun calculateAstroTimes(
         roadmap: List<PositionLine>,
         timeHrMap: Map<LineNumber, TimeHrVector>
-    ): Map<LineNumber, TimeOfDay> {
+    ): Map<LineNumber, TimeDayHrMinSec> {
         val astroTimeLine = roadmap.singleOrNull { it.modifier<PositionLineModifier.AstroTime>() != null }
         if (astroTimeLine == null) {
             return emptyMap()

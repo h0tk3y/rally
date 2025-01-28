@@ -224,7 +224,7 @@ fun PositionsListView(
                                                     for ((index, value) in timeValues.withIndex()) {
                                                         val text = when (value) {
                                                             is TimeHr -> value.toMinSec().toString()
-                                                            is TimeOfDay -> value.timeStrNoDayOverflow()
+                                                            is TimeDayHrMinSec -> value.timeStrNoDayOverflow()
                                                             else -> error("unexpected time vector value")
                                                         }
                                                         Text(

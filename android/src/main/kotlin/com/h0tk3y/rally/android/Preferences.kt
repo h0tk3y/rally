@@ -18,9 +18,10 @@ internal val Context.dataStore by preferencesDataStore(
 private object PreferencesKeys {
     val ALLOWANCE = stringPreferencesKey("allowance")
     val CALIBRATION = doublePreferencesKey("calibration")
+    val BT_MAC = stringPreferencesKey("btMac")
 }
 
-data class UserPreferences(val allowance: TimeAllowance?, val calibration: Double)
+data class UserPreferences(val allowance: TimeAllowance?, val calibration: Double, val btMac: String?)
 
 class PreferenceRepository(val dataStore: DataStore<Preferences>) {
     val userPreferencesFlow: Flow<UserPreferences> = dataStore.data.map { preferences ->
@@ -38,6 +39,12 @@ class PreferenceRepository(val dataStore: DataStore<Preferences>) {
             preferences[PreferencesKeys.CALIBRATION] = calibration ?: 1.0
         }
     }
+
+    suspend fun saveBtMac(btMac: String?) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.BT_MAC] = btMac ?: ""
+        }
+    }
 }
 
 private fun mapUserPreferences(preferences: Preferences): UserPreferences {
@@ -45,5 +52,6 @@ private fun mapUserPreferences(preferences: Preferences): UserPreferences {
     val timeAllowance =
         preferences[PreferencesKeys.ALLOWANCE]?.let { pref -> TimeAllowance.entries.find { it.name == pref } }
     val calibration = preferences[PreferencesKeys.CALIBRATION] ?: 1.0
-    return UserPreferences(timeAllowance, calibration)
+    val btMac = preferences[PreferencesKeys.BT_MAC]
+    return UserPreferences(timeAllowance, calibration, btMac)
 }

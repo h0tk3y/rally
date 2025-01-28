@@ -18,6 +18,8 @@ import androidx.compose.ui.unit.sp
 data class CustomColorsPalette(
     val selection: Color = Color.Unspecified,
     val dangerous: Color = Color.Unspecified,
+    val speedLimit: Color = Color.Unspecified,
+    val warning: Color = Color.Unspecified,
     val raceCurrent: Color = Color.Unspecified
 )
 
@@ -32,12 +34,16 @@ val LocalCustomTypography = staticCompositionLocalOf { CustomTypography() }
 val OnLightCustomColorsPalette = CustomColorsPalette(
     selection = Color(color = 0xFFFFFFCC),
     dangerous = Color.Red,
+    warning = Color(color = 0xFFEB7A34),
+    speedLimit = Color(0xFFD47972),
     raceCurrent = Color(color = 0xFF99FF99),
 )
 
 val OnDarkCustomColorsPalette = CustomColorsPalette(
     selection = Color(color = 0xFF666600),
     dangerous = Color.Red,
+    warning = Color(color = 0xFFF2A16F),
+    speedLimit = Color(0xFF6e3c38),
     raceCurrent = Color(color = 0xFF235523),
 )
 
