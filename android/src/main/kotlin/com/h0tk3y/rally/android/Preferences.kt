@@ -19,9 +19,10 @@ private object PreferencesKeys {
     val ALLOWANCE = stringPreferencesKey("allowance")
     val CALIBRATION = doublePreferencesKey("calibration")
     val BT_MAC = stringPreferencesKey("btMac")
+    val SPEED_LIMIT_PERCENT_TEXT = stringPreferencesKey("speedLimitPercentText")
 }
 
-data class UserPreferences(val allowance: TimeAllowance?, val calibration: Double, val btMac: String?)
+data class UserPreferences(val allowance: TimeAllowance?, val calibration: Double, val btMac: String?, val speedLimitPercent: String?)
 
 class PreferenceRepository(val dataStore: DataStore<Preferences>) {
     val userPreferencesFlow: Flow<UserPreferences> = dataStore.data.map { preferences ->
@@ -45,6 +46,12 @@ class PreferenceRepository(val dataStore: DataStore<Preferences>) {
             preferences[PreferencesKeys.BT_MAC] = btMac ?: ""
         }
     }
+
+    suspend fun saveSpeedLimitPercent(value: String?) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.SPEED_LIMIT_PERCENT_TEXT] = value ?: ""
+        }
+    }
 }
 
 private fun mapUserPreferences(preferences: Preferences): UserPreferences {
@@ -53,5 +60,6 @@ private fun mapUserPreferences(preferences: Preferences): UserPreferences {
         preferences[PreferencesKeys.ALLOWANCE]?.let { pref -> TimeAllowance.entries.find { it.name == pref } }
     val calibration = preferences[PreferencesKeys.CALIBRATION] ?: 1.0
     val btMac = preferences[PreferencesKeys.BT_MAC]
-    return UserPreferences(timeAllowance, calibration, btMac)
+    val speedLimitPercent = preferences[PreferencesKeys.SPEED_LIMIT_PERCENT_TEXT]
+    return UserPreferences(timeAllowance, calibration, btMac, speedLimitPercent)
 }

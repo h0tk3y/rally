@@ -11,10 +11,12 @@ import androidx.compose.material.darkColors
 import androidx.compose.material.lightColors
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -34,7 +36,7 @@ import kotlinx.serialization.Serializable
 object HomeScene
 
 @Serializable
-data class SectionScene(val sectionId: Long)
+data class SectionScene(val sectionId: Long, val withRace: Boolean)
 
 @Composable
 fun App(
@@ -59,32 +61,41 @@ fun App(
                     composable<HomeScene> {
                         val sections: LoadState<List<Section>> by database.selectAllSections()
                             .collectAsState(LoadState.LOADING)
-                        AllSectionsScene(database, sections) { navController.navigate(SectionScene(it.id)) }
+                        AllSectionsScene(database, sections) { navController.navigate(SectionScene(it.id, false)) }
                     }
 
                     composable<SectionScene> {
                         val sectionId = it.toRoute<SectionScene>().sectionId
+                        val withRace = it.toRoute<SectionScene>().withRace
 
                         val context = LocalContext.current
                         val model = viewModel { SectionViewModel(sectionId, database, userPreferences) }
                         val connection = remember(context) {
                             RaceServiceConnection(context, model::onServiceConnected, model::onServiceDisconnected)
                         }
-                        
-                        model.setRaceServiceConnector {
+
+                        val connector: () -> Unit = {
                             val intent = Intent(context, RaceService::class.java)
                             context.bindService(intent, connection, Context.BIND_AUTO_CREATE)
+                            ContextCompat.startForegroundService(context, intent)
                         }
+                        model.setRaceServiceConnector(connector)
                         model.setRaceServiceDisconnector { 
                             connection.disconnectIfConnected()
                         }
 
+                        if (withRace) {
+                            LaunchedEffect(sectionId) { 
+                                model.enterRaceMode() 
+                            }
+                        }
+                        
                         DisposableEffect(context) {
                             onDispose {
                                 connection.disconnectIfConnected()
                             }
                         }
-
+                        
                         SectionScene(
                             sectionId,
                             database,
@@ -92,8 +103,8 @@ fun App(
                                 database.deleteSectionById(sectionId)
                                 navController.popBackStack()
                             },
-                            onNavigateToNewSection = { id ->
-                                navController.navigate(SectionScene(id), navOptions { popUpTo(HomeScene) })
+                            onNavigateToNewSection = { id, isRace ->
+                                navController.navigate(SectionScene(id, isRace), navOptions { popUpTo(HomeScene) })
                             },
                             onBack = {
                                 navController.popBackStack()

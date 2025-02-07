@@ -11,6 +11,8 @@ import androidx.compose.material.Divider
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -21,6 +23,20 @@ import com.h0tk3y.rally.PositionLineModifier.IsSynthetic
 import com.h0tk3y.rally.android.scenes.*
 import com.h0tk3y.rally.android.scenes.DataKind.*
 import com.h0tk3y.rally.android.theme.LocalCustomColorsPalette
+import com.h0tk3y.rally.model.duration
+import kotlinx.coroutines.delay
+import kotlinx.datetime.Clock
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.Instant
+import kotlinx.datetime.LocalTime
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.atStartOfDayIn
+import kotlinx.datetime.atTime
+import kotlinx.datetime.plus
+import kotlinx.datetime.toInstant
+import kotlinx.datetime.toLocalDateTime
+import kotlin.math.absoluteValue
+import kotlin.math.ceil
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -36,7 +52,21 @@ fun PositionsListView(
     results: RallyTimesResult,
     subsMatch: SubsMatch,
     allowance: TimeAllowance?,
+    raceState: SectionViewModel.RaceUiState.RaceGoing?
 ) {
+    val time by produceState(Clock.System.now(), raceState) {
+        if (raceState != null) {
+            while (true) {
+                val time = Clock.System.now()
+                val currentTime = time.toLocalDateTime(TimeZone.currentSystemDefault())
+                val millisToNextWholeSecond = 1000 - (currentTime.time.toMillisecondOfDay() - currentTime.time.toSecondOfDay() * 1000)
+                value = time
+                val delayTime = millisToNextWholeSecond.toLong()
+                delay(delayTime)
+            }
+        } else value = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date.atStartOfDayIn(TimeZone.currentSystemDefault())
+    }
+
     val isEditorEnabled = editorState.isEnabled
 
     val interactionSource = remember { MutableInteractionSource() }
@@ -216,11 +246,16 @@ fun PositionsListView(
                                             val currentLineTimes = results.timeVectorsAtRoadmapLine[line.lineNumber]
                                             val currentLineAtime = results.astroTimeAtRoadmapLine[line.lineNumber]
 
+
                                             if (currentLineTimes != null) {
                                                 val outerTime = currentLineTimes.outer
                                                 val timeValues =
                                                     if (currentLineAtime != null) currentLineTimes.values + currentLineAtime else currentLineTimes.values
                                                 Row(Modifier.weight(1.0f), horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End)) {
+                                                    if (isSelectedLine && raceState != null && currentLineAtime != null) {
+                                                        CountdownToPosition(time, currentLineAtime)
+                                                    }
+
                                                     for ((index, value) in timeValues.withIndex()) {
                                                         val text = when (value) {
                                                             is TimeHr -> value.toMinSec().toString()
@@ -231,7 +266,7 @@ fun PositionsListView(
                                                             text = text,
                                                             modifier = Modifier.padding(start = 4.dp, end = 4.dp)
                                                         )
-                                                        if (allowance != null && index == timeValues.lastIndex) {
+                                                        if (raceState == null && allowance != null && index == timeValues.lastIndex) {
                                                             if (outerTime.timeHours.isFinite()) {
                                                                 val allowanceTime = allowance(allowance, outerTime)
                                                                 Text(
@@ -261,12 +296,32 @@ fun PositionsListView(
     }
 }
 
+@Composable
+private fun CountdownToPosition(time: Instant, currentLineAtime: TimeDayHrMinSec) {
+    val now = time.toLocalDateTime(TimeZone.currentSystemDefault())
+    val targetTime = now.date.plus(currentLineAtime.dayOverflow, DateTimeUnit.DAY)
+        .atTime(LocalTime(currentLineAtime.hr, currentLineAtime.min, currentLineAtime.sec))
+        .toInstant(TimeZone.currentSystemDefault())
+    val countdown = time - targetTime
+    if (countdown.isNegative()) {
+        val text = if (countdown.inWholeSeconds.absoluteValue < 60) {
+            "${countdown.inWholeSeconds}"
+        } else {
+            "-${TimeHr.duration(countdown.absoluteValue).toTimeDayHrMinSec().timeStrNoHoursIfZero()}"
+        }
+        Text(
+            text = text,
+            modifier = Modifier.padding(start = 4.dp, end = 4.dp)
+        )
+    }
+}
+
 fun allowance(allowance: TimeAllowance?, time: TimeHr): Int {
-    val sec = time.toMinSec().min * 60 + time.toMinSec().sec
+    val sec = time.timeHours * 3600
     val minutes = sec / 60.0
     return when (allowance) {
         TimeAllowance.BY_TEN_FULL -> (minutes / 10).toInt()
-        TimeAllowance.BY_TEN_FULL_PLUS_ONE -> Math.ceil(minutes / 10.0).toInt()
+        TimeAllowance.BY_TEN_FULL_PLUS_ONE -> ceil(minutes / 10.0).toInt()
         null -> 0
     }
 }

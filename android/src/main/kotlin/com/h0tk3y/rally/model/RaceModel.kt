@@ -16,19 +16,24 @@ sealed interface RaceState {
     data class Stopped(
         val raceSectionIdAtStop: Long,
         val raceModelAtStop: RaceModel,
-        val stoppedAt: Instant
+        val stoppedAt: Instant,
+        val finishedAt: Instant?,
+        val finishedModel: RaceModel?,
     ) : RaceState
     
     data class InRace(
         override val raceSectionId: Long,
         val raceModel: RaceModel,
+        val previousFinishAt: Instant?,
+        val previousFinishModel: RaceModel?,
+        val goingModel: RaceModel
     ) : RaceState, HasCurrentSection
     
-    data class Finished(
+    data class Going(
         override val raceSectionId: Long,
         val raceModel: RaceModel,
-        val finishedRaceModel: RaceModel,
-        val finishedAt: Instant
+        val finishedRaceModel: RaceModel?,
+        val finishedAt: Instant?
     ) : RaceState, HasCurrentSection
 }
 
@@ -52,4 +57,4 @@ fun TimeHr.Companion.interval(from: Instant, to: Instant): TimeHr =
     TimeHr.duration(to - from)
 
 fun TimeHr.Companion.duration(duration: Duration): TimeHr =
-    TimeHr(duration.inWholeMilliseconds / 1000.0 / 3600.0)
+    TimeHr(duration.inWholeMicroseconds / 1000_000.0 / 3600)
