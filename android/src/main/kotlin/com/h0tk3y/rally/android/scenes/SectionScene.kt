@@ -39,7 +39,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.rounded.Done
 import androidx.compose.material.icons.rounded.Edit
-import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Flag
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -65,6 +65,7 @@ import com.h0tk3y.rally.PositionLineModifier.IsSynthetic
 import com.h0tk3y.rally.PositionLineModifier.SetAvg
 import com.h0tk3y.rally.RaceService
 import com.h0tk3y.rally.RallyTimesResultFailure
+import com.h0tk3y.rally.RallyTimesResultSuccess
 import com.h0tk3y.rally.RoadmapInputLine
 import com.h0tk3y.rally.SpeedKmh
 import com.h0tk3y.rally.SubsMatch
@@ -93,7 +94,7 @@ fun SectionScene(
     sectionId: Long,
     database: Database,
     onDeleteSection: () -> Unit,
-    onNavigateToNewSection: (Long) -> Unit,
+    onNavigateToNewSection: (Long, Boolean) -> Unit,
     onBack: () -> Unit,
     model: SectionViewModel
 ) {
@@ -120,9 +121,11 @@ fun SectionScene(
     val editorFocus by model.editorFocus.collectAsState()
     val allowance by model.timeAllowance.collectAsState(null)
     val calibration by model.calibration.collectAsState(null)
-    val raceState by model.raceState.collectAsState(SectionViewModel.RaceUiState.NotInRaceMode)
+    val raceState by model.raceState.collectAsState(SectionViewModel.RaceUiState.NoRaceServiceConnection)
+    val raceUiVisible by model.raceUiVisible.collectAsState(false)
     val btState by model.btState.collectAsState(RaceService.BtPublicState.NotInitialized)
     val btMac by model.btMac.collectAsState(null)
+    val speedLimitPercent by model.speedLimitPercent.collectAsState(null)
 
     var showDuplicateDialog by rememberSaveable { mutableStateOf(false) }
     var showRenameDialog by rememberSaveable { mutableStateOf(false) }
@@ -146,7 +149,7 @@ fun SectionScene(
 
                         is SectionInsertOrRenameResult.Success -> {
                             showDuplicateDialog = false
-                            onNavigateToNewSection(result.section.id)
+                            onNavigateToNewSection(result.section.id, false)
                             ItemSaveResult.Ok(result.section)
                         }
                     }
@@ -215,7 +218,7 @@ fun SectionScene(
 
                     val context = LocalContext.current
                     val launchServiceAfterObtainingPermission = permissionRequester(whenObtained = {
-                        model.enterRaceMode(context)
+                        model.enterRaceMode()
                     }, whenFailedToObtain = {
                         Toast.makeText(context, "Please grant the required permissions", Toast.LENGTH_LONG).show()
                     })
@@ -224,37 +227,36 @@ fun SectionScene(
                         Icon(Icons.Default.MoreVert, "Show menu")
                     }
                     DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-
                         DropdownMenuItem(onClick = {
                             if (editorState.isEnabled) {
                                 model.switchEditor()
                                 when (raceState) {
-                                    is SectionViewModel.RaceUiState.NotInRaceMode -> launchServiceAfterObtainingPermission()
+                                    is SectionViewModel.RaceUiState.NoRaceServiceConnection -> launchServiceAfterObtainingPermission()
                                     else -> Unit
                                 }
                             } else when (raceState) {
-                                is SectionViewModel.RaceUiState.NotInRaceMode -> launchServiceAfterObtainingPermission()
-                                SectionViewModel.RaceUiState.NoRaceServiceConnection,
+                                is SectionViewModel.RaceUiState.NoRaceServiceConnection -> launchServiceAfterObtainingPermission()
                                 is SectionViewModel.RaceUiState.RaceGoing,
                                 is SectionViewModel.RaceUiState.RaceGoingInAnotherSection,
-                                is SectionViewModel.RaceUiState.RaceStopped,
-                                is SectionViewModel.RaceUiState.RaceGoingAfterFinish,
-                                SectionViewModel.RaceUiState.RaceNotStarted -> model.leaveRaceMode()
+                                is SectionViewModel.RaceUiState.Stopped,
+                                is SectionViewModel.RaceUiState.Going,
+                                SectionViewModel.RaceUiState.RaceNotStarted -> 
+                                    if (raceUiVisible) model.leaveRaceMode() else model.enterRaceMode()
                             }
                             showMenu = false
                         }) {
-                            Icon(imageVector = Icons.Rounded.PlayArrow, "Race")
+                            Icon(imageVector = Icons.Rounded.Flag, "Race")
                             Spacer(Modifier.width(8.dp))
                             Text(
                                 if (editorState.isEnabled) "Race mode" else
                                     when (raceState) {
-                                        SectionViewModel.RaceUiState.NoRaceServiceConnection,
-                                        is SectionViewModel.RaceUiState.NotInRaceMode -> "Race mode"
+                                        SectionViewModel.RaceUiState.NoRaceServiceConnection -> "Race mode"
 
                                         is SectionViewModel.RaceUiState.RaceGoingInAnotherSection,
-                                        is SectionViewModel.RaceUiState.RaceStopped,
-                                        is SectionViewModel.RaceUiState.RaceGoingAfterFinish,
-                                        is SectionViewModel.RaceUiState.RaceGoing -> "Hide race panel"
+                                        is SectionViewModel.RaceUiState.Stopped,
+                                        is SectionViewModel.RaceUiState.Going,
+                                        is SectionViewModel.RaceUiState.RaceGoing ->
+                                            if (raceUiVisible) "Hide race panel" else "Show race panel"
 
                                         SectionViewModel.RaceUiState.RaceNotStarted -> "Leave race mode"
                                     }
@@ -358,10 +360,12 @@ fun SectionScene(
                     Row(Modifier.padding(padding)) {
                         val listModifier = Modifier
                             .fillMaxHeight()
-                            .weight(1.0f)
+                            .weight(1.0f, true)
+                            .fillMaxWidth(0.5f)
                         val keyboardModifier = Modifier
                             .fillMaxHeight()
-                            .weight(1.0f)
+                            .weight(1.0f, true)
+                            .fillMaxWidth(0.5f)
                         content(listModifier, keyboardModifier)
                     }
                 } else {
@@ -395,7 +399,8 @@ fun SectionScene(
                                 editorFocus,
                                 results,
                                 subsMatch,
-                                allowance
+                                allowance,
+                                raceState as? SectionViewModel.RaceUiState.RaceGoing
                             )
                         }
 
@@ -406,36 +411,42 @@ fun SectionScene(
                 }
                 if (editorState.isEnabled) {
                     Keyboard(editorState, model, keyboardModifier)
-                } else {
-                    if (raceState !is SectionViewModel.RaceUiState.NotInRaceMode) {
-                        RaceView(
-                            raceState,
-                            btState,
-                            btMac,
-                            model::setBtMac,
-                            preprocessed.firstOrNull { it.lineNumber == selectedLineIndex } as? PositionLine,
-                            onStartRace = model::startRace,
-                            onFinishRace = model::finishRace,
-                            onUndoFinishRace = model::undoFinishRace,
-                            onStopRace = model::stopRace,
-                            onResetRace = model::resetRace,
-                            onSetGoingForward = model::setGoingForward,
-                            onSetDebugSpeed = {
-                                model.setDebugSpeed(SpeedKmh(it.toDouble()))
-                            },
-                            navigateToSection = onNavigateToNewSection,
-                            keyboardModifier,
-                            applyLimit = { speed ->
-                                val currentRaceState = raceState
-                                if (currentRaceState is SectionViewModel.RaceUiState.RaceGoing) {
-                                    model.maybeCreateItemAtDistance(
-                                        currentRaceState.raceModel.currentDistance,
-                                        listOfNotNull(speed?.let(PositionLineModifier::ThenAvgSpeed))
-                                    )
-                                }
+                } else if (raceUiVisible) {
+                    RaceView(
+                        raceState,
+                        (results as? RallyTimesResultSuccess)?.raceTimeDistanceLocalizer,
+                        (results as? RallyTimesResultSuccess)?.sectionTimeDistanceLocalizer,
+                        btState,
+                        btMac,
+                        model::setBtMac,
+                        speedLimitPercent,
+                        model::setSpeedLimitPercent,
+                        preprocessed.firstOrNull { it.lineNumber == selectedLineIndex } as? PositionLine,
+                        onStartRace = model::startRace,
+                        onFinishRace = model::finishRace,
+                        onUndoFinishRace = model::undoFinishRace,
+                        onStopRace = model::stopRace,
+                        onUndoStopRace = model::undoStopRace,
+                        onResetRace = model::resetRace,
+                        distanceCorrection = model::distanceCorrection,
+                        onSetGoingForward = model::setGoingForward,
+                        onSetDebugSpeed = {
+                            model.setDebugSpeed(SpeedKmh(it.toDouble()))
+                        },
+                        navigateToSection = { onNavigateToNewSection(it, true) },
+                        keyboardModifier,
+                        applyLimit = { speed ->
+                            val currentRaceState = raceState
+                            if (currentRaceState is SectionViewModel.RaceUiState.RaceGoing) {
+                                model.maybeCreateItemAtDistance(
+                                    currentRaceState.raceModel.currentDistance,
+                                    forceCreateIfExists = true,
+                                    listOfNotNull(speed?.let(PositionLineModifier::ThenAvgSpeed))
+                                )
                             }
-                        )
-                    }
+                        },
+                        allowance
+                    )
                 }
             }
         }
@@ -466,7 +477,7 @@ interface EditorControls {
     fun selectLine(index: LineNumber, field: DataKind?)
     fun moveCursor(indexDelta: Int)
     fun keyPress(key: GridKey)
-    fun deletePosition(line: RoadmapInputLine)
+    fun deletePositionViaEditor(line: RoadmapInputLine)
     fun selectNextItem()
     fun selectPreviousItem()
     fun addItemAbove()

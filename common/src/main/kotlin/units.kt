@@ -1,5 +1,6 @@
 package com.h0tk3y.rally
 
+import kotlinx.datetime.LocalTime
 import kotlin.math.roundToInt
 
 data class SpeedKmh(val valueKmh: Double) {
@@ -18,14 +19,14 @@ data class SpeedKmh(val valueKmh: Double) {
                 else -> null
             }
         }
-        
+
         const val KMH_SUFFIX = "kmh"
     }
 
     override fun toString(): String = if (valueKmh.isInfinite()) "∞" else "${(valueKmh * 100).roundToInt() / 100.0}$KMH_SUFFIX"
 }
 
-data class DistanceKm(val valueKm: Double) {
+data class DistanceKm(val valueKm: Double) : Comparable<DistanceKm> {
     operator fun plus(other: DistanceKm) = DistanceKm(valueKm + other.valueKm)
     operator fun times(other: Double) = DistanceKm(valueKm * other)
     operator fun minus(other: DistanceKm) = DistanceKm(valueKm.minusWithInf(other.valueKm))
@@ -34,16 +35,19 @@ data class DistanceKm(val valueKm: Double) {
         fun byMoving(speedKmh: SpeedKmh, timeHr: TimeHr): DistanceKm {
             return DistanceKm(speedKmh.valueKmh * timeHr.timeHours)
         }
+
         val zero = DistanceKm(0.0)
     }
+
+    override fun compareTo(other: DistanceKm): Int = compareValues(valueKm, other.valueKm)
 }
 
-data class TimeHr(val timeHours: Double): Comparable<TimeHr> {
+data class TimeHr(val timeHours: Double) : Comparable<TimeHr> {
     init {
         if (timeHours.isNaN())
             throw IllegalStateException()
     }
-    
+
     fun toMinSec(): TimeMinSec {
         if (timeHours.isNaN()) {
             return TimeMinSec(-1, -1, false)
@@ -53,6 +57,8 @@ data class TimeHr(val timeHours: Double): Comparable<TimeHr> {
         val remSec = (sec % 60)
         return TimeMinSec(min, remSec, timeHours.isInfinite())
     }
+
+    fun toTimeDayHrMinSec() = TimeDayHrMinSec(0, 0, 0, 0) + toMinSec()
 
     operator fun plus(other: TimeHr) = TimeHr(timeHours + other.timeHours)
     operator fun minus(other: TimeHr) = TimeHr(timeHours.minusWithInf(other.timeHours))
@@ -73,8 +79,9 @@ data class TimeHrVector(val values: List<TimeHr>) {
     fun rebased(base: TimeHr) = TimeHrVector(values + (values.lastOrNull()?.plus(base) ?: base))
     fun mapOuter(mapFn: (outer: TimeHr) -> TimeHr) =
         TimeHrVector(values.dropLast(1) + if (values.isNotEmpty()) listOf(values.last().let(mapFn)) else emptyList())
-    
+
     val outer: TimeHr get() = values.last()
+
     companion object {
         fun of(timeHr: TimeHr) = TimeHrVector(listOf(timeHr))
     }
@@ -104,6 +111,10 @@ data class TimeDayHrMinSec(val dayOverflow: Int = 0, val hr: Int, val min: Int, 
         require(sec in 0..59)
     }
 
+    val timeSinceMidnight: TimeHr get() = TimeHr(dayOverflow * 24 + hr + min / 60.0 + sec / 3600.0)
+
+    val secondsOfDay: Int get() = sec + min * 60 + hr * 3600 + dayOverflow * (24 * 3600)
+
     operator fun plus(timeMinSec: TimeMinSec): TimeDayHrMinSec {
         fun divModNonNegative(dividend: Int, divisor: Int): Pair<Int, Int> {
             val quotient = dividend / divisor
@@ -113,7 +124,7 @@ data class TimeDayHrMinSec(val dayOverflow: Int = 0, val hr: Int, val min: Int, 
                 else -> quotient to remainder
             }
         }
-        
+
         val newSecRaw = sec + timeMinSec.sec
         val (secOverflowMin, newSec) = divModNonNegative(newSecRaw, 60)
 
@@ -151,25 +162,39 @@ data class TimeDayHrMinSec(val dayOverflow: Int = 0, val hr: Int, val min: Int, 
                 "${min.toString().padStart(2, '0')}:" +
                 sec.toString().padStart(2, '0')
 
+    fun timeStrNoHoursIfZero(): String =
+        (if (hr == 0) "" else "${hr.toString().padStart(2, '0')}:") +
+                "${min.toString().padStart(2, '0')}:" +
+                sec.toString().padStart(2, '0')
+
     fun timeStr(): String = "$dayOverflow:" + timeStrNoDayOverflow()
 
     companion object {
-        fun parse(string: String): TimeDayHrMinSec {
+        fun tryParse(string: String): TimeDayHrMinSec? {
             val parts = string.split(":")
             if (parts.size == 3) {
-                return TimeDayHrMinSec(0, parts[0].toInt(), parts[1].toInt(), parts[2].toInt())
+                return TimeDayHrMinSec(0, 
+                    parts[0].toInt().takeIf { it in 0..23 } ?: return null, 
+                    parts[1].toInt().takeIf { it in 0..59 } ?: return null,  
+                    parts[2].toInt().takeIf { it in 0..59 } ?: return null
+                )
             } else if (parts.size == 4) {
                 return TimeDayHrMinSec(
                     parts[0].toInt(),
-                    parts[1].toInt(),
-                    parts[2].toInt(),
-                    parts[3].toInt()
+                    parts[1].toInt().takeIf { it in 0..23 } ?: return null,
+                    parts[2].toInt().takeIf { it in 0..59 } ?: return null,
+                    parts[3].toInt().takeIf { it in 0..59 } ?: return null
                 )
             } else {
                 throw IllegalArgumentException("expected time of day, got $string")
             }
         }
+        
+        fun of(time: LocalTime): TimeDayHrMinSec = TimeDayHrMinSec(0, time.hour, time.minute, time.second)
     }
 }
 
 fun Double.minusWithInf(other: Double) = if (this.isInfinite()) this else this - other
+
+fun DistanceKm.roundTo3Digits(): DistanceKm = 
+    valueKm.strRound3().toDouble().let(::DistanceKm)

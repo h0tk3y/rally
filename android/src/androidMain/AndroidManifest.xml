@@ -23,6 +23,7 @@
     
     <application
         android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
         android:label="@string/appName"
         android:supportsRtl="true"
         
@@ -35,6 +36,7 @@
         <activity
             android:name=".android.MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:theme="@style/Theme.AppCompat.DayNight"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>

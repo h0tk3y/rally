@@ -25,7 +25,10 @@ data class CustomColorsPalette(
 
 @Immutable
 data class CustomTypography(
-    val dataTextStyle: TextStyle = TextStyle.Default
+    val dataTextStyle: TextStyle = TextStyle.Default,
+    val raceIndicatorText: TextStyle = TextStyle.Default.copy(fontSize = 45.sp),
+    val raceControlButton: TextStyle = TextStyle.Default.copy(fontSize = 20.sp),
+    val raceEditableValue: TextStyle = TextStyle.Default.copy(fontSize = 20.sp),
 )
 
 val LocalCustomColorsPalette = staticCompositionLocalOf { CustomColorsPalette() }

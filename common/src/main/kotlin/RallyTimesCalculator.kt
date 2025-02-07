@@ -8,8 +8,14 @@ data class RallyTimesResultSuccess(
     val timeVectorsAtRoadmapLine: Map<LineNumber, TimeHrVector>,
     val astroTimeAtRoadmapLine: Map<LineNumber, TimeDayHrMinSec>,
     val goAtAvgSpeed: Map<LineNumber, SpeedKmh?>,
-    val warnings: List<CalculationWarning>
+    val warnings: List<CalculationWarning>,
+    val raceTimeDistanceLocalizer: TimeDistanceLocalizer?,
+    val sectionTimeDistanceLocalizer: TimeDistanceLocalizer?
 ) : RallyTimesResult
+
+interface TimeDistanceLocalizer {
+    fun getExpectedTimeForDistance(distanceKm: DistanceKm): TimeHr?
+}
 
 data class RallyTimesResultFailure(
     val failures: List<CalculationFailure>

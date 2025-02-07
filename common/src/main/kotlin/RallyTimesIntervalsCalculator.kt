@@ -18,10 +18,16 @@ class RallyTimesIntervalsCalculator : RallyTimes {
         val result = IntervalTimesEvaluator().evaluate(rootInterval.interval, rootInterval.interval.end)
         check(result is RallyTimesResultSuccess)
 
-        return result.copy(astroTimeAtRoadmapLine = AstroTimeCalculator.calculateAstroTimes(roadmap = roadmap, timeHrMap = result.timeVectorsAtRoadmapLine))
+        val localizerForNested = TimeDistanceLocalizerImpl.createWithNestedIntervals(rootInterval.interval, roadmap)
+        val localizerForRoot = TimeDistanceLocalizerImpl.createForRootIntervalOnly(rootInterval.interval, roadmap)
+
+        return result.copy(
+            astroTimeAtRoadmapLine = AstroTimeCalculator.calculateAstroTimes(roadmap = roadmap, timeHrMap = result.timeVectorsAtRoadmapLine),
+            raceTimeDistanceLocalizer = localizerForNested,
+            sectionTimeDistanceLocalizer = localizerForRoot
+        )
     }
 }
-
 
 
 internal data class PureFragment(
@@ -46,30 +52,36 @@ internal data class Interval(
     val exemptTime: TimeHr = TimeHr(subIntervals.sumOf { it.targetTime.timeHours })
     val pureTime: TimeHr = maxOf(if (targetTime.timeHours.isInfinite()) targetTime else targetTime - exemptTime, TimeHr.zero)
 
-    val pureSpeed: SpeedKmh = SpeedKmh.averageAt(pureDistance, pureTime)
+    val pureSpeed: SpeedKmh = if (pureDistance > DistanceKm.zero) SpeedKmh.averageAt(pureDistance, pureTime) else SpeedKmh(0.0)
 }
 
-private fun TimeHr.Companion.byMovingOrZero(startKm: DistanceKm, endKm: DistanceKm, speedKmh: SpeedKmh) = when {
-    startKm == endKm -> TimeHr(0.0)
+fun TimeHr.Companion.byMovingOrZero(startKm: DistanceKm, endKm: DistanceKm, speedKmh: SpeedKmh) = when {
+    endKm - startKm == DistanceKm.zero -> TimeHr(0.0)
     else -> byMoving(endKm - startKm, speedKmh)
 }
 
 internal class IntervalTimesEvaluator {
 
+    private data class PositionPureFragment(
+        val pureFragment: PureFragment,
+        val positionLine: PositionLine,
+        val isStart: Boolean
+    )
+
     fun evaluate(rootInterval: Interval, last: PositionLine): RallyTimesResult {
-        val timeHrMap = mutableMapOf<PositionLine, TimeHrVector>()
+        val timeHrMap = mutableMapOf<PositionPureFragment, TimeHrVector>()
         val warnings = mutableListOf<CalculationWarning>()
         val goAtMap = mutableMapOf<PositionLine, SpeedKmh>()
 
-        fun putInnermostTime(positionLine: PositionLine, time: TimeHr) {
-            timeHrMap.compute(positionLine) { key, old ->
+        fun putInnermostTime(pureFragment: PureFragment, positionLine: PositionLine, isStart: Boolean, time: TimeHr) {
+            timeHrMap.compute(PositionPureFragment(pureFragment, positionLine, isStart)) { key, old ->
                 check(old == null) { "Expected this time to be the innermost" }
                 TimeHrVector.of(time)
             }
         }
 
-        fun rebase(positionLine: PositionLine, timeHr: TimeHr) {
-            timeHrMap.compute(positionLine) { _, old ->
+        fun rebase(pureFragment: PureFragment, positionLine: PositionLine, isStart: Boolean, timeHr: TimeHr) {
+            timeHrMap.compute(PositionPureFragment(pureFragment, positionLine, isStart)) { _, old ->
                 check(old != null) { "Expected existing time for this position, as it is now rebased" }
                 old.rebased(timeHr)
             }
@@ -77,7 +89,8 @@ internal class IntervalTimesEvaluator {
 
         fun traverseAndRebase(interval: Interval, addTime: TimeHr) {
             interval.pureFragments.forEach { pureFragment ->
-                rebase(pureFragment.end, addTime)
+                rebase(pureFragment, pureFragment.start, isStart = true, addTime)
+                rebase(pureFragment, pureFragment.end, isStart = false, addTime)
             }
             interval.subIntervals.forEach { subInterval ->
                 traverseAndRebase(subInterval, addTime)
@@ -111,12 +124,13 @@ internal class IntervalTimesEvaluator {
             var lastSubTime = TimeHr.zero
             var setAvgTime = TimeHr.zero
 
-            sortedEvents.forEach { event ->
+            sortedEvents.forEachIndexed { index, event ->
                 when (event) {
                     is Event.PureFragmentStart -> {
                         val fragment = event.pureFragment
-                        localTime += maxOf(TimeHr.zero, TimeHr.byMoving(fragment.distance, interval.pureSpeed))
-                        putInnermostTime(fragment.end, localTime)
+                        putInnermostTime(fragment, fragment.start, isStart = true, localTime)
+                        localTime += maxOf(TimeHr.zero, TimeHr.byMovingOrZero(fragment.start.atKm, fragment.end.atKm, interval.pureSpeed))
+                        putInnermostTime(fragment, fragment.end, isStart = false, localTime)
                     }
 
                     is Event.SubIntervalStart -> {
@@ -145,11 +159,17 @@ internal class IntervalTimesEvaluator {
         }
 
         recurse(rootInterval, TimeHr.zero)
+        
         return RallyTimesResultSuccess(
-            timeHrMap.mapKeys { it.key.lineNumber }, emptyMap(), goAtMap.mapKeys { it.key.lineNumber }, warnings
+            timeHrMap.entries.sortedWith(compareByDescending{ it.key.pureFragment.start.lineNumber }).associate { (position, vector) -> position.positionLine.lineNumber to vector },
+            emptyMap(),
+            goAtMap.mapKeys { it.key.lineNumber },
+            warnings,
+            null,
+            null
         )
     }
-
+    
     private sealed interface Event {
         val startDistance: DistanceKm
 
@@ -196,7 +216,7 @@ internal class IntervalBuilder {
 
                 while (index <= endAt) {
                     val currentPosition = roadmap[index]
-                    if (currentPosition.atKm != prev.atKm) {
+                    if (currentPosition.atKm != prev.atKm || (index == endAt && pureFragments.isEmpty() && subs.isEmpty())) {
                         pureFragments += PureFragment(prev, currentPosition)
                     }
 
@@ -238,7 +258,13 @@ internal class IntervalBuilder {
             val call = recurse(current, setAvg.setavg)
             if (outermost != null) {
                 outermost =
-                    outermost.copy(end = call.interval.end, subIntervals = outermost.subIntervals + call.interval)
+                    outermost.copy(
+                        end = call.interval.end, subIntervals = outermost.subIntervals + call.interval,
+                        targetAverageSpeedKmh = SpeedKmh.averageAt(
+                            call.interval.end.atKm - outermost.start.atKm,
+                            outermost.targetTime + call.interval.targetTime
+                        )
+                    )
                 hasSynthRoot = true
             }
             if (call.endIndex >= endAt) {
@@ -250,7 +276,7 @@ internal class IntervalBuilder {
                         call.interval.end,
                         emptyList(),
                         listOf(call.interval),
-                        SpeedKmh(60.0)
+                        SpeedKmh.averageAt(call.interval.end.atKm - call.interval.start.atKm, call.interval.targetTime)
                     )
             }
             current = call.endIndex

@@ -78,7 +78,7 @@ class InputRoadmapParser(private val modifiersValidator: ModifiersValidator) {
         ByWord("endavg", 1) { (arg) -> PositionLineModifier.EndAvgSpeed(parseAvgSpeed(arg)) },
         ByWord("endavg", 0) { (_) -> PositionLineModifier.EndAvgSpeed(null) },
         ByWord("thenavg", 1) { (arg) -> PositionLineModifier.ThenAvgSpeed(parseAvgSpeed(arg)) },
-        ByWord("atime", 1, partsAreNumbers = false) { (arg) -> PositionLineModifier.AstroTime(TimeDayHrMinSec.parse(arg)) },
+        ByWord("atime", 1, partsAreNumbers = false) { (arg) -> PositionLineModifier.AstroTime(TimeDayHrMinSec.tryParse(arg)!!) },
         ByWord("here", 1) { (arg) ->
             PositionLineModifier.Here(TimeMinSec.parse(arg)?.toHr() ?: error("failed to parse time"))
         },

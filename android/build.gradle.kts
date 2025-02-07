@@ -1,3 +1,4 @@
+import com.android.build.gradle.api.ApkVariantOutput
 import org.apache.tools.ant.filters.StringInputStream
 import java.util.Properties
 
@@ -83,7 +84,7 @@ android {
         }
     }
     defaultConfig {
-        minSdk = 24
+        minSdk = 26
         targetSdk = 35
         versionCode = 100
         versionName = "0.1.0"
@@ -98,5 +99,14 @@ android {
     }
     kotlin {
         jvmToolchain(11)
+    }
+
+    applicationVariants.all {
+        val variantName = name
+        outputs.all {
+            if (this is ApkVariantOutput) {
+                this.outputFileName = "com.h0tk3y.rally.${variantName}.apk"
+            }
+        }
     }
 }
