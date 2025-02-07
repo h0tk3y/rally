@@ -1,5 +1,7 @@
 package com.h0tk3y.rally.android
 
+import android.app.ComponentCaller
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -15,6 +17,7 @@ import com.google.accompanist.systemuicontroller.rememberSystemUiController
 import com.h0tk3y.rally.android.db.Database
 import com.h0tk3y.rally.android.db.DatabaseDriverFactory
 import com.h0tk3y.rally.android.theme.AppTheme
+
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
