@@ -16,6 +16,7 @@ import androidx.compose.material.DropdownMenu
 import androidx.compose.material.DropdownMenuItem
 import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
+import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Scaffold
 import androidx.compose.material.Text
 import androidx.compose.material.TopAppBar
@@ -83,6 +84,7 @@ fun AllSectionsScene(
         modifier = Modifier.imePadding(),
         topBar = {
             TopAppBar(
+                backgroundColor = MaterialTheme.colors.surface,
                 title = { Text(stringResource(R.string.appName)) },
                 actions = {
                     IconButton(onClick = { showNewListDialog = true }) {
