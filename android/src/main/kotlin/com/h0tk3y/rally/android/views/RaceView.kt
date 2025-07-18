@@ -46,6 +46,7 @@ import androidx.compose.material.icons.rounded.ArrowOutward
 import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.Cancel
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.ControlPoint
 import androidx.compose.material.icons.rounded.Done
 import androidx.compose.material.icons.rounded.Flag
 import androidx.compose.material.icons.rounded.OutlinedFlag
@@ -84,7 +85,7 @@ import com.h0tk3y.rally.BuildConfig
 import com.h0tk3y.rally.DistanceKm
 import com.h0tk3y.rally.PositionLine
 import com.h0tk3y.rally.PositionLineModifier
-import com.h0tk3y.rally.RaceService
+import com.h0tk3y.rally.android.racecervice.RaceService
 import com.h0tk3y.rally.SpeedKmh
 import com.h0tk3y.rally.TimeDistanceLocalizer
 import com.h0tk3y.rally.TimeHr
@@ -134,7 +135,7 @@ fun RaceView(
     onSetDebugSpeed: (Int) -> Unit,
     navigateToSection: (Long) -> Unit,
     modifier: Modifier,
-    applyLimit: (SpeedKmh?) -> Unit,
+    addPositionMaybeWithSpeed: (SpeedKmh?) -> Unit,
     allowance: TimeAllowance?
 ) {
     val time by produceState(Clock.System.now()) {
@@ -149,30 +150,47 @@ fun RaceView(
     }
 
     VolumeKeyHandler(onVolumeUp = { distanceCorrection(DistanceKm(0.01)) }, onVolumeDown = { distanceCorrection(DistanceKm(-0.01)) }) {
-        Surface(modifier.padding(4.dp)) {
-            Column(Modifier.verticalScroll(rememberScrollState())) {
-                BtStatus(btState, macAddressInPreferences, updateMacAddress)
-                RaceStatus(race, time, onSetGoingForward, distanceLocalizer, sectionDistanceLocalizer, distanceCorrection, allowance)
-                RaceControls(
-                    race,
-                    selectedPosition,
-                    onStartRace,
-                    onFinishRace,
-                    onUndoFinishRace,
-                    onStopRace,
-                    onUndoStopRace,
-                    onResetRace,
-                    navigateToSection,
-                    applyLimit,
-                    speedLimitPercent,
-                    setSpeedLimitPercent
-                )
-                if (BuildConfig.DEBUG) {
-                    DebugSpeedSlider(onSetDebugSpeed)
+        Column {
+            Box(modifier.padding(4.dp)) {
+                InRaceEditorControls({ addPositionMaybeWithSpeed(null) })
+            }
+            Surface(modifier.padding(4.dp)) {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    BtStatus(btState, macAddressInPreferences, updateMacAddress)
+                    RaceStatus(race, time, onSetGoingForward, distanceLocalizer, sectionDistanceLocalizer, distanceCorrection, allowance, selectedPosition)
+                    RaceControls(
+                        race,
+                        selectedPosition,
+                        onStartRace,
+                        onFinishRace,
+                        onUndoFinishRace,
+                        onStopRace,
+                        onUndoStopRace,
+                        onResetRace,
+                        navigateToSection,
+                        addPositionMaybeWithSpeed,
+                        speedLimitPercent,
+                        setSpeedLimitPercent
+                    )
+                    if (BuildConfig.DEBUG) {
+                        DebugSpeedSlider(onSetDebugSpeed)
+                    }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun InRaceEditorControls(
+    onAddPositionAtCurrentDistance: () -> Unit
+) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { 
+        IconButton(onClick = { onAddPositionAtCurrentDistance() }) { 
+            Icon(Icons.Rounded.ControlPoint, contentDescription = "Add passed position")
+        }
+    }
+    
 }
 
 @Composable
@@ -240,7 +258,8 @@ private fun RaceStatus(
     distanceLocalizer: TimeDistanceLocalizer?,
     sectionDistanceLocalizer: TimeDistanceLocalizer?,
     distanceCorrection: (DistanceKm) -> Unit,
-    allowance: TimeAllowance?
+    allowance: TimeAllowance?,
+    selectedPosition: PositionLine?
 ) {
     val actualTime = maxOf(time, Clock.System.now())
 
@@ -256,7 +275,9 @@ private fun RaceStatus(
                     if (race.lastFinishAt != null && race.lastFinishModel != null) {
                         Text("Finished: ${raceTimeDistanceString(race.lastFinishAt, race.lastFinishModel)}")
                     }
-                    RaceTimeDistance(actualTime, race.raceModel, isSectionTime = false, onSetGoingForward, distanceCorrection, distanceLocalizer, allowance)
+                    RaceTimeDistance(
+                        actualTime, race.raceModel, selectedPosition, isSectionTime = false, onSetGoingForward, distanceCorrection, distanceLocalizer, allowance
+                    )
                     RaceSpeed(actualTime, race)
                 }
             }
@@ -266,7 +287,10 @@ private fun RaceStatus(
                     if (race.finishedAt != null && race.raceModelAtFinish != null) {
                         Text("Finished: ${raceTimeDistanceString(race.finishedAt, race.raceModelAtFinish)}")
                     }
-                    RaceTimeDistance(actualTime, race.raceModel, isSectionTime = true, onSetGoingForward, distanceCorrection, sectionDistanceLocalizer, allowance)
+                    RaceTimeDistance(
+                        actualTime, race.raceModel, selectedPosition, isSectionTime = true, 
+                        onSetGoingForward, distanceCorrection, sectionDistanceLocalizer, allowance
+                    )
                     GoingSpeed(race)
                 }
             }
@@ -287,6 +311,7 @@ private fun RaceStatus(
 private fun RaceTimeDistance(
     time: Instant,
     race: RaceModel,
+    selectedPosition: PositionLine?,
     isSectionTime: Boolean,
     onSetGoingForward: (Boolean) -> Unit,
     distanceCorrection: (DistanceKm) -> Unit,
@@ -345,6 +370,9 @@ private fun RaceTimeDistance(
             Text(distanceString(race.currentDistance), style = LocalCustomTypography.current.raceIndicatorText, modifier = Modifier.clickable {
                 isEditing = true
             })
+            if (selectedPosition != null) {
+                Text(deltaDistanceString(race.currentDistance - selectedPosition.atKm), style = LocalCustomTypography.current.raceSmallIndicatorText)
+            }
             TextButton(
                 onClick = {
                     hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -682,13 +710,14 @@ private fun Reset(onResetRace: () -> Unit) {
 }
 
 private fun distanceString(distance: DistanceKm) = distance.valueKm.strRound3Exact()
+private fun deltaDistanceString(distance: DistanceKm) = (if (distance.valueKm > 0) "+" else "") + distance.valueKm.strRound3Exact()
 
 private val speedLimitValues: List<Int> = listOf(5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110)
 
 @Composable
 private fun NewSpeedLimits(applyLimit: (SpeedKmh?) -> Unit, percent: String?, onPercentChange: (String?) -> Unit) {
     // Hold the full TextFieldValue (text + selection) locally.
-    var textFieldValue = remember { mutableStateOf(TextFieldValue(text = percent.orEmpty())) }
+    val textFieldValue = remember { mutableStateOf(TextFieldValue(text = percent.orEmpty())) }
 
     // When the stored text changes externally, update the local TextFieldValue
     // without losing the current cursor position unless the text differs.
