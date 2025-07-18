@@ -23,7 +23,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navOptions
 import androidx.navigation.toRoute
-import com.h0tk3y.rally.RaceService
+import com.h0tk3y.rally.android.racecervice.RaceService
 import com.h0tk3y.rally.android.db.Database
 import com.h0tk3y.rally.android.scenes.AllSectionsScene
 import com.h0tk3y.rally.android.scenes.SectionScene

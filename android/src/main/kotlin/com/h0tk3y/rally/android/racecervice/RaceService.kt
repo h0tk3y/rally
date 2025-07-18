@@ -1,4 +1,4 @@
-package com.h0tk3y.rally
+package com.h0tk3y.rally.android.racecervice
 
 import android.Manifest
 import android.Manifest.permission.BLUETOOTH_CONNECT
@@ -32,6 +32,9 @@ import com.github.pires.obd.exceptions.NoDataException
 import com.github.pires.obd.exceptions.NonNumericResponseException
 import com.github.pires.obd.exceptions.UnableToConnectException
 import com.github.pires.obd.exceptions.UnknownErrorException
+import com.h0tk3y.rally.DistanceKm
+import com.h0tk3y.rally.SpeedKmh
+import com.h0tk3y.rally.TimeHr
 import com.h0tk3y.rally.android.MainActivity
 import com.h0tk3y.rally.model.RaceModel
 import com.h0tk3y.rally.model.RaceState
@@ -39,6 +42,7 @@ import com.h0tk3y.rally.model.duration
 import com.h0tk3y.rally.model.interval
 import com.h0tk3y.rally.obd.MySpeedCommand
 import com.h0tk3y.rally.obd.SelectEcuCommand
+import com.h0tk3y.rally.strRound3
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
