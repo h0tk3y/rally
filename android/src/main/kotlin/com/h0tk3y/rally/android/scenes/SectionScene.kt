@@ -56,6 +56,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
+import com.h0tk3y.rally.DistanceKm
 import com.h0tk3y.rally.InputToTextSerializer
 import com.h0tk3y.rally.LineNumber
 import com.h0tk3y.rally.PositionLine
@@ -63,7 +64,7 @@ import com.h0tk3y.rally.PositionLineModifier
 import com.h0tk3y.rally.PositionLineModifier.AddSynthetic
 import com.h0tk3y.rally.PositionLineModifier.IsSynthetic
 import com.h0tk3y.rally.PositionLineModifier.SetAvg
-import com.h0tk3y.rally.RaceService
+import com.h0tk3y.rally.android.racecervice.RaceService
 import com.h0tk3y.rally.RallyTimesResultFailure
 import com.h0tk3y.rally.RallyTimesResultSuccess
 import com.h0tk3y.rally.RoadmapInputLine
@@ -400,6 +401,7 @@ fun SectionScene(
                                 results,
                                 subsMatch,
                                 allowance,
+                                !editorState.isEnabled && raceUiVisible,
                                 raceState as? SectionViewModel.RaceUiState.RaceGoing
                             )
                         }
@@ -435,14 +437,17 @@ fun SectionScene(
                         },
                         navigateToSection = { onNavigateToNewSection(it, true) },
                         keyboardModifier,
-                        applyLimit = { speed ->
+                        addPositionMaybeWithSpeed = { speed ->
                             val currentRaceState = raceState
-                            if (currentRaceState is SectionViewModel.RaceUiState.RaceGoing) {
-                                model.maybeCreateItemAtDistance(
+                            if (currentRaceState is SectionViewModel.RaceUiState.HasRaceModel) {
+                                val newItem = model.maybeCreateItemAtDistance(
                                     currentRaceState.raceModel.currentDistance,
                                     forceCreateIfExists = true,
                                     listOfNotNull(speed?.let(PositionLineModifier::ThenAvgSpeed))
                                 )
+                                if (model.selectedLineIndex.value == newItem.lineNumber) {
+                                    model.selectLine(newItem.lineNumber, null)
+                                }
                             }
                         },
                         allowance

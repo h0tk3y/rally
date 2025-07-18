@@ -21,8 +21,8 @@ import com.h0tk3y.rally.PositionLineModifier.OdoDistance
 import com.h0tk3y.rally.PositionLineModifier.SetAvg
 import com.h0tk3y.rally.PositionLineModifier.SetAvgSpeed
 import com.h0tk3y.rally.PositionLineModifier.ThenAvgSpeed
-import com.h0tk3y.rally.RaceService
-import com.h0tk3y.rally.RaceService.BtPublicState
+import com.h0tk3y.rally.android.racecervice.RaceService
+import com.h0tk3y.rally.android.racecervice.RaceService.BtPublicState
 import com.h0tk3y.rally.RallyTimesIntervalsCalculator
 import com.h0tk3y.rally.RallyTimesResult
 import com.h0tk3y.rally.RallyTimesResultFailure
@@ -154,6 +154,10 @@ class SectionViewModel(
     val speedLimitPercent = prefs.userPreferencesFlow.map { it.speedLimitPercent }
 
     sealed interface RaceUiState {
+        sealed interface HasRaceModel {
+            val raceModel: RaceModel
+        }
+        
         data object NoRaceServiceConnection : RaceUiState
 
         data object RaceNotStarted : RaceUiState
@@ -163,26 +167,26 @@ class SectionViewModel(
         ) : RaceUiState
 
         data class RaceGoing(
-            val raceModel: RaceModel,
+            override val raceModel: RaceModel,
             val serial: Long,
             val lastFinishAt: Instant?,
             val lastFinishModel: RaceModel?,
             val raceModelOfGoingAtSection: RaceModel
-        ) : RaceUiState
+        ) : RaceUiState, HasRaceModel
 
         data class Going(
-            val raceModel: RaceModel,
+            override val raceModel: RaceModel,
             val raceModelAtFinish: RaceModel?,
             val finishedAt: Instant?,
             val serial: Long
-        ) : RaceUiState
+        ) : RaceUiState, HasRaceModel
 
         data class Stopped(
             val stoppedAt: Instant,
-            val raceModel: RaceModel,
+            override val raceModel: RaceModel,
             val finishedAt: Instant?,
             val raceModelAtFinish: RaceModel?,
-        ) : RaceUiState
+        ) : RaceUiState, HasRaceModel
     }
 
     @SuppressLint("StaticFieldLeak")
@@ -540,7 +544,7 @@ class SectionViewModel(
     override fun addItemAbove() {
         createNewItem(0)?.let { viewModelScope.launch { selectLine(it, DataKind.Distance) } }
     }
-
+    
     override fun addItemBelow() {
         createNewItem(1)?.let { viewModelScope.launch { selectLine(it, DataKind.Distance) } }
     }
@@ -880,11 +884,6 @@ class SectionViewModel(
             _inputPositions.value[indexOfItem].lineNumber,
             item.copy(modifiers = addOrReplaceModifiers(item.modifiers, modifiersToAdd))
         )
-    }
-
-    private fun removeAtime(inputLine: RoadmapInputLine) = when (inputLine) {
-        is CommentLine -> inputLine
-        is PositionLine -> inputLine.copy(modifiers = inputLine.modifiers.filterNot { it is AstroTime })
     }
 
     private fun recalculateLineNumbers(lines: Collection<RoadmapInputLine>) =
