@@ -4,7 +4,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.ServiceConnection
 import android.os.IBinder
-import com.h0tk3y.rally.RaceService
+import com.h0tk3y.rally.android.racecervice.RaceService
 
 class RaceServiceConnection(
     private val context: Context,
