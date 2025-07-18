@@ -52,6 +52,7 @@ fun PositionsListView(
     results: RallyTimesResult,
     subsMatch: SubsMatch,
     allowance: TimeAllowance?,
+    raceViewShown: Boolean,
     raceState: SectionViewModel.RaceUiState.RaceGoing?
 ) {
     val time by produceState(Clock.System.now(), raceState) {
@@ -243,9 +244,11 @@ fun PositionsListView(
                                                 }
                                             }
 
-                                            val currentLineTimes = results.timeVectorsAtRoadmapLine[line.lineNumber]
-                                            val currentLineAtime = results.astroTimeAtRoadmapLine[line.lineNumber]
+                                            val currentLineTimes =
+                                                (if (!raceViewShown || raceState != null) results.timeVectorsAtRoadmapLine else results.timesForOuterInterval)[line.lineNumber]
 
+                                            val currentLineAtime =
+                                                (if (!raceViewShown || raceState != null) results.astroTimeAtRoadmapLine else results.astroTimeAtRoadmapLineForOuter)[line.lineNumber]
 
                                             if (currentLineTimes != null) {
                                                 val outerTime = currentLineTimes.outer
