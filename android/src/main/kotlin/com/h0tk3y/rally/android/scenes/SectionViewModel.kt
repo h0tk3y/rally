@@ -2,8 +2,10 @@ package com.h0tk3y.rally.android.scenes
 
 import android.annotation.SuppressLint
 import android.app.Service
+import android.transition.TransitionManager.go
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.github.h0tk3y.betterParse.grammar.parser
 import com.h0tk3y.rally.CommentLine
 import com.h0tk3y.rally.DefaultModifierValidator
 import com.h0tk3y.rally.DistanceKm
@@ -65,6 +67,7 @@ import kotlinx.datetime.atTime
 import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
 import kotlin.math.sign
+import kotlin.text.Typography.section
 
 class SectionViewModel(
     private val sectionId: Long,
@@ -303,6 +306,7 @@ class SectionViewModel(
                                 it != currentItems.firstOrNull() &&
                                 it == currentItems.lastOrNull { d -> d is PositionLine && d.atKm == it.atKm }
                     }
+                    ?.takeIf { PositionLineModifier.IsSynthetic !in it.modifiers }
                     ?.let { addModifiersToItem(it, startModifiersToAdd) }
                     ?: maybeCreateItemAtDistance(
                         startDistance,
