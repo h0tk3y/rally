@@ -21,8 +21,27 @@ class RallyTimesIntervalsCalculator : RallyTimes {
         val localizerForNested = TimeDistanceLocalizerImpl.createWithNestedIntervals(rootInterval.interval, roadmap)
         val localizerForRoot = TimeDistanceLocalizerImpl.createForRootIntervalOnly(rootInterval.interval, roadmap)
 
+        val timeAtZero = localizerForRoot.getExpectedTimeForDistance(DistanceKm.zero)?.timeHours?.times(-1)
+        val timesAtOuterIntervals = roadmap.mapNotNull {
+            it.lineNumber to
+                    (localizerForRoot.getExpectedTimeForDistance(it.atKm)?.timeHours?.plus(
+                        timeAtZero ?: return@mapNotNull null
+                    ) ?: return@mapNotNull null).let { time -> TimeHrVector(listOf(TimeHr(time))) }
+        }.toMap()
+
+        val atimeLine = roadmap.singleOrNull { it.modifier<PositionLineModifier.AstroTime>() != null }
+        val atimeFound = atimeLine?.modifier<PositionLineModifier.AstroTime>()
+        val atimeAtZero = atimeFound?.timeOfDay?.timeSinceMidnight?.let { it - timesAtOuterIntervals.getValue(atimeLine.lineNumber).outer }
+        val atimeForOuter: Map<LineNumber, TimeDayHrMinSec> = if (atimeAtZero != null) {
+            roadmap.associate { position ->
+                position.lineNumber to (timesAtOuterIntervals.getValue(position.lineNumber).outer - atimeAtZero).toTimeDayHrMinSec()
+            }
+        } else emptyMap()
+
         return result.copy(
+            timesForOuterInterval = timesAtOuterIntervals,
             astroTimeAtRoadmapLine = AstroTimeCalculator.calculateAstroTimes(roadmap = roadmap, timeHrMap = result.timeVectorsAtRoadmapLine),
+            astroTimeAtRoadmapLineForOuter = atimeForOuter,
             raceTimeDistanceLocalizer = localizerForNested,
             sectionTimeDistanceLocalizer = localizerForRoot
         )
@@ -159,9 +178,12 @@ internal class IntervalTimesEvaluator {
         }
 
         recurse(rootInterval, TimeHr.zero)
-        
+
         return RallyTimesResultSuccess(
-            timeHrMap.entries.sortedWith(compareByDescending{ it.key.pureFragment.start.lineNumber }).associate { (position, vector) -> position.positionLine.lineNumber to vector },
+            timeHrMap.entries.sortedWith(compareByDescending { it.key.pureFragment.start.lineNumber })
+                .associate { (position, vector) -> position.positionLine.lineNumber to vector },
+            emptyMap(),
+            emptyMap(),
             emptyMap(),
             goAtMap.mapKeys { it.key.lineNumber },
             warnings,
@@ -169,7 +191,7 @@ internal class IntervalTimesEvaluator {
             null
         )
     }
-    
+
     private sealed interface Event {
         val startDistance: DistanceKm
 
