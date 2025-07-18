@@ -11,6 +11,10 @@ sealed interface RaceState {
         val raceSectionId: Long   
     }
     
+    sealed interface MovingWithRaceModel : HasCurrentSection {
+        val raceModel: RaceModel
+    }
+    
     data object NotStarted : RaceState
 
     data class Stopped(
@@ -23,18 +27,18 @@ sealed interface RaceState {
     
     data class InRace(
         override val raceSectionId: Long,
-        val raceModel: RaceModel,
+        override val raceModel: RaceModel,
         val previousFinishAt: Instant?,
         val previousFinishModel: RaceModel?,
         val goingModel: RaceModel
-    ) : RaceState, HasCurrentSection
+    ) : RaceState, MovingWithRaceModel
     
     data class Going(
         override val raceSectionId: Long,
-        val raceModel: RaceModel,
+        override val raceModel: RaceModel,
         val finishedRaceModel: RaceModel?,
         val finishedAt: Instant?
-    ) : RaceState, HasCurrentSection
+    ) : RaceState, MovingWithRaceModel
 }
 
 data class RaceModel(

@@ -206,7 +206,7 @@ class SectionViewModel(
         serviceRelatedJob = viewModelScope.launch {
             launch {
                 raceService.raceState.collectLatest { newState ->
-                    if (newState is RaceState.InRace && newState.raceSectionId == sectionId) {
+                    if (newState is RaceState.MovingWithRaceModel && newState.raceSectionId == sectionId) {
                         val positionLines = _preprocessedPositions.value
                         val inRaceAtKm = newState.raceModel.currentDistance.roundTo3Digits()
                         val position = positionLines.lastOrNull { it is PositionLine && it.atKm <= inRaceAtKm }
