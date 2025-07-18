@@ -1,5 +1,6 @@
 package com.h0tk3y.rally.android.theme
 
+import android.app.Activity
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Typography
@@ -8,11 +9,14 @@ import androidx.compose.material.lightColors
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.sp
+import androidx.core.view.WindowCompat
 
 @Immutable
 data class CustomColorsPalette(
@@ -27,6 +31,7 @@ data class CustomColorsPalette(
 data class CustomTypography(
     val dataTextStyle: TextStyle = TextStyle.Default,
     val raceIndicatorText: TextStyle = TextStyle.Default.copy(fontSize = 45.sp),
+    val raceSmallIndicatorText: TextStyle = TextStyle.Default.copy(fontSize = 20.sp),
     val raceControlButton: TextStyle = TextStyle.Default.copy(fontSize = 20.sp),
     val raceEditableValue: TextStyle = TextStyle.Default.copy(fontSize = 20.sp),
 )
@@ -62,6 +67,12 @@ fun AppTheme(
     val customColorsPalette =
         if (darkTheme) OnDarkCustomColorsPalette
         else OnLightCustomColorsPalette
+
+    val view = LocalView.current
+    val window = (view.context as? Activity)?.window
+    SideEffect {
+        WindowCompat.getInsetsController(window!!, view).isAppearanceLightStatusBars = !darkTheme
+    }
 
     CompositionLocalProvider(
         LocalCustomColorsPalette provides customColorsPalette,
