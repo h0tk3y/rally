@@ -29,7 +29,7 @@
         
         android:theme="@style/Theme.AppCompat.Light.NoActionBar">
         <service
-            android:name=".RaceService"
+            android:name=".android.racecervice.RaceService"
             android:enabled="true"
             android:foregroundServiceType="connectedDevice" />
 
