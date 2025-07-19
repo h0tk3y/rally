@@ -365,7 +365,7 @@ private fun RaceTimeDistance(
     ) {
         val hapticFeedback = LocalHapticFeedback.current
 
-        var isEditing by remember { mutableStateOf(false) }
+        var isEditing by rememberSaveable { mutableStateOf(false) }
         if (!isEditing) {
             Text(distanceString(race.currentDistance), style = LocalCustomTypography.current.raceIndicatorText, modifier = Modifier.clickable {
                 isEditing = true
@@ -409,6 +409,16 @@ private fun RaceTimeDistance(
                 isEditing = false
             }) {
                 Icon(Icons.Rounded.Close, "Cancel")
+            }
+            
+            Spacer(Modifier.weight(1.0f))
+            
+            if (selectedPosition != null) {
+                TextButton({
+                    hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                    distanceCorrection(selectedPosition.atKm - race.currentDistance)
+                    isEditing = false
+                }) { Text("Set to position ${selectedPosition.atKm.valueKm.strRound3()}") }
             }
         }
     }
