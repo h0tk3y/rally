@@ -56,7 +56,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
-import com.h0tk3y.rally.DistanceKm
 import com.h0tk3y.rally.InputToTextSerializer
 import com.h0tk3y.rally.LineNumber
 import com.h0tk3y.rally.PositionLine
@@ -64,7 +63,6 @@ import com.h0tk3y.rally.PositionLineModifier
 import com.h0tk3y.rally.PositionLineModifier.AddSynthetic
 import com.h0tk3y.rally.PositionLineModifier.IsSynthetic
 import com.h0tk3y.rally.PositionLineModifier.SetAvg
-import com.h0tk3y.rally.android.racecervice.RaceService
 import com.h0tk3y.rally.RallyTimesResultFailure
 import com.h0tk3y.rally.RallyTimesResultSuccess
 import com.h0tk3y.rally.RoadmapInputLine
@@ -74,6 +72,7 @@ import com.h0tk3y.rally.android.LoadState
 import com.h0tk3y.rally.android.db.Database
 import com.h0tk3y.rally.android.db.SectionInsertOrRenameResult
 import com.h0tk3y.rally.android.permissions.RequiredPermissions
+import com.h0tk3y.rally.android.racecervice.RaceService
 import com.h0tk3y.rally.android.scenes.DataKind.AstroTime
 import com.h0tk3y.rally.android.scenes.DataKind.AverageSpeed
 import com.h0tk3y.rally.android.scenes.DataKind.Distance
@@ -97,7 +96,8 @@ fun SectionScene(
     onDeleteSection: () -> Unit,
     onNavigateToNewSection: (Long, Boolean) -> Unit,
     onBack: () -> Unit,
-    model: SectionViewModel
+    onNavigateToEventLog: () -> Unit,
+    model: SectionViewModel,
 ) {
     val section by model.section.collectAsState(LoadState.LOADING)
     val positions by model.inputPositions.collectAsState(emptyList())
@@ -436,6 +436,7 @@ fun SectionScene(
                             model.setDebugSpeed(SpeedKmh(it.toDouble()))
                         },
                         navigateToSection = { onNavigateToNewSection(it, true) },
+                        goToEventLog = onNavigateToEventLog, 
                         keyboardModifier,
                         addPositionMaybeWithSpeed = { speed ->
                             val currentRaceState = raceState

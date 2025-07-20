@@ -1,0 +1,5 @@
+package com.h0tk3y.rally.model
+
+enum class RaceEventKind {
+    SECTION_START, SECTION_FINISH, SECTION_UNDO_FUNISH, RACE_START, RACE_FINISH, RACE_UNDO_FINISH
+}
