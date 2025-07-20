@@ -49,6 +49,7 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ControlPoint
 import androidx.compose.material.icons.rounded.Done
 import androidx.compose.material.icons.rounded.Flag
+import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.OutlinedFlag
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material.icons.rounded.Timer
@@ -134,6 +135,7 @@ fun RaceView(
     onSetGoingForward: (Boolean) -> Unit,
     onSetDebugSpeed: (Int) -> Unit,
     navigateToSection: (Long) -> Unit,
+    goToEventLog: () -> Unit,
     modifier: Modifier,
     addPositionMaybeWithSpeed: (SpeedKmh?) -> Unit,
     allowance: TimeAllowance?
@@ -182,14 +184,19 @@ fun RaceView(
 
 @Composable
 private fun InRaceEditorControls(
-    onAddPositionAtCurrentDistance: () -> Unit
+    onAddPositionAtCurrentDistance: () -> Unit,
+    onGoToEventLog: () -> Unit
 ) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { 
-        IconButton(onClick = { onAddPositionAtCurrentDistance() }) { 
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        IconButton(onClick = { onAddPositionAtCurrentDistance() }) {
             Icon(Icons.Rounded.ControlPoint, contentDescription = "Add passed position")
         }
+        Spacer(Modifier.weight(1f))
+        IconButton(onClick = { onGoToEventLog() }) {
+            Icon(Icons.Rounded.History, contentDescription = "Event log")
+        }
     }
-    
+
 }
 
 @Composable
@@ -287,7 +294,7 @@ private fun RaceStatus(
                         Text("Finished: ${raceTimeDistanceString(race.finishedAt, race.raceModelAtFinish)}")
                     }
                     RaceTimeDistance(
-                        actualTime, race.raceModel, selectedPosition, isSectionTime = true, 
+                        actualTime, race.raceModel, selectedPosition, isSectionTime = true,
                         onSetGoingForward, distanceCorrection, sectionDistanceLocalizer, allowance
                     )
                     GoingSpeed(race)
@@ -409,9 +416,9 @@ private fun RaceTimeDistance(
             }) {
                 Icon(Icons.Rounded.Close, "Cancel")
             }
-            
+
             Spacer(Modifier.weight(1.0f))
-            
+
             if (selectedPosition != null) {
                 TextButton({
                     hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)

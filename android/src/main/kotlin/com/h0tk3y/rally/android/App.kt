@@ -23,9 +23,11 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navOptions
 import androidx.navigation.toRoute
-import com.h0tk3y.rally.android.racecervice.RaceService
 import com.h0tk3y.rally.android.db.Database
+import com.h0tk3y.rally.android.racecervice.RaceService
 import com.h0tk3y.rally.android.scenes.AllSectionsScene
+import com.h0tk3y.rally.android.scenes.SectionEventLogScene
+import com.h0tk3y.rally.android.scenes.SectionEventLogViewModel
 import com.h0tk3y.rally.android.scenes.SectionScene
 import com.h0tk3y.rally.android.scenes.SectionViewModel
 import com.h0tk3y.rally.db.Section
@@ -37,6 +39,9 @@ object HomeScene
 
 @Serializable
 data class SectionScene(val sectionId: Long, val withRace: Boolean)
+
+@Serializable
+data class SectionEventLogScene(val sectionId: Long)
 
 @Composable
 fun App(
@@ -109,8 +114,16 @@ fun App(
                             onBack = {
                                 navController.popBackStack()
                             },
+                            onNavigateToEventLog = {
+                                navController.navigate(SectionEventLogScene(sectionId))
+                            },
                             model
                         )
+                    }
+                    composable<SectionEventLogScene> {
+                        val sectionId = it.toRoute<SectionEventLogScene>().sectionId
+                        val model = viewModel { SectionEventLogViewModel(sectionId, database) }
+                        SectionEventLogScene(model, onBack = navController::popBackStack)
                     }
                 }
             }

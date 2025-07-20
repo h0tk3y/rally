@@ -1,4 +1,7 @@
-CREATE TABLE Section (
+import kotlinx.datetime.Instant;
+import com.h0tk3y.rally.model.RaceEventKind;
+
+CREATE TABLE IF NOT EXISTS Section (
     id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     serializedPositions TEXT NOT NULL
@@ -30,3 +33,24 @@ INSERT OR IGNORE INTO Section(id, name, serializedPositions) VALUES (?, ?, "");
 
 createSection:
 INSERT OR IGNORE INTO Section(id, name, serializedPositions) VALUES (?, ?, ?);
+
+CREATE TABLE IF NOT EXISTS Event (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    sectionId INTEGER NOT NULL,
+    distance REAL NOT NULL,
+    kind TEXT AS RaceEventKind NOT NULL,
+    timestamp TEXT AS Instant NOT NULL,
+    sinceTimestamp TEXT AS Instant,
+    FOREIGN KEY(sectionId) REFERENCES Section(id)  
+);
+
+selectEventsBySectionId:
+SELECT Event.* FROM Event WHERE sectionId = ?;
+
+createEvent:
+INSERT OR IGNORE INTO Event(
+    id, sectionId, distance, kind, timestamp, sinceTimestamp
+) VALUES (?, ?, ?, ?, ?, ?);
+
+deleteEventsForSection:
+DELETE FROM Event WHERE sectionId = ?;
