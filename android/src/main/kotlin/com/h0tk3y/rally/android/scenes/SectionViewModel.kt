@@ -2,10 +2,8 @@ package com.h0tk3y.rally.android.scenes
 
 import android.annotation.SuppressLint
 import android.app.Service
-import android.transition.TransitionManager.go
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.github.h0tk3y.betterParse.grammar.parser
 import com.h0tk3y.rally.CommentLine
 import com.h0tk3y.rally.DefaultModifierValidator
 import com.h0tk3y.rally.DistanceKm
@@ -43,6 +41,9 @@ import com.h0tk3y.rally.db.Section
 import com.h0tk3y.rally.isEndAvg
 import com.h0tk3y.rally.isSetAvg
 import com.h0tk3y.rally.isThenAvg
+import com.h0tk3y.rally.model.RaceEventKind
+import com.h0tk3y.rally.model.RaceEventKind.RACE_START
+import com.h0tk3y.rally.model.RaceEventKind.SECTION_START
 import com.h0tk3y.rally.model.RaceModel
 import com.h0tk3y.rally.model.RaceState
 import com.h0tk3y.rally.model.duration
@@ -67,7 +68,6 @@ import kotlinx.datetime.atTime
 import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
 import kotlin.math.sign
-import kotlin.text.Typography.section
 
 class SectionViewModel(
     private val sectionId: Long,
@@ -160,7 +160,7 @@ class SectionViewModel(
         sealed interface HasRaceModel {
             val raceModel: RaceModel
         }
-        
+
         data object NoRaceServiceConnection : RaceUiState
 
         data object RaceNotStarted : RaceUiState
@@ -254,6 +254,8 @@ class SectionViewModel(
 
     fun startRace(startOption: StartOption) {
         service?.run {
+            val now = Clock.System.now()
+
             val currentRaceState = raceState.value
             val startDistance = when (startOption.locationAndTime) {
                 StartOption.StartAtSelectedPositionAtTimeKeepOdo,
@@ -268,11 +270,17 @@ class SectionViewModel(
                 }
             }.roundTo3Digits()
 
+            database.insertEvent(
+                if (startOption.isRace) RACE_START else SECTION_START,
+                sectionId,
+                startDistance,
+                now,
+                sinceTimestamp = null
+            )
+
             val speedAtDistance: SpeedKmh? =
                 currentItem?.takeIf { it.atKm == startDistance }?.modifier<SetAvg>()?.setavg
                     ?: findPureSpeedForDistance(startDistance)
-
-            val now = Clock.System.now()
 
             val startTime = when (startOption.locationAndTime) {
                 StartOption.StartAtSelectedPositionAtTimeKeepOdo,
@@ -405,6 +413,14 @@ class SectionViewModel(
             )
             restoreStartAtime(currentState.raceModelOfGoingAtSection)
             service?.finishRace(currentState.raceModel)
+
+            database.insertEvent(
+                RaceEventKind.RACE_FINISH,
+                sectionId,
+                currentState.raceModel.currentDistance,
+                Clock.System.now(),
+                sinceTimestamp = currentState.raceModel.startAtTime
+            )
         }
     }
 
@@ -418,6 +434,13 @@ class SectionViewModel(
                 deletePosition(findLast)
             }
             restoreStartAtime(currentState.raceModelAtFinish)
+            database.insertEvent(
+                RaceEventKind.RACE_UNDO_FINISH,
+                sectionId,
+                currentState.raceModel.currentDistance,
+                Clock.System.now(),
+                sinceTimestamp = null
+            )
         }
         service?.undoFinishRace()
     }
@@ -434,9 +457,25 @@ class SectionViewModel(
 
     fun stopRace() {
         service?.stopRace()
+        val raceModelAtStop = (service?.raceState?.value as? RaceState.Stopped)?.raceModelAtStop
+        database.insertEvent(
+            RaceEventKind.SECTION_FINISH,
+            sectionId,
+            raceModelAtStop?.currentDistance ?: DistanceKm.zero,
+            Clock.System.now(),
+            sinceTimestamp = raceModelAtStop?.startAtTime
+        )
     }
 
     fun undoStopRace() {
+        val stopDistance = (service?.raceState?.value as? RaceState.Stopped)?.raceModelAtStop?.currentDistance ?: DistanceKm.zero
+        database.insertEvent(
+            RaceEventKind.SECTION_UNDO_FUNISH,
+            sectionId,
+            stopDistance,
+            Clock.System.now(),
+            sinceTimestamp = null
+        )
         service?.undoStop()
     }
 
@@ -548,7 +587,7 @@ class SectionViewModel(
     override fun addItemAbove() {
         createNewItem(0)?.let { viewModelScope.launch { selectLine(it, DataKind.Distance) } }
     }
-    
+
     override fun addItemBelow() {
         createNewItem(1)?.let { viewModelScope.launch { selectLine(it, DataKind.Distance) } }
     }
