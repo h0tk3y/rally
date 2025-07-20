@@ -22,15 +22,16 @@ dependencies {
     implementation(compose.runtime)
     implementation(compose.foundation)
     implementation(compose.material)
+    implementation(platform("androidx.compose:compose-bom:2025.05.00"))
     implementation("androidx.compose.material:material-icons-extended:1.7.6")
     implementation("androidx.compose.material:material-icons-extended-android:1.7.6")
     implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.6.1")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
-    implementation("app.cash.sqldelight:coroutines-extensions:2.0.0-alpha05")
+    implementation("app.cash.sqldelight:coroutines-extensions:2.1.0")
     implementation("com.github.h0tk3y.betterParse:better-parse:0.4.4")
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("androidx.core:core-ktx:1.15.0")
-    implementation("app.cash.sqldelight:android-driver:2.0.0-alpha05")
+    implementation("app.cash.sqldelight:android-driver:2.1.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7")
     implementation("androidx.navigation:navigation-compose:2.8.5")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
@@ -49,6 +50,7 @@ dependencies {
 sqldelight {
     databases.create("AppDatabase") {
         packageName.set("com.h0tk3y.rally.db")
+        schemaOutputDirectory.set(file("src/main/sqldelight/databases"))
     }
 }
 
