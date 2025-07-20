@@ -150,31 +150,30 @@ fun RaceView(
     }
 
     VolumeKeyHandler(onVolumeUp = { distanceCorrection(DistanceKm(0.01)) }, onVolumeDown = { distanceCorrection(DistanceKm(-0.01)) }) {
-        Column {
-            Box(modifier.padding(4.dp)) {
-                InRaceEditorControls({ addPositionMaybeWithSpeed(null) })
-            }
-            Surface(modifier.padding(4.dp)) {
-                Column(Modifier.verticalScroll(rememberScrollState())) {
-                    BtStatus(btState, macAddressInPreferences, updateMacAddress)
-                    RaceStatus(race, time, onSetGoingForward, distanceLocalizer, sectionDistanceLocalizer, distanceCorrection, allowance, selectedPosition)
-                    RaceControls(
-                        race,
-                        selectedPosition,
-                        onStartRace,
-                        onFinishRace,
-                        onUndoFinishRace,
-                        onStopRace,
-                        onUndoStopRace,
-                        onResetRace,
-                        navigateToSection,
-                        addPositionMaybeWithSpeed,
-                        speedLimitPercent,
-                        setSpeedLimitPercent
-                    )
-                    if (BuildConfig.DEBUG) {
-                        DebugSpeedSlider(onSetDebugSpeed)
-                    }
+        Surface(modifier.padding(4.dp)) {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                InRaceEditorControls(
+                    onAddPositionAtCurrentDistance = { addPositionMaybeWithSpeed(null) },
+                    onGoToEventLog = { goToEventLog() }
+                )
+                BtStatus(btState, macAddressInPreferences, updateMacAddress)
+                RaceStatus(race, time, onSetGoingForward, distanceLocalizer, sectionDistanceLocalizer, distanceCorrection, allowance, selectedPosition)
+                RaceControls(
+                    race,
+                    selectedPosition,
+                    onStartRace,
+                    onFinishRace,
+                    onUndoFinishRace,
+                    onStopRace,
+                    onUndoStopRace,
+                    onResetRace,
+                    navigateToSection,
+                    addPositionMaybeWithSpeed,
+                    speedLimitPercent,
+                    setSpeedLimitPercent
+                )
+                if (BuildConfig.DEBUG) {
+                    DebugSpeedSlider(onSetDebugSpeed)
                 }
             }
         }
