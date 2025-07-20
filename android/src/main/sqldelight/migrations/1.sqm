@@ -1,0 +1,14 @@
+import kotlinx.datetime.Instant;
+import com.h0tk3y.rally.model.RaceEventKind;
+
+-- Migrate from v1: add the events table
+
+CREATE TABLE IF NOT EXISTS Event (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    sectionId INTEGER NOT NULL,
+    distance REAL NOT NULL,
+    kind TEXT AS RaceEventKind NOT NULL,
+    timestamp TEXT AS Instant NOT NULL,
+    sinceTimestamp TEXT AS Instant,
+    FOREIGN KEY(sectionId) REFERENCES Section(id)  
+);
