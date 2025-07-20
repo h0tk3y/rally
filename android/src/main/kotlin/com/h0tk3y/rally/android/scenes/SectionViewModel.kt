@@ -470,7 +470,7 @@ class SectionViewModel(
     fun undoStopRace() {
         val stopDistance = (service?.raceState?.value as? RaceState.Stopped)?.raceModelAtStop?.currentDistance ?: DistanceKm.zero
         database.insertEvent(
-            RaceEventKind.SECTION_UNDO_FUNISH,
+            RaceEventKind.SECTION_UNDO_FINISH,
             sectionId,
             stopDistance,
             Clock.System.now(),
