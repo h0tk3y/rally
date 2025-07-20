@@ -26,7 +26,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment.Companion.CenterVertically
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.h0tk3y.rally.android.LoadState
@@ -90,7 +89,7 @@ fun SectionEventLogScene(
                                         RaceEventKind.SECTION_FINISH -> Icons.Default.Stop
                                         RaceEventKind.RACE_START -> Icons.Default.OutlinedFlag
                                         RaceEventKind.RACE_FINISH -> Icons.Default.Flag
-                                        RaceEventKind.SECTION_UNDO_FUNISH,
+                                        RaceEventKind.SECTION_UNDO_FINISH,
                                         RaceEventKind.RACE_UNDO_FINISH -> Icons.AutoMirrored.Default.Undo
                                     }, "Event kind: ${item.kind}", Modifier.weight(1f)
                                 )
@@ -100,7 +99,7 @@ fun SectionEventLogScene(
                                     when (item.kind) {
                                         RaceEventKind.SECTION_START -> "Section started"
                                         RaceEventKind.SECTION_FINISH -> "Section finished"
-                                        RaceEventKind.SECTION_UNDO_FUNISH -> "Undo section finish"
+                                        RaceEventKind.SECTION_UNDO_FINISH -> "Undo section finish"
                                         RaceEventKind.RACE_START -> "Race started"
                                         RaceEventKind.RACE_FINISH -> "Race finished"
                                         RaceEventKind.RACE_UNDO_FINISH -> "Undo race finish"
