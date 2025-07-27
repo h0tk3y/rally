@@ -18,11 +18,22 @@ internal val Context.dataStore by preferencesDataStore(
 private object PreferencesKeys {
     val ALLOWANCE = stringPreferencesKey("allowance")
     val CALIBRATION = doublePreferencesKey("calibration")
+    val TELEMETRY_SOURCE = stringPreferencesKey("telemetrySource")
     val BT_MAC = stringPreferencesKey("btMac")
     val SPEED_LIMIT_PERCENT_TEXT = stringPreferencesKey("speedLimitPercentText")
 }
 
-data class UserPreferences(val allowance: TimeAllowance?, val calibration: Double, val btMac: String?, val speedLimitPercent: String?)
+data class UserPreferences(
+    val allowance: TimeAllowance?,
+    val calibration: Double,
+    val telemetrySource: TelemetrySource,
+    val btMac: String?,
+    val speedLimitPercent: String?
+)
+
+enum class TelemetrySource {
+    BT_OBD, SIMULATION
+}
 
 class PreferenceRepository(val dataStore: DataStore<Preferences>) {
     val userPreferencesFlow: Flow<UserPreferences> = dataStore.data.map { preferences ->
@@ -52,6 +63,12 @@ class PreferenceRepository(val dataStore: DataStore<Preferences>) {
             preferences[PreferencesKeys.SPEED_LIMIT_PERCENT_TEXT] = value ?: ""
         }
     }
+
+    suspend fun saveTelemetrySource(telemetrySource: TelemetrySource) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.TELEMETRY_SOURCE] = telemetrySource.name
+        }
+    }
 }
 
 private fun mapUserPreferences(preferences: Preferences): UserPreferences {
@@ -59,7 +76,9 @@ private fun mapUserPreferences(preferences: Preferences): UserPreferences {
     val timeAllowance =
         preferences[PreferencesKeys.ALLOWANCE]?.let { pref -> TimeAllowance.entries.find { it.name == pref } }
     val calibration = preferences[PreferencesKeys.CALIBRATION] ?: 1.0
+    val telemetrySource = preferences[PreferencesKeys.TELEMETRY_SOURCE]?.let { value  -> TelemetrySource.entries.find { it.name == value } } 
+        ?: TelemetrySource.BT_OBD
     val btMac = preferences[PreferencesKeys.BT_MAC]
     val speedLimitPercent = preferences[PreferencesKeys.SPEED_LIMIT_PERCENT_TEXT]
-    return UserPreferences(timeAllowance, calibration, btMac, speedLimitPercent)
+    return UserPreferences(timeAllowance, calibration, telemetrySource, btMac, speedLimitPercent)
 }

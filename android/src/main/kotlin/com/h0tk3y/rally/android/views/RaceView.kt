@@ -31,7 +31,6 @@ import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
-import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Slider
 import androidx.compose.material.Surface
 import androidx.compose.material.Text
@@ -119,9 +118,7 @@ fun RaceView(
     race: SectionViewModel.RaceUiState,
     distanceLocalizer: TimeDistanceLocalizer?,
     sectionDistanceLocalizer: TimeDistanceLocalizer?,
-    btState: RaceService.BtPublicState,
-    macAddressInPreferences: String?,
-    updateMacAddress: (String?) -> Unit,
+    btState: RaceService.TelemetryPublicState,
     speedLimitPercent: String?,
     setSpeedLimitPercent: (String?) -> Unit,
     selectedPosition: PositionLine?,
@@ -136,6 +133,7 @@ fun RaceView(
     onSetDebugSpeed: (Int) -> Unit,
     navigateToSection: (Long) -> Unit,
     goToEventLog: () -> Unit,
+    goToSettings: () -> Unit,
     modifier: Modifier,
     addPositionMaybeWithSpeed: (SpeedKmh?) -> Unit,
     allowance: TimeAllowance?
@@ -155,10 +153,11 @@ fun RaceView(
         Surface(modifier.padding(4.dp)) {
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 InRaceEditorControls(
+                    btState,
                     onAddPositionAtCurrentDistance = { addPositionMaybeWithSpeed(null) },
-                    onGoToEventLog = { goToEventLog() }
+                    onGoToEventLog = goToEventLog,
+                    onGoToSettings = goToSettings
                 )
-                BtStatus(btState, macAddressInPreferences, updateMacAddress)
                 RaceStatus(race, time, onSetGoingForward, distanceLocalizer, sectionDistanceLocalizer, distanceCorrection, allowance, selectedPosition)
                 RaceControls(
                     race,
@@ -174,8 +173,8 @@ fun RaceView(
                     speedLimitPercent,
                     setSpeedLimitPercent
                 )
-                if (BuildConfig.DEBUG) {
-                    DebugSpeedSlider(onSetDebugSpeed)
+                if (btState == RaceService.TelemetryPublicState.Simulation) {
+                    DebugSpeedSlider(onSetDebugSpeed, (race as? SectionViewModel.RaceUiState.HasRaceModel)?.raceModel?.instantSpeed)
                 }
             }
         }
@@ -184,14 +183,17 @@ fun RaceView(
 
 @Composable
 private fun InRaceEditorControls(
+    btState: RaceService.TelemetryPublicState,
     onAddPositionAtCurrentDistance: () -> Unit,
-    onGoToEventLog: () -> Unit
+    onGoToEventLog: () -> Unit,
+    onGoToSettings: () -> Unit
 ) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         IconButton(onClick = { onAddPositionAtCurrentDistance() }) {
             Icon(Icons.Rounded.ControlPoint, contentDescription = "Add passed position")
         }
         Spacer(Modifier.weight(1f))
+        BtStatus(btState, onGoToSettings)
         IconButton(onClick = { onGoToEventLog() }) {
             Icon(Icons.Rounded.History, contentDescription = "Event log")
         }
@@ -208,51 +210,33 @@ private fun RaceViewElement(modifier: Modifier = Modifier, content: @Composable 
 }
 
 @Composable
-private fun BtStatus(btPublicState: RaceService.BtPublicState, macAddressInPreferences: String?, updateMacAddress: (String?) -> Unit) {
-    var isEditingMacAddress by remember { mutableStateOf(false) }
-
-    if (isEditingMacAddress) {
-        var text by rememberSaveable(macAddressInPreferences) { mutableStateOf(macAddressInPreferences) }
-        RaceViewElement {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    text.orEmpty(),
-                    onValueChange = {
-                        text = it
-                    },
-                    label = { Text("Bluetooth MAC address") }
-                )
-                IconButton(onClick = {
-                    updateMacAddress(text)
-                    isEditingMacAddress = false
-                }) {
-                    Icon(Icons.Rounded.Done, "Apply")
-                }
+private fun BtStatus(
+    telemetryPublicState: RaceService.TelemetryPublicState,
+    goToSettings: () -> Unit
+) {
+        RaceViewElement(Modifier.clickable(onClick = { goToSettings() })) {
+            val text = when (telemetryPublicState) {
+                RaceService.TelemetryPublicState.NotInitialized,
+                RaceService.TelemetryPublicState.BtConnecting -> "OBD: connecting…"
+                RaceService.TelemetryPublicState.BtReconnecting -> "OBD: reconnecting…"
+                
+                RaceService.TelemetryPublicState.BtNoPermissions -> "OBD: permissions!"
+                RaceService.TelemetryPublicState.BtNoTargetMacAddress -> "OBD: no MAC!"
+                
+                RaceService.TelemetryPublicState.BtWorking -> "OBD ✔"
+                RaceService.TelemetryPublicState.Simulation -> "SIMUL️ATION"
             }
+            val color = when (telemetryPublicState) {
+                RaceService.TelemetryPublicState.BtWorking -> Color.Unspecified
+                RaceService.TelemetryPublicState.BtConnecting,
+                RaceService.TelemetryPublicState.BtNoPermissions,
+                RaceService.TelemetryPublicState.BtNoTargetMacAddress,
+                RaceService.TelemetryPublicState.NotInitialized,
+                RaceService.TelemetryPublicState.BtReconnecting -> LocalCustomColorsPalette.current.warning
+                RaceService.TelemetryPublicState.Simulation -> LocalCustomColorsPalette.current.warning
+            }
+            Text(text, color = color)
         }
-    } else {
-        RaceViewElement(Modifier.clickable(onClick = {
-            isEditingMacAddress = true
-        })) {
-            val text = when (btPublicState) {
-                RaceService.BtPublicState.Connecting -> "connecting..."
-                RaceService.BtPublicState.NoPermissions -> "lacking permissions"
-                RaceService.BtPublicState.NoTargetMacAddress -> "click here to set the MAC"
-                RaceService.BtPublicState.NotInitialized -> "not initialized"
-                RaceService.BtPublicState.Reconnecting -> "reconnecting..."
-                RaceService.BtPublicState.Working -> "OK"
-            }
-            val color = when (btPublicState) {
-                RaceService.BtPublicState.Working -> Color.Unspecified
-                RaceService.BtPublicState.Connecting,
-                RaceService.BtPublicState.NoPermissions,
-                RaceService.BtPublicState.NoTargetMacAddress,
-                RaceService.BtPublicState.NotInitialized,
-                RaceService.BtPublicState.Reconnecting -> LocalCustomColorsPalette.current.warning
-            }
-            Text("OBD: $text", color = color)
-        }
-    }
 }
 
 
@@ -966,10 +950,22 @@ private fun StopRace(onStopRace: () -> Unit) {
 }
 
 @Composable
-private fun DebugSpeedSlider(onSetDebugSpeed: (Int) -> Unit) {
+private fun DebugSpeedSlider(
+    onSetDebugSpeed: (Int) -> Unit,
+    speed: SpeedKmh?
+) {
     var speedSliderValue by remember { mutableIntStateOf(0) }
+    var isDragging by remember { mutableStateOf(false) }
+    
     val maxDebugSpeed = 100
     RaceViewElement {
+        
+    // Keep slider in sync with external state when not dragging
+    LaunchedEffect(speed) {
+        if (!isDragging) {
+            speedSliderValue = speed?.valueKmh?.roundToInt() ?: 0
+        }
+    }
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -980,10 +976,14 @@ private fun DebugSpeedSlider(onSetDebugSpeed: (Int) -> Unit) {
             Slider(
                 value = speedSliderValue.toFloat() / maxDebugSpeed,
                 onValueChange = {
+                    isDragging = true
                     speedSliderValue = (it * maxDebugSpeed).roundToInt()
                     onSetDebugSpeed(speedSliderValue)
                 },
-                Modifier.width(200.dp)
+                onValueChangeFinished = {
+                    isDragging = false
+                },
+                modifier = Modifier.width(200.dp)
             )
             Text("$speedSliderValue/h", Modifier.wrapContentWidth())
         }

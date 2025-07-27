@@ -30,6 +30,8 @@ import com.h0tk3y.rally.android.scenes.SectionEventLogScene
 import com.h0tk3y.rally.android.scenes.SectionEventLogViewModel
 import com.h0tk3y.rally.android.scenes.SectionScene
 import com.h0tk3y.rally.android.scenes.SectionViewModel
+import com.h0tk3y.rally.android.scenes.SettingsScene
+import com.h0tk3y.rally.android.scenes.SettingsViewModel
 import com.h0tk3y.rally.db.Section
 import kotlinx.serialization.Serializable
 
@@ -42,6 +44,9 @@ data class SectionScene(val sectionId: Long, val withRace: Boolean)
 
 @Serializable
 data class SectionEventLogScene(val sectionId: Long)
+
+@Serializable
+object SettingsScene
 
 @Composable
 fun App(
@@ -66,7 +71,11 @@ fun App(
                     composable<HomeScene> {
                         val sections: LoadState<List<Section>> by database.selectAllSections()
                             .collectAsState(LoadState.LOADING)
-                        AllSectionsScene(database, sections) { navController.navigate(SectionScene(it.id, false)) }
+                        AllSectionsScene(
+                            database, sections, 
+                            onSelectSection = { navController.navigate(SectionScene(it.id, false)) },
+                            onGoToSettings = { navController.navigate(SettingsScene) }
+                        )
                     }
 
                     composable<SectionScene> {
@@ -85,22 +94,22 @@ fun App(
                             ContextCompat.startForegroundService(context, intent)
                         }
                         model.setRaceServiceConnector(connector)
-                        model.setRaceServiceDisconnector { 
+                        model.setRaceServiceDisconnector {
                             connection.disconnectIfConnected()
                         }
 
                         if (withRace) {
-                            LaunchedEffect(sectionId) { 
-                                model.enterRaceMode() 
+                            LaunchedEffect(sectionId) {
+                                model.enterRaceMode()
                             }
                         }
-                        
+
                         DisposableEffect(context) {
                             onDispose {
                                 connection.disconnectIfConnected()
                             }
                         }
-                        
+
                         SectionScene(
                             sectionId,
                             database,
@@ -117,13 +126,19 @@ fun App(
                             onNavigateToEventLog = {
                                 navController.navigate(SectionEventLogScene(sectionId))
                             },
-                            model
+                            onGoToSettings = {
+                                navController.navigate(SettingsScene)
+                            },
+                            model = model
                         )
                     }
                     composable<SectionEventLogScene> {
                         val sectionId = it.toRoute<SectionEventLogScene>().sectionId
                         val model = viewModel { SectionEventLogViewModel(sectionId, database) }
                         SectionEventLogScene(model, onBack = navController::popBackStack)
+                    }
+                    composable<SettingsScene> {
+                        SettingsScene(onBack = navController::popBackStack, model = viewModel { SettingsViewModel(userPreferences) })
                     }
                 }
             }
