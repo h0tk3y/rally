@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.rounded.Done
 import androidx.compose.material.icons.rounded.Edit
@@ -102,6 +103,7 @@ fun SectionScene(
     onBack: () -> Unit,
     onNavigateToEventLog: () -> Unit,
     model: SectionViewModel,
+    onGoToSettings: () -> Unit,
 ) {
     val section by model.section.collectAsState(LoadState.LOADING)
     val positions by model.inputPositions.collectAsState(emptyList())
@@ -128,8 +130,7 @@ fun SectionScene(
     val calibration by model.calibration.collectAsState(null)
     val raceState by model.raceState.collectAsState(SectionViewModel.RaceUiState.NoRaceServiceConnection)
     val raceUiVisible by model.raceUiVisible.collectAsState(false)
-    val btState by model.btState.collectAsState(RaceService.BtPublicState.NotInitialized)
-    val btMac by model.btMac.collectAsState(null)
+    val btState by model.btState.collectAsState(RaceService.TelemetryPublicState.NotInitialized)
     val speedLimitPercent by model.speedLimitPercent.collectAsState(null)
 
     var showDuplicateDialog by rememberSaveable { mutableStateOf(false) }
@@ -359,6 +360,15 @@ fun SectionScene(
                             Icon(Icons.Default.LocationOn, "Calibration")
                             Text("ODO calibration: $calibration")
                         }
+                        Divider()
+                        DropdownMenuItem(onClick = {
+                            onGoToSettings()
+                            showMenu = false
+                        }) {
+                            Icon(Icons.Default.Settings, "Settings")
+                            Text("Settings")
+                        }
+
                     }
                 }
             )
@@ -428,8 +438,6 @@ fun SectionScene(
                         (results as? RallyTimesResultSuccess)?.raceTimeDistanceLocalizer,
                         (results as? RallyTimesResultSuccess)?.sectionTimeDistanceLocalizer,
                         btState,
-                        btMac,
-                        model::setBtMac,
                         speedLimitPercent,
                         model::setSpeedLimitPercent,
                         preprocessed.firstOrNull { it.lineNumber == selectedLineIndex } as? PositionLine,
@@ -445,7 +453,8 @@ fun SectionScene(
                             model.setDebugSpeed(SpeedKmh(it.toDouble()))
                         },
                         navigateToSection = { onNavigateToNewSection(it, true) },
-                        goToEventLog = onNavigateToEventLog, 
+                        goToEventLog = onNavigateToEventLog,
+                        goToSettings = onGoToSettings,
                         keyboardModifier,
                         addPositionMaybeWithSpeed = { speed ->
                             val currentRaceState = raceState
