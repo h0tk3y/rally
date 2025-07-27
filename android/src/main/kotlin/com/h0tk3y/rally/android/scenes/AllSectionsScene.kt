@@ -23,6 +23,7 @@ import androidx.compose.material.TopAppBar
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -45,7 +46,8 @@ import com.h0tk3y.rally.db.Section
 fun AllSectionsScene(
     database: Database,
     sections: LoadState<List<Section>>,
-    onSelectSection: (Section) -> Unit
+    onSelectSection: (Section) -> Unit,
+    onGoToSettings: () -> Unit
 ) {
     var showNewListDialog by rememberSaveable { mutableStateOf(false) }
     var showImportDialog by rememberSaveable { mutableStateOf(false) }
@@ -101,6 +103,14 @@ fun AllSectionsScene(
                             Icon(Icons.Default.Create, "Import section")
                             Spacer(Modifier.width(8.dp))
                             Text("Import section")
+                        }
+                        DropdownMenuItem(onClick = {
+                            onGoToSettings()
+                            showMenu = false
+                        }) {
+                            Icon(Icons.Default.Settings, "Settings")
+                            Spacer(Modifier.width(8.dp))
+                            Text("Settings")
                         }
                     }
                 }

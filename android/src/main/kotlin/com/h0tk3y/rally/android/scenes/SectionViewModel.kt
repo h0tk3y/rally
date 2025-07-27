@@ -22,7 +22,7 @@ import com.h0tk3y.rally.PositionLineModifier.SetAvg
 import com.h0tk3y.rally.PositionLineModifier.SetAvgSpeed
 import com.h0tk3y.rally.PositionLineModifier.ThenAvgSpeed
 import com.h0tk3y.rally.android.racecervice.RaceService
-import com.h0tk3y.rally.android.racecervice.RaceService.BtPublicState
+import com.h0tk3y.rally.android.racecervice.RaceService.TelemetryPublicState
 import com.h0tk3y.rally.RallyTimesIntervalsCalculator
 import com.h0tk3y.rally.RallyTimesResult
 import com.h0tk3y.rally.RallyTimesResultFailure
@@ -90,7 +90,7 @@ class SectionViewModel(
     // Race mode:
     private val _raceUiVisible: MutableStateFlow<Boolean> = MutableStateFlow(false)
     private val _raceState: MutableStateFlow<RaceUiState> = MutableStateFlow(RaceUiState.NoRaceServiceConnection)
-    private val _btState: MutableStateFlow<BtPublicState> = MutableStateFlow(BtPublicState.NotInitialized)
+    private val _btState: MutableStateFlow<TelemetryPublicState> = MutableStateFlow(TelemetryPublicState.NotInitialized)
 
     val calibration = prefs.userPreferencesFlow.map { it.calibration }
 
@@ -153,7 +153,6 @@ class SectionViewModel(
     val raceUiVisible = _raceUiVisible.asStateFlow()
     val btState = _btState.asStateFlow()
     val timeAllowance = prefs.userPreferencesFlow.map { it.allowance }
-    val btMac = prefs.userPreferencesFlow.map { it.btMac }
     val speedLimitPercent = prefs.userPreferencesFlow.map { it.speedLimitPercent }
 
     sealed interface RaceUiState {
@@ -236,11 +235,6 @@ class SectionViewModel(
             launch {
                 calibration.collectLatest {
                     raceService.calibration = it
-                }
-            }
-            launch {
-                btMac.collectLatest {
-                    raceService.setBtMac(it)
                 }
             }
         }
@@ -597,13 +591,7 @@ class SectionViewModel(
             prefs.saveTimeAllowance(timeAllowance)
         }
     }
-
-    fun setBtMac(mac: String?) {
-        viewModelScope.launch {
-            prefs.saveBtMac(mac)
-        }
-    }
-
+    
     fun setSpeedLimitPercent(value: String?) {
         viewModelScope.launch {
             prefs.saveSpeedLimitPercent(value)
