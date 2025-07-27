@@ -15,7 +15,6 @@ import android.bluetooth.BluetoothSocket
 import android.content.Intent
 import android.content.pm.PackageManager.PERMISSION_GRANTED
 import android.os.Binder
-import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.annotation.RequiresPermission
@@ -36,6 +35,10 @@ import com.h0tk3y.rally.DistanceKm
 import com.h0tk3y.rally.SpeedKmh
 import com.h0tk3y.rally.TimeHr
 import com.h0tk3y.rally.android.MainActivity
+import com.h0tk3y.rally.android.PreferenceRepository
+import com.h0tk3y.rally.android.TelemetrySource
+import com.h0tk3y.rally.android.TelemetrySource.BT_OBD
+import com.h0tk3y.rally.android.dataStore
 import com.h0tk3y.rally.model.RaceModel
 import com.h0tk3y.rally.model.RaceState
 import com.h0tk3y.rally.model.duration
@@ -46,12 +49,16 @@ import com.h0tk3y.rally.strRound3
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.zip
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -71,22 +78,15 @@ class RaceService : Service() {
 
     val raceState: StateFlow<RaceState> get() = _raceState
 
-    private sealed interface BtMacState {
-        data object NotInitialized : BtMacState
-        data object NotSet : BtMacState
-        data class Set(val mac: String) : BtMacState
-    }
+    private val prefs = PreferenceRepository(dataStore).userPreferencesFlow
+    private val btMac = prefs.map { it.btMac }
+    private val telemetrySource = prefs.map { it.telemetrySource }
 
-    private val btMac = MutableStateFlow<BtMacState>(BtMacState.NotInitialized)
     private var debugSpeed: SpeedKmh? = null
     private var debugSpeedJob: Job? = null
     private var deltaDistanceGoingUp = MutableStateFlow(false)
 
     var calibration = 1.0
-
-    fun setBtMac(mac: String?) {
-        btMac.value = mac?.let(BtMacState::Set) ?: BtMacState.NotSet
-    }
 
     fun setDistanceGoingUp(isUp: Boolean) {
         deltaDistanceGoingUp.value = isUp
@@ -308,9 +308,9 @@ class RaceService : Service() {
         }
 
         val intent = Intent(this, MainActivity::class.java)
-        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        intent.setAction(Intent.ACTION_MAIN);
-        intent.addCategory(Intent.CATEGORY_LAUNCHER);
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        intent.setAction(Intent.ACTION_MAIN)
+        intent.addCategory(Intent.CATEGORY_LAUNCHER)
 
         val pendingIntent = PendingIntent.getActivity(
             this,
@@ -337,14 +337,12 @@ class RaceService : Service() {
     }
 
     private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val serviceChannel = NotificationChannel(
-                TIMER_SERVICE_NOTIFICATION_CHANNEL_ID,
-                "Race Service",
-                NotificationManager.IMPORTANCE_LOW
-            )
-            notificationManager.createNotificationChannel(serviceChannel)
-        }
+        val serviceChannel = NotificationChannel(
+            TIMER_SERVICE_NOTIFICATION_CHANNEL_ID,
+            "Race Service",
+            NotificationManager.IMPORTANCE_LOW
+        )
+        notificationManager.createNotificationChannel(serviceChannel)
     }
 
     override fun stopService(name: Intent?): Boolean {
@@ -363,16 +361,18 @@ class RaceService : Service() {
     }
 
     private var raceJob: Job? = null
-    private var btState = MutableStateFlow<BtConnectionState>(BtConnectionState.NotInitialized)
+    private var btState = MutableStateFlow<TelemetryState>(TelemetryState.NotInitialized)
     val btPublicState = btState.map { it.toPublicState() }
 
-    sealed interface BtPublicState {
-        data object NotInitialized : BtPublicState
-        data object NoTargetMacAddress : BtPublicState
-        data object NoPermissions : BtPublicState
-        data object Connecting : BtPublicState
-        data object Working : BtPublicState
-        data object Reconnecting : BtPublicState
+    sealed interface TelemetryPublicState {
+        data object Simulation : TelemetryPublicState
+
+        data object NotInitialized : TelemetryPublicState
+        data object BtNoTargetMacAddress : TelemetryPublicState
+        data object BtNoPermissions : TelemetryPublicState
+        data object BtConnecting : TelemetryPublicState
+        data object BtWorking : TelemetryPublicState
+        data object BtReconnecting : TelemetryPublicState
     }
 
     private sealed interface BtConnectionState {
@@ -386,42 +386,73 @@ class RaceService : Service() {
 
         sealed interface PrimaryState : BtConnectionState
 
-        data object NotInitialized : BtConnectionState, PrimaryState
-        data object NoTargetMacAddress : BtConnectionState, PrimaryState
-        data object NoPermissions : BtConnectionState, PrimaryState
+        data object NoTargetMacAddress : PrimaryState
+        data object NoPermissions : PrimaryState
         data class Connecting(override val device: BluetoothDevice) : HasDevice, PrimaryState
         data class LostConnection(override val device: BluetoothDevice) : HasDevice, PrimaryState
         data class Disconnecting(override val device: BluetoothDevice, override val socket: BluetoothSocket) : HasDevice, HasSocket
-        data class Connected(val device: BluetoothDevice, override val socket: BluetoothSocket) : BtConnectionState, HasSocket, PrimaryState
+        data class Connected(val device: BluetoothDevice, override val socket: BluetoothSocket) : PrimaryState, HasSocket
+    }
 
-        fun toPublicState(): BtPublicState {
+    private sealed interface TelemetryState {
+        data object NotInitialized : TelemetryState
+        data object UsesSimulator : TelemetryState
+        data class BtTelemetry(val connectionState: BtConnectionState) : TelemetryState
+
+        fun toPublicState(): TelemetryPublicState {
             return when (this) {
-                NotInitialized -> BtPublicState.NotInitialized
-                NoTargetMacAddress -> BtPublicState.NoTargetMacAddress
-                NoPermissions -> BtPublicState.NoPermissions
-                is Connected -> BtPublicState.Working
-                is Connecting -> BtPublicState.Connecting
+                NotInitialized -> TelemetryPublicState.NotInitialized
+                UsesSimulator -> TelemetryPublicState.Simulation
+                is BtTelemetry -> when (this.connectionState) {
+                    BtConnectionState.NoTargetMacAddress -> TelemetryPublicState.BtNoTargetMacAddress
+                    BtConnectionState.NoPermissions -> TelemetryPublicState.BtNoPermissions
+                    is BtConnectionState.Connected -> TelemetryPublicState.BtWorking
+                    is BtConnectionState.Connecting -> TelemetryPublicState.BtConnecting
 
-                is Disconnecting,
-                is LostConnection -> BtPublicState.Reconnecting
+                    is BtConnectionState.Disconnecting,
+                    is BtConnectionState.LostConnection -> TelemetryPublicState.BtReconnecting
+                }
             }
         }
     }
+    
+    private val serviceScope = CoroutineScope(SupervisorJob())
 
-    private fun raceJob(): Job = CoroutineScope(Dispatchers.Default).launch {
+    private fun raceJob(): Job = serviceScope.launch {
         launch {
             while (true) {
                 postRaceStateNotification()
                 delay(1000L)
             }
         }
-        btMac.collectLatest { newBtMac ->
-            if (newBtMac is BtMacState.Set) {
-                startBtMainLoopJob(newBtMac.mac)
-            } else {
-                btState.value = BtConnectionState.NoTargetMacAddress
+        
+        /** Use an explicit job handle instead of [kotlinx.coroutines.flow.Flow.collectLatest] 
+         * so that cancellation does not block us from updating the state and running another job. */
+        var btJob: Job? = null
+        
+        btMac.zip(telemetrySource, ::Pair).onEach { (newBtMac, telemetrySource) ->
+            btJob?.cancel()
+            
+            when (telemetrySource) {
+                BT_OBD -> {
+                    debugSpeed = SpeedKmh(0.0)
+                    debugSpeedJob?.cancel()
+                    
+                    if (newBtMac != null) {
+                        btJob = serviceScope.launch(Dispatchers.IO) { 
+                            startBtMainLoopJob(newBtMac) 
+                        }
+                    } else {
+                        btState.value = TelemetryState.BtTelemetry(BtConnectionState.NoTargetMacAddress)
+                    }
+                }
+
+                TelemetrySource.SIMULATION -> {
+                    btState.value = TelemetryState.UsesSimulator
+                    setDebugSpeed(SpeedKmh(0.0))
+                }
             }
-        }
+        }.launchIn(serviceScope)
     }
 
     private suspend fun startBtMainLoopJob(btMac: String) {
@@ -429,7 +460,7 @@ class RaceService : Service() {
         if (BluetoothAdapter.checkBluetoothAddress(btMac)) {
             launchBtMainLoopAndFreeResources(btAdapter.getRemoteDevice(btMac))
         } else {
-            btState.value = BtConnectionState.NoTargetMacAddress
+            btState.value = TelemetryState.BtTelemetry(BtConnectionState.NoTargetMacAddress)
         }
     }
 
@@ -440,7 +471,7 @@ class RaceService : Service() {
             }
         }.also {
             it.invokeOnCompletion {
-                btState.value = BtConnectionState.NotInitialized
+                btState.value = TelemetryState.NotInitialized
             }
         }
     }
@@ -452,13 +483,13 @@ class RaceService : Service() {
     private suspend fun CoroutineContext.btMainLoop(device: BluetoothDevice) {
         while (isActive) {
             if (ActivityCompat.checkSelfPermission(this@RaceService, BLUETOOTH_CONNECT) != PERMISSION_GRANTED) {
-                btState.value = BtConnectionState.NoPermissions
+                btState.value = TelemetryState.BtTelemetry(BtConnectionState.NoPermissions)
                 Log.d("raceService", "missing Bluetooth permissions")
                 delay(5000L)
                 continue
             }
 
-            btState.value = BtConnectionState.Connecting(device)
+            btState.value = TelemetryState.BtTelemetry(BtConnectionState.Connecting(device))
             try {
                 Log.i("raceService", "connecting to $device")
                 btSocketForDevice(device)
@@ -469,7 +500,7 @@ class RaceService : Service() {
                 ensureActive()
                 try {
                     initObdDevice(socket)
-                    btState.value = BtConnectionState.Connected(device, socket)
+                    btState.value = TelemetryState.BtTelemetry(BtConnectionState.Connected(device, socket))
                     btCommunicationLoop(socket)
                 } catch (e: IOException) {
                     Log.i(tag, "failed to initialize $device", e)
@@ -517,7 +548,7 @@ class RaceService : Service() {
                 val speedKmh = SpeedKmh(speed.toDouble() / calibration)
                 updateRaceStateFromObdData(speedKmh, time - lastTime, speed)
                 lastTime = time
-            } catch (e: NoDataException) {
+            } catch (_: NoDataException) {
                 Log.i(tag, "no data from device, continuing")
             }
         }
