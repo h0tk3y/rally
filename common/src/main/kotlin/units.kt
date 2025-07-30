@@ -111,6 +111,8 @@ data class TimeDayHrMinSec(val dayOverflow: Int = 0, val hr: Int, val min: Int, 
         require(sec in 0..59)
     }
 
+    fun toHr(): TimeHr = TimeHr(0.0 + dayOverflow * 24.0 + hr + min / 60.0 + sec / 3600.0)
+
     val timeSinceMidnight: TimeHr get() = TimeHr(dayOverflow * 24 + hr + min / 60.0 + sec / 3600.0)
 
     val secondsOfDay: Int get() = sec + min * 60 + hr * 3600 + dayOverflow * (24 * 3600)
@@ -189,12 +191,12 @@ data class TimeDayHrMinSec(val dayOverflow: Int = 0, val hr: Int, val min: Int, 
                 throw IllegalArgumentException("expected time of day, got $string")
             }
         }
-        
+
         fun of(time: LocalTime): TimeDayHrMinSec = TimeDayHrMinSec(0, time.hour, time.minute, time.second)
     }
 }
 
 fun Double.minusWithInf(other: Double) = if (this.isInfinite()) this else this - other
 
-fun DistanceKm.roundTo3Digits(): DistanceKm = 
+fun DistanceKm.roundTo3Digits(): DistanceKm =
     valueKm.strRound3().toDouble().let(::DistanceKm)
