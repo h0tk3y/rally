@@ -1,7 +1,5 @@
 package com.h0tk3y.rally.android.scenes
 
-import android.R.attr.label
-import android.R.attr.text
 import android.bluetooth.BluetoothDevice
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -40,30 +38,27 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.h0tk3y.rally.android.PreferenceRepository
 import com.h0tk3y.rally.android.TelemetrySource
-import com.h0tk3y.rally.android.scenes.validateCalibrationFactor
+import com.h0tk3y.rally.strRound3
+import com.h0tk3y.rally.strRound5
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-import org.intellij.lang.annotations.JdkConstants
 
 @Composable
 fun SettingsScene(
     onBack: () -> Unit,
-    model: SettingsViewModel
+    model: SettingsViewModel,
+    calibrateByCurrentDistance: Double?
 ) {
     Scaffold(
         modifier = Modifier.imePadding(),
@@ -88,7 +83,7 @@ fun SettingsScene(
             val lazyListState = rememberLazyListState()
 
             LazyColumn(Modifier.padding(padding), lazyListState, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                item { TelemetrySource(model) }
+                item { TelemetrySource(model, calibrateByCurrentDistance) }
                 item { Allowance(model) }
             }
         }
@@ -97,7 +92,8 @@ fun SettingsScene(
 
 @Composable
 private fun LazyItemScope.TelemetrySource(
-    model: SettingsViewModel
+    model: SettingsViewModel,
+    calibrateByCurrentDistance: Double?
 ) {
     val telemetrySource by model.currentTelemetrySource.collectAsState(TelemetrySource.BT_OBD)
 
@@ -152,67 +148,103 @@ private fun LazyItemScope.TelemetrySource(
         }
 
         Spacer(Modifier.height(24.dp))
+        Calibration(model, calibrateByCurrentDistance)
+    }
+}
 
-        run {
-            val calibration by model.currentCalibration.collectAsState(null)
-            
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Spacer(Modifier.width(48.dp))
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Calibration")
+@Composable
+private fun Calibration(model: SettingsViewModel, calibrateByCurrentDistance: Double?) {
+    val calibration by model.currentCalibration.collectAsState(null)
 
-                    Text(style = MaterialTheme.typography.caption, text = "Distance measured by the odometer divided by the roadmap distance:")
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Spacer(Modifier.width(48.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Calibration")
 
-                    var valueString by rememberSaveable(calibration) { mutableStateOf(calibration.toString()) }
-                    var isErrorInvalidValue by rememberSaveable(valueString) { mutableStateOf(false) }
+            Text(style = MaterialTheme.typography.caption, text = "Distance measured by the odometer divided by the roadmap distance:")
 
-                    fun trySave() {
-                        val factor = validateCalibrationFactor(valueString)
-                        if (factor == null) {
-                            isErrorInvalidValue = true
-                        } else {
-                            model.setOdoCalibration(factor)
-                        }
-                    }
-
-                    Row(
-                        Modifier.padding(end = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        OutlinedTextField(
-                            modifier = Modifier.weight(1f),
-                            value = valueString,
-                            singleLine = true,
-                            onValueChange = {
-                                isErrorInvalidValue = validateCalibrationFactor(it) == null
-                                valueString = it
-                            },
-                            isError = isErrorInvalidValue,
-                            keyboardOptions = KeyboardOptions.Default.copy(keyboardType = KeyboardType.Number),
-                            label = { Text("Calibration factor") }
-                        )
-                        Button(
-                            onClick = { trySave() },
-                            enabled = validateCalibrationFactor(valueString) != null && valueString.isNotBlank() && !isErrorInvalidValue && valueString.toDoubleOrNull() != calibration
-                        ) {
-                            Text("Save")
-                        }
-                    }
-
-                    if (isErrorInvalidValue) {
-                        Spacer(Modifier.height(8.dp))
-                        Box(Modifier.height(48.dp)) {
-                            Text(text = "Invalid number, should be between 0.1 and 10.0", color = MaterialTheme.colors.error)
-                        }
+            var odoCalibrationValue by rememberSaveable(calibration) { mutableStateOf(calibration.toString()) }
+            var isOdoInvalidValue by rememberSaveable { mutableStateOf(false) }
+            fun updateOdoCalibrationField(newText: String) {
+                isOdoInvalidValue = validateCalibrationFactor(newText) == null
+                odoCalibrationValue = newText
+            }
+            run {
+                fun trySave() {
+                    val factor = validateCalibrationFactor(odoCalibrationValue)
+                    if (factor == null) {
+                        isOdoInvalidValue = true
+                    } else {
+                        model.setOdoCalibration(factor)
                     }
                 }
 
-                val context = LocalContext.current
-                IconButton(onClick = { model.pickAndSetBluetoothDevice(context) }) {
-                    Icon(Icons.AutoMirrored.Rounded.BluetoothSearching, contentDescription = null)
+                Row(
+                    Modifier.padding(end = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        modifier = Modifier.weight(1f),
+                        value = odoCalibrationValue,
+                        singleLine = true,
+                        onValueChange = ::updateOdoCalibrationField,
+                        isError = isOdoInvalidValue,
+                        keyboardOptions = KeyboardOptions.Default.copy(keyboardType = KeyboardType.Number),
+                        label = { Text("Calibration factor") }
+                    )
+                    Button(
+                        onClick = { trySave() },
+                        enabled = validateCalibrationFactor(odoCalibrationValue) != null && odoCalibrationValue.isNotBlank() && !isOdoInvalidValue && odoCalibrationValue.toDoubleOrNull() != calibration
+                    ) {
+                        Text("Save")
+                    }
+                }
+
+                if (isOdoInvalidValue) {
+                    Spacer(Modifier.height(8.dp))
+                    Box(Modifier.height(48.dp)) {
+                        Text(text = "Invalid number, should be between 0.1 and 10.0", color = MaterialTheme.colors.error)
+                    }
                 }
             }
+
+            if (calibrateByCurrentDistance == null || calibrateByCurrentDistance.isFinite().not()) {
+                Text("You can calibrate from the real distance by going over the ODO check route in Race Mode and opening Settings after that.")
+            } else {
+                Text(text = "Calibrate by ODO check route:")
+                Text(style = MaterialTheme.typography.caption, text = "Odometer distance: ${calibrateByCurrentDistance.strRound3()}")
+
+                var exactValueString by rememberSaveable(calibration) { mutableStateOf("") }
+                var isErrorInvalidExactDistance by rememberSaveable { mutableStateOf(false) }
+
+                OutlinedTextField(
+                    value = exactValueString,
+                    singleLine = true,
+                    onValueChange = {
+                        isErrorInvalidExactDistance = validateDistance(it) == null
+                        exactValueString = it
+                        if (!isErrorInvalidExactDistance) {
+                            val odoFactor = calibrateByCurrentDistance.strRound3().toDouble() / exactValueString.toDouble()
+                            if (odoFactor.isFinite()) {
+                                updateOdoCalibrationField(odoFactor.strRound5())
+                            }
+                        }
+                    },
+                    isError = isErrorInvalidExactDistance,
+                    keyboardOptions = KeyboardOptions.Default.copy(keyboardType = KeyboardType.Number),
+                    label = { Text("Exact ODO check distance") }
+                )
+
+                if (exactValueString.isNotEmpty() && isErrorInvalidExactDistance) {
+                    Text(text = "Invalid number, should be a decimal like 4.25", color = MaterialTheme.colors.error)
+                }
+            }
+        }
+
+        val context = LocalContext.current
+        IconButton(onClick = { model.pickAndSetBluetoothDevice(context) }) {
+            Icon(Icons.AutoMirrored.Rounded.BluetoothSearching, contentDescription = null)
         }
     }
 }
@@ -221,6 +253,8 @@ private fun validateCalibrationFactor(string: String): Double? {
     val d = string.toDoubleOrNull() ?: return null
     return if (d in 0.01..10.0) d else null
 }
+
+private fun validateDistance(string: String): Double? = string.toDoubleOrNull()?.takeIf { it.isFinite() }
 
 private sealed interface CalibrationDialogResult {
     data object Ok : CalibrationDialogResult

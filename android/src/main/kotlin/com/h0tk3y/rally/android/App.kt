@@ -46,7 +46,7 @@ data class SectionScene(val sectionId: Long, val withRace: Boolean)
 data class SectionEventLogScene(val sectionId: Long)
 
 @Serializable
-object SettingsScene
+data class SettingsScene(val currentDistance: Double?)
 
 @Composable
 fun App(
@@ -74,7 +74,7 @@ fun App(
                         AllSectionsScene(
                             database, sections, 
                             onSelectSection = { navController.navigate(SectionScene(it.id, false)) },
-                            onGoToSettings = { navController.navigate(SettingsScene) }
+                            onGoToSettings = { navController.navigate(SettingsScene(null)) }
                         )
                     }
 
@@ -127,7 +127,7 @@ fun App(
                                 navController.navigate(SectionEventLogScene(sectionId))
                             },
                             onGoToSettings = {
-                                navController.navigate(SettingsScene)
+                                navController.navigate(SettingsScene(it))
                             },
                             model = model
                         )
@@ -138,7 +138,12 @@ fun App(
                         SectionEventLogScene(model, onBack = navController::popBackStack)
                     }
                     composable<SettingsScene> {
-                        SettingsScene(onBack = navController::popBackStack, model = viewModel { SettingsViewModel(userPreferences) })
+                        val distance = it.toRoute<SettingsScene>().currentDistance
+                        SettingsScene(
+                            onBack = navController::popBackStack,
+                            model = viewModel { SettingsViewModel(userPreferences) },
+                            calibrateByCurrentDistance = distance
+                        )
                     }
                 }
             }
