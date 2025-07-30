@@ -90,6 +90,7 @@ class SectionViewModel(
     // Race mode:
     private val _raceUiVisible: MutableStateFlow<Boolean> = MutableStateFlow(false)
     private val _raceState: MutableStateFlow<RaceUiState> = MutableStateFlow(RaceUiState.NoRaceServiceConnection)
+    private val _rememberSpeed: MutableStateFlow<SpeedKmh?> = MutableStateFlow(null)
     private val _btState: MutableStateFlow<TelemetryPublicState> = MutableStateFlow(TelemetryPublicState.NotInitialized)
 
     val calibration = prefs.userPreferencesFlow.map { it.calibration }
@@ -150,6 +151,7 @@ class SectionViewModel(
     val odoValues = _odoValues.asStateFlow()
     val subsMatching = _subsMatching.asStateFlow()
     val raceState = _raceState.distinctUntilChanged { _, _ -> false }
+    val rememberSpeed = _rememberSpeed.asStateFlow()
     val raceUiVisible = _raceUiVisible.asStateFlow()
     val btState = _btState.asStateFlow()
     val timeAllowance = prefs.userPreferencesFlow.map { it.allowance }
@@ -227,6 +229,11 @@ class SectionViewModel(
                     _raceState.value = raceStateToUiState(newState)
                 }
             }
+            launch { 
+                raceService.rememberSpeedLimit.collectLatest { 
+                    _rememberSpeed.value = it
+                }
+            }
             launch {
                 raceService.btPublicState.collectLatest {
                     _btState.value = it
@@ -273,6 +280,7 @@ class SectionViewModel(
             )
 
             val speedAtDistance: SpeedKmh? =
+                rememberSpeed.value ?:
                 currentItem?.takeIf { it.atKm == startDistance }?.modifier<SetAvg>()?.setavg
                     ?: findPureSpeedForDistance(startDistance)
 
@@ -483,6 +491,10 @@ class SectionViewModel(
 
     fun distanceCorrection(distanceKm: DistanceKm) {
         service?.distanceCorrection(distanceKm)
+    }
+    
+    fun setRememberSpeed(speedKmh: SpeedKmh?) {
+        service?.setRememberSpeedLimit(speedKmh)
     }
 
     fun leaveRaceMode() {
