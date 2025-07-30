@@ -103,6 +103,12 @@ fun Double.strRound3(): String = when (this) {
     else -> ((this * 1000).roundToInt() / 1000.0).toString()
 }
 
+fun Double.strRound5(): String = when (this) {
+    Double.POSITIVE_INFINITY -> "∞"
+    Double.NEGATIVE_INFINITY -> "-∞"
+    else -> ((this * 100000).roundToInt() / 100000.0).toString()
+}
+
 fun Double.strRound2Exact(): String = when (this) {
     Double.POSITIVE_INFINITY -> "∞"
     Double.NEGATIVE_INFINITY -> "-∞"

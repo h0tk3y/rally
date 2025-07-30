@@ -103,7 +103,7 @@ fun SectionScene(
     onBack: () -> Unit,
     onNavigateToEventLog: () -> Unit,
     model: SectionViewModel,
-    onGoToSettings: () -> Unit,
+    onGoToSettings: (calibrateFromCurrentDistance: Double?) -> Unit,
 ) {
     val section by model.section.collectAsState(LoadState.LOADING)
     val positions by model.inputPositions.collectAsState(emptyList())
@@ -319,7 +319,7 @@ fun SectionScene(
                         }
                         Divider()
                         DropdownMenuItem(onClick = {
-                            onGoToSettings()
+                            onGoToSettings((raceState as? SectionViewModel.RaceUiState.HasRaceModel)?.raceModel?.currentDistance?.valueKm)
                             showMenu = false
                         }) {
                             Icon(Icons.Default.Settings, "Settings")
@@ -411,7 +411,7 @@ fun SectionScene(
                         },
                         navigateToSection = { onNavigateToNewSection(it, true) },
                         goToEventLog = onNavigateToEventLog,
-                        goToSettings = onGoToSettings,
+                        goToSettings = { onGoToSettings((model.raceState as? SectionViewModel.RaceUiState.HasRaceModel)?.raceModel?.currentDistance?.valueKm) },
                         keyboardModifier,
                         addPositionMaybeWithSpeed = { speed ->
                             val currentRaceState = raceState
