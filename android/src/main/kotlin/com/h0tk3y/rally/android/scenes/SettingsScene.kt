@@ -1,5 +1,7 @@
 package com.h0tk3y.rally.android.scenes
 
+import android.R.attr.label
+import android.R.attr.text
 import android.bluetooth.BluetoothDevice
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -7,16 +9,21 @@ import android.content.Intent
 import android.content.IntentFilter
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.Button
 import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
@@ -32,17 +39,26 @@ import androidx.compose.material.icons.automirrored.rounded.BluetoothSearching
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.h0tk3y.rally.android.PreferenceRepository
 import com.h0tk3y.rally.android.TelemetrySource
+import com.h0tk3y.rally.android.scenes.validateCalibrationFactor
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import org.intellij.lang.annotations.JdkConstants
 
 @Composable
 fun SettingsScene(
@@ -68,66 +84,182 @@ fun SettingsScene(
             )
         },
         content = { padding ->
-            val telemetrySource by model.currentTelemetrySource.collectAsState(TelemetrySource.BT_OBD)
 
             val lazyListState = rememberLazyListState()
-            val rbColors = RadioButtonDefaults.colors(MaterialTheme.colors.primary)
 
             LazyColumn(Modifier.padding(padding), lazyListState, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                item {
-                    Text("Telemetry source", style = MaterialTheme.typography.h6, modifier = Modifier.padding(16.dp))
-
-                    SettingsRow(
-                        Modifier.clickable { model.setTelemetrySource(TelemetrySource.SIMULATION) }
-                    ) {
-                        RadioButton(colors = rbColors, selected = telemetrySource == TelemetrySource.SIMULATION, onClick = null)
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text("Simulation")
-                            Text(style = MaterialTheme.typography.caption, text = "Set the speed by using the slider in the race view")
-                        }
-                    }
-
-                    val isObd = telemetrySource == TelemetrySource.BT_OBD
-
-                    SettingsRow(
-                        Modifier
-                            .fillMaxWidth()
-                            .clickable { model.setTelemetrySource(TelemetrySource.BT_OBD) }
-                    ) {
-                        RadioButton(colors = rbColors, selected = isObd, onClick = null)
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text("OBD over Bluetooth")
-                            Text(style = MaterialTheme.typography.caption, text = "Connect to an OBD (ELM327) unit over Bluetooth")
-                        }
-                    }
-                    if (isObd) {
-                        val btMac by model.currentMacSelection.collectAsState(null)
-
-                        run {
-                            var text = rememberSaveable(btMac) { btMac ?: "" }
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Spacer(Modifier.width(48.dp))
-                                OutlinedTextField(
-                                    modifier = Modifier.weight(1f),
-                                    value = text,
-                                    onValueChange = {
-                                        text = it
-                                        model.setBtMac(it.takeIf { it.isNotEmpty() })
-                                    },
-                                    label = { Text("Bluetooth MAC address") }
-                                )
-
-                                val context = LocalContext.current
-                                IconButton(onClick = { model.pickAndSetBluetoothDevice(context) }) {
-                                    Icon(Icons.AutoMirrored.Rounded.BluetoothSearching, contentDescription = null)
-                                }
-                            }
-                        }
-                    }
-                }
+                item { TelemetrySource(model) }
+                item { Allowance(model) }
             }
         }
     )
+}
+
+@Composable
+private fun LazyItemScope.TelemetrySource(
+    model: SettingsViewModel
+) {
+    val telemetrySource by model.currentTelemetrySource.collectAsState(TelemetrySource.BT_OBD)
+
+    val rbColors = RadioButtonDefaults.colors(MaterialTheme.colors.primary)
+
+    Text("Telemetry source", style = MaterialTheme.typography.h6, modifier = Modifier.padding(16.dp))
+
+    SettingsRow(
+        Modifier.clickable { model.setTelemetrySource(TelemetrySource.SIMULATION) }
+    ) {
+        RadioButton(colors = rbColors, selected = telemetrySource == TelemetrySource.SIMULATION, onClick = null)
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("Simulation")
+            Text(style = MaterialTheme.typography.caption, text = "Set the speed by using the slider in the race view")
+        }
+    }
+
+    val isObd = telemetrySource == TelemetrySource.BT_OBD
+
+    SettingsRow(
+        Modifier
+            .fillMaxWidth()
+            .clickable { model.setTelemetrySource(TelemetrySource.BT_OBD) }
+    ) {
+        RadioButton(colors = rbColors, selected = isObd, onClick = null)
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("OBD over Bluetooth")
+            Text(style = MaterialTheme.typography.caption, text = "Connect to an OBD (ELM327) unit over Bluetooth")
+        }
+    }
+    if (isObd) {
+        run {
+            val btMac by model.currentMacSelection.collectAsState(null)
+            var text = rememberSaveable(btMac) { btMac ?: "" }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Spacer(Modifier.width(48.dp))
+                OutlinedTextField(
+                    modifier = Modifier.weight(1f),
+                    value = text,
+                    onValueChange = {
+                        text = it
+                        model.setBtMac(it.takeIf { it.isNotEmpty() })
+                    },
+                    label = { Text("Bluetooth MAC address") }
+                )
+
+                val context = LocalContext.current
+                IconButton(onClick = { model.pickAndSetBluetoothDevice(context) }) {
+                    Icon(Icons.AutoMirrored.Rounded.BluetoothSearching, contentDescription = null)
+                }
+            }
+        }
+
+        Spacer(Modifier.height(24.dp))
+
+        run {
+            val calibration by model.currentCalibration.collectAsState(null)
+            
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Spacer(Modifier.width(48.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Calibration")
+
+                    Text(style = MaterialTheme.typography.caption, text = "Distance measured by the odometer divided by the roadmap distance:")
+
+                    var valueString by rememberSaveable(calibration) { mutableStateOf(calibration.toString()) }
+                    var isErrorInvalidValue by rememberSaveable(valueString) { mutableStateOf(false) }
+
+                    fun trySave() {
+                        val factor = validateCalibrationFactor(valueString)
+                        if (factor == null) {
+                            isErrorInvalidValue = true
+                        } else {
+                            model.setOdoCalibration(factor)
+                        }
+                    }
+
+                    Row(
+                        Modifier.padding(end = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            modifier = Modifier.weight(1f),
+                            value = valueString,
+                            singleLine = true,
+                            onValueChange = {
+                                isErrorInvalidValue = validateCalibrationFactor(it) == null
+                                valueString = it
+                            },
+                            isError = isErrorInvalidValue,
+                            keyboardOptions = KeyboardOptions.Default.copy(keyboardType = KeyboardType.Number),
+                            label = { Text("Calibration factor") }
+                        )
+                        Button(
+                            onClick = { trySave() },
+                            enabled = validateCalibrationFactor(valueString) != null && valueString.isNotBlank() && !isErrorInvalidValue && valueString.toDoubleOrNull() != calibration
+                        ) {
+                            Text("Save")
+                        }
+                    }
+
+                    if (isErrorInvalidValue) {
+                        Spacer(Modifier.height(8.dp))
+                        Box(Modifier.height(48.dp)) {
+                            Text(text = "Invalid number, should be between 0.1 and 10.0", color = MaterialTheme.colors.error)
+                        }
+                    }
+                }
+
+                val context = LocalContext.current
+                IconButton(onClick = { model.pickAndSetBluetoothDevice(context) }) {
+                    Icon(Icons.AutoMirrored.Rounded.BluetoothSearching, contentDescription = null)
+                }
+            }
+        }
+    }
+}
+
+private fun validateCalibrationFactor(string: String): Double? {
+    val d = string.toDoubleOrNull() ?: return null
+    return if (d in 0.01..10.0) d else null
+}
+
+private sealed interface CalibrationDialogResult {
+    data object Ok : CalibrationDialogResult
+    data object InvalidValue : CalibrationDialogResult
+}
+
+@Composable
+private fun LazyItemScope.Allowance(
+    model: SettingsViewModel,
+) {
+    val allowance by model.currentAllowance.collectAsState(null)
+    val rbColors = RadioButtonDefaults.colors(MaterialTheme.colors.primary)
+
+    Text("Allowance", style = MaterialTheme.typography.h6, modifier = Modifier.padding(16.dp))
+
+    SettingsRow(
+        Modifier.clickable { model.setAllowance(null) }
+    ) {
+        RadioButton(colors = rbColors, selected = allowance == null, onClick = null)
+        Text("None")
+    }
+    SettingsRow(
+        Modifier.clickable { model.setAllowance(TimeAllowance.BY_TEN_FULL) }
+    ) {
+        RadioButton(colors = rbColors, selected = allowance == TimeAllowance.BY_TEN_FULL, onClick = null)
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("⌊t/10⌋")
+            Text(style = MaterialTheme.typography.caption, text = "9 min → 0; 10 min → 1; 11 min → 1")
+        }
+    }
+    SettingsRow(
+        Modifier.clickable { model.setAllowance(TimeAllowance.BY_TEN_FULL_PLUS_ONE) }
+    ) {
+        RadioButton(colors = rbColors, selected = allowance == TimeAllowance.BY_TEN_FULL_PLUS_ONE, onClick = null)
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("⌈t/10⌉")
+            Text(style = MaterialTheme.typography.caption, text = "9 min → 1; 10 min → 1; 11 min → 2")
+        }
+    }
 }
 
 @Composable
@@ -148,6 +280,9 @@ class SettingsViewModel(
 ) : ViewModel() {
     val currentTelemetrySource = prefs.userPreferencesFlow.map { it.telemetrySource }
     val currentMacSelection = prefs.userPreferencesFlow.map { it.btMac }
+    val currentAllowance = prefs.userPreferencesFlow.map { it.allowance }
+    val currentCalibration = prefs.userPreferencesFlow.map { it.calibration }
+
     fun setTelemetrySource(newTelemetrySource: TelemetrySource) {
         viewModelScope.launch {
             prefs.saveTelemetrySource(newTelemetrySource)
@@ -157,6 +292,18 @@ class SettingsViewModel(
     fun setBtMac(newMac: String?) {
         viewModelScope.launch {
             prefs.saveBtMac(newMac)
+        }
+    }
+
+    fun setAllowance(allowance: TimeAllowance?) {
+        viewModelScope.launch {
+            prefs.saveTimeAllowance(allowance)
+        }
+    }
+
+    fun setOdoCalibration(newCalibration: Double) {
+        viewModelScope.launch {
+            prefs.saveCalibrationFactor(newCalibration)
         }
     }
 
