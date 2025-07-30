@@ -55,6 +55,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
@@ -430,7 +431,7 @@ class RaceService : Service() {
          * so that cancellation does not block us from updating the state and running another job. */
         var btJob: Job? = null
         
-        btMac.zip(telemetrySource, ::Pair).onEach { (newBtMac, telemetrySource) ->
+        btMac.zip(telemetrySource, ::Pair).distinctUntilChanged().onEach { (newBtMac, telemetrySource) ->
             btJob?.cancel()
             
             when (telemetrySource) {
