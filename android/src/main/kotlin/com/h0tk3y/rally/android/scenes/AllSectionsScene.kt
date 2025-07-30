@@ -55,8 +55,8 @@ fun AllSectionsScene(
 
 
     if (showNewListDialog) {
-        CreateOrRenameSectionDialog(DialogKind.CREATE, existing = null, onDismiss = { showNewListDialog = false }, onSave = { name, _ ->
-            when (val result = database.createEmptySection(name)) {
+        CreateOrRenameSectionDialog(DialogKind.CREATE, existing = null, onDismiss = { showNewListDialog = false }, onSave = { name, content ->
+            when (val result = database.createSection(name, content)) {
                 is SectionInsertOrRenameResult.Success -> {
                     onSelectSection(result.section)
                     showNewListDialog = false
