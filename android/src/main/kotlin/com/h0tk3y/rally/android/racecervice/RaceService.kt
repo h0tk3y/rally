@@ -74,10 +74,13 @@ import kotlin.time.Duration
 class RaceService : Service() {
 
     private val _raceState = MutableStateFlow<RaceState>(RaceState.NotStarted)
+    private val _rememberSpeedLimit = MutableStateFlow<SpeedKmh?>(null)
+    
     private lateinit var notificationManager: NotificationManagerCompat
     private lateinit var notification: Notification
 
     val raceState: StateFlow<RaceState> get() = _raceState
+    val rememberSpeedLimit: StateFlow<SpeedKmh?> = _rememberSpeedLimit
 
     private val prefs = PreferenceRepository(dataStore).userPreferencesFlow
     private val btMac = prefs.map { it.btMac }
@@ -124,6 +127,10 @@ class RaceService : Service() {
                 }
             }
         }
+    }
+    
+    fun setRememberSpeedLimit(speedKmh: SpeedKmh?) {
+        _rememberSpeedLimit.value = speedKmh
     }
 
     fun startRace(raceSectionId: Long, startAtDistanceKm: DistanceKm, setDistance: DistanceKm, startAtTime: Instant) {

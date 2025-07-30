@@ -210,10 +210,10 @@ private fun Calibration(model: SettingsViewModel, calibrateByCurrentDistance: Do
             }
 
             if (calibrateByCurrentDistance == null || calibrateByCurrentDistance.isFinite().not()) {
-                Text("You can calibrate from the real distance by going over the ODO check route in Race Mode and opening Settings after that.")
+                Text(style = MaterialTheme.typography.caption, text = "You can calibrate from the real distance by going over the ODO check route in Race Mode and opening Settings after that.")
             } else {
                 Text(text = "Calibrate by ODO check route:")
-                Text(style = MaterialTheme.typography.caption, text = "Odometer distance: ${calibrateByCurrentDistance.strRound3()}")
+                Text(text = "Odometer distance: ${calibrateByCurrentDistance.strRound3()}")
 
                 var exactValueString by rememberSaveable(calibration) { mutableStateOf("") }
                 var isErrorInvalidExactDistance by rememberSaveable { mutableStateOf(false) }

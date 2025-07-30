@@ -6,8 +6,6 @@ import android.content.res.Configuration
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -25,8 +23,6 @@ import androidx.compose.material.DropdownMenuItem
 import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
-import androidx.compose.material.RadioButton
-import androidx.compose.material.RadioButtonDefaults
 import androidx.compose.material.Scaffold
 import androidx.compose.material.Text
 import androidx.compose.material.TopAppBar
@@ -35,7 +31,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
@@ -82,8 +77,6 @@ import com.h0tk3y.rally.android.scenes.DataKind.Distance
 import com.h0tk3y.rally.android.scenes.DataKind.OdoDistance
 import com.h0tk3y.rally.android.scenes.DataKind.SyntheticCount
 import com.h0tk3y.rally.android.scenes.DataKind.SyntheticInterval
-import com.h0tk3y.rally.android.scenes.TimeAllowance.BY_TEN_FULL
-import com.h0tk3y.rally.android.scenes.TimeAllowance.BY_TEN_FULL_PLUS_ONE
 import com.h0tk3y.rally.android.valueOrNull
 import com.h0tk3y.rally.android.views.GridKey
 import com.h0tk3y.rally.android.views.Keyboard
@@ -127,8 +120,8 @@ fun SectionScene(
     )
     val editorFocus by model.editorFocus.collectAsState()
     val allowance by model.timeAllowance.collectAsState(null)
-    val calibration by model.calibration.collectAsState(null)
     val raceState by model.raceState.collectAsState(SectionViewModel.RaceUiState.NoRaceServiceConnection)
+    val rememberSpeed by model.rememberSpeed.collectAsState(null)
     val raceUiVisible by model.raceUiVisible.collectAsState(false)
     val btState by model.btState.collectAsState(RaceService.TelemetryPublicState.NotInitialized)
     val speedLimitPercent by model.speedLimitPercent.collectAsState(null)
@@ -426,7 +419,9 @@ fun SectionScene(
                                 }
                             }
                         },
-                        allowance
+                        allowance,
+                        rememberSpeed,
+                        setRememberSpeed = { model.setRememberSpeed(it) }
                     )
                 }
             }
