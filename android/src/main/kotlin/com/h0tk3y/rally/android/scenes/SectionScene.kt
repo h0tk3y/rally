@@ -178,13 +178,6 @@ fun SectionScene(
                 }
             )
         }
-
-        if (showCalibrationDialog) {
-            CalibrationFactorDialog({ showCalibrationDialog = false }, calibration ?: 1.0, {
-                model.setCalibration(it)
-                showCalibrationDialog = false
-            })
-        }
     }
 
     Scaffold(
@@ -325,50 +318,14 @@ fun SectionScene(
                             }
                         }
                         Divider()
-                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("Allowance")
-                            val rbColors = RadioButtonDefaults.colors(MaterialTheme.colors.primary)
-                            Row(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .clickable { model.setAllowance(null) }) {
-                                RadioButton(colors = rbColors, selected = allowance == null, onClick = null)
-                                Spacer(Modifier.width(8.dp))
-                                Text("⦰")
-                            }
-                            Row(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .clickable { model.setAllowance(BY_TEN_FULL) }) {
-                                RadioButton(colors = rbColors, selected = allowance == BY_TEN_FULL, onClick = null)
-                                Spacer(Modifier.width(8.dp))
-                                Text("⌊t/10⌋")
-                            }
-                            Row(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .clickable { model.setAllowance(BY_TEN_FULL_PLUS_ONE) }) {
-                                RadioButton(colors = rbColors, selected = allowance == BY_TEN_FULL_PLUS_ONE, onClick = null)
-                                Spacer(Modifier.width(8.dp))
-                                Text("⌈t/10⌉")
-                            }
-                        }
-                        Divider()
-                        DropdownMenuItem(onClick = {
-                            showCalibrationDialog = true
-                        }) {
-                            Icon(Icons.Default.LocationOn, "Calibration")
-                            Text("ODO calibration: $calibration")
-                        }
-                        Divider()
                         DropdownMenuItem(onClick = {
                             onGoToSettings()
                             showMenu = false
                         }) {
                             Icon(Icons.Default.Settings, "Settings")
+                            Spacer(Modifier.width(8.dp))
                             Text("Settings")
                         }
-
                     }
                 }
             )
