@@ -22,6 +22,7 @@ import androidx.compose.material.Text
 import androidx.compose.material.TopAppBar
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Create
+import androidx.compose.material.icons.filled.DriveEta
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.rounded.Add
@@ -47,7 +48,8 @@ fun AllSectionsScene(
     database: Database,
     sections: LoadState<List<Section>>,
     onSelectSection: (Section) -> Unit,
-    onGoToSettings: () -> Unit
+    onGoToSettings: () -> Unit,
+    onOpenDriverHud: () -> Unit
 ) {
     var showNewListDialog by rememberSaveable { mutableStateOf(false) }
     var showImportDialog by rememberSaveable { mutableStateOf(false) }
@@ -97,6 +99,14 @@ fun AllSectionsScene(
                     }
                     DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                         DropdownMenuItem(onClick = {
+                            onOpenDriverHud()
+                            showMenu = false
+                        }) {
+                            Icon(Icons.Default.DriveEta, "Driver HUD")
+                            Spacer(Modifier.width(8.dp))
+                            Text("Driver HUD")
+                        }
+                        DropdownMenuItem(onClick = {
                             showImportDialog = true
                             showMenu = false
                         }) {
@@ -124,7 +134,7 @@ fun AllSectionsScene(
                     }
 
                     LoadState.LOADING -> CenterTextBox("Loading sections...")
-                    LoadState.EMPTY -> CenterTextBox("The section does not exist")
+                    LoadState.EMPTY -> CenterTextBox("No section data")
                     LoadState.FAILED -> CenterTextBox("Something went wrong")
                 }
             }

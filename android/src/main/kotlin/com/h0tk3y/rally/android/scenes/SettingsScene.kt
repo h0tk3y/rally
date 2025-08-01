@@ -104,13 +104,21 @@ private fun LazyItemScope.TelemetrySource(
     SettingsRow(
         Modifier.clickable { model.setTelemetrySource(TelemetrySource.SIMULATION) }
     ) {
-        RadioButton(colors = rbColors, selected = telemetrySource == TelemetrySource.SIMULATION, onClick = null)
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("Simulation")
-            Text(style = MaterialTheme.typography.caption, text = "Set the speed by using the slider in the race view")
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            RadioButton(colors = rbColors, selected = telemetrySource == TelemetrySource.SIMULATION, onClick = null)
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("Simulation")
+                Text(style = MaterialTheme.typography.caption, text = "Set the speed by using the slider in the race view")
+            }
         }
     }
-
+    if (telemetrySource == TelemetrySource.SIMULATION) {
+        Row {
+            Spacer(Modifier.width(48.dp))
+            SendTeleToIp(model)
+        }
+    }
+    
     val isObd = telemetrySource == TelemetrySource.BT_OBD
 
     SettingsRow(
@@ -127,28 +135,65 @@ private fun LazyItemScope.TelemetrySource(
     if (isObd) {
         run {
             val btMac by model.currentMacSelection.collectAsState(null)
-            var text = rememberSaveable(btMac) { btMac ?: "" }
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            var text by rememberSaveable(btMac) { mutableStateOf(btMac ?: "") }
+            Row {
                 Spacer(Modifier.width(48.dp))
-                OutlinedTextField(
-                    modifier = Modifier.weight(1f),
-                    value = text,
-                    onValueChange = {
-                        text = it
-                        model.setBtMac(it.takeIf { it.isNotEmpty() })
-                    },
-                    label = { Text("Bluetooth MAC address") }
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(
+                            modifier = Modifier.weight(1f),
+                            value = text,
+                            onValueChange = {
+                                text = it
+                                model.viewModelScope.launch {
+                                    model.setBtMac(it.takeIf { it.isNotEmpty() })
+                                }
+                            },
+                            label = { Text("Bluetooth MAC address") }
+                        )
 
-                val context = LocalContext.current
-                IconButton(onClick = { model.pickAndSetBluetoothDevice(context) }) {
-                    Icon(Icons.AutoMirrored.Rounded.BluetoothSearching, contentDescription = null)
+                        val context = LocalContext.current
+                        IconButton(onClick = { model.pickAndSetBluetoothDevice(context) }) {
+                            Icon(Icons.AutoMirrored.Rounded.BluetoothSearching, contentDescription = null)
+                        }
+                    }
+
                 }
             }
         }
 
         Spacer(Modifier.height(24.dp))
         Calibration(model, calibrateByCurrentDistance)
+        Spacer(Modifier.height(24.dp))
+        Row {
+            Spacer(Modifier.width(48.dp))
+            SendTeleToIp(model)
+        }
+    }
+}
+
+@Composable
+private fun SendTeleToIp(model: SettingsViewModel) {
+    val sendTeleToIp by model.sendTeleToIp.collectAsState(null)
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text("Send data to another device")
+        Text(
+            style = MaterialTheme.typography.caption,
+            text = "Enter the other device's IP to send data to it. The other device must be on the same Wi-Fi network.\n" +
+                    "On the other device, open 'Driver HUD' from the menu on the section list."
+        )
+        var text by rememberSaveable(sendTeleToIp) { mutableStateOf(sendTeleToIp ?: "") }
+        OutlinedTextField(
+            modifier = Modifier.fillMaxWidth(),
+            value = text,
+            onValueChange = {
+                text = it
+                model.viewModelScope.launch {
+                    model.setSendTeleToIp(it.takeIf { it.isNotEmpty() })
+                }
+            },
+            label = { Text("The other device's IP address") }
+        )
     }
 }
 
@@ -210,7 +255,10 @@ private fun Calibration(model: SettingsViewModel, calibrateByCurrentDistance: Do
             }
 
             if (calibrateByCurrentDistance == null || calibrateByCurrentDistance.isFinite().not()) {
-                Text(style = MaterialTheme.typography.caption, text = "You can calibrate from the real distance by going over the ODO check route in Race Mode and opening Settings after that.")
+                Text(
+                    style = MaterialTheme.typography.caption,
+                    text = "You can calibrate from the real distance by going over the ODO check route in Race Mode and opening Settings after that."
+                )
             } else {
                 Text(text = "Calibrate by ODO check route:")
                 Text(text = "Odometer distance: ${calibrateByCurrentDistance.strRound3()}")
@@ -256,13 +304,8 @@ private fun validateCalibrationFactor(string: String): Double? {
 
 private fun validateDistance(string: String): Double? = string.toDoubleOrNull()?.takeIf { it.isFinite() }
 
-private sealed interface CalibrationDialogResult {
-    data object Ok : CalibrationDialogResult
-    data object InvalidValue : CalibrationDialogResult
-}
-
 @Composable
-private fun LazyItemScope.Allowance(
+private fun Allowance(
     model: SettingsViewModel,
 ) {
     val allowance by model.currentAllowance.collectAsState(null)
@@ -313,6 +356,7 @@ class SettingsViewModel(
     val prefs: PreferenceRepository
 ) : ViewModel() {
     val currentTelemetrySource = prefs.userPreferencesFlow.map { it.telemetrySource }
+    val sendTeleToIp = prefs.userPreferencesFlow.map { it.sendTeleToIp }
     val currentMacSelection = prefs.userPreferencesFlow.map { it.btMac }
     val currentAllowance = prefs.userPreferencesFlow.map { it.allowance }
     val currentCalibration = prefs.userPreferencesFlow.map { it.calibration }
@@ -341,12 +385,19 @@ class SettingsViewModel(
         }
     }
 
+    fun setSendTeleToIp(newIp: String?) {
+        viewModelScope.launch {
+            prefs.saveSendTeleToIp(newIp)
+        }
+    }
+
     fun pickAndSetBluetoothDevice(context: Context) {
         viewModelScope.launch {
             val bluetoothReceiver: BroadcastReceiver = object : BroadcastReceiver() {
                 override fun onReceive(context: Context, intent: Intent) {
                     viewModelScope.launch {
                         if (ACTION_BLUETOOTH_SELECTED == intent.action) {
+                            @Suppress("DEPRECATION") 
                             val device = intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
                             setBtMac(device?.address)
                         }

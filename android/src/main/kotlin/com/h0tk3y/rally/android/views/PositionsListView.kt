@@ -46,14 +46,14 @@ fun PositionsListView(
     positionsList: List<RoadmapInputLine>,
     selectedLineIndex: LineNumber,
     raceCurrentLineIndex: LineNumber?,
-    editorControls: EditorControls,
+    editorControls: EditorControls?,
     editorState: EditorState,
     editorFocus: EditorFocus,
     results: RallyTimesResult,
     subsMatch: SubsMatch,
     allowance: TimeAllowance?,
     raceViewShown: Boolean,
-    raceState: SectionViewModel.RaceUiState.RaceGoing?
+    raceState: RaceUiState.RaceGoing?
 ) {
     val time by produceState(Clock.System.now(), raceState) {
         if (raceState != null) {
@@ -108,7 +108,7 @@ fun PositionsListView(
                     modifier = background
                         .padding(8.dp)
                         .fillMaxWidth()
-                        .clickable(interactionSource, indication = null, onClick = { editorControls.selectLine(line.lineNumber, null) }),
+                        .clickable(interactionSource, indication = null, onClick = { editorControls?.selectLine(line.lineNumber, null) }),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
@@ -337,7 +337,7 @@ private fun DataField(
     isEditorEnabled: Boolean,
     isSelectedLine: Boolean,
     editorFocus: EditorFocus,
-    editorControls: EditorControls,
+    editorControls: EditorControls?,
     editorState: EditorState,
     subsMatch: SubsMatch,
     elementsModifier: Modifier
@@ -353,9 +353,9 @@ private fun DataField(
         focused = isEditorEnabled && isSelectedLine && field == editorFocus.kind,
         onTextChange = { },
         onFocused = {
-            editorControls.selectLine(line.lineNumber, field)
+            editorControls?.selectLine(line.lineNumber, field)
         },
-        onPositionChange = { editorControls.moveCursor(it - cursorIndex) },
+        onPositionChange = { editorControls?.moveCursor(it - cursorIndex) },
         enabled = editorState.isEnabled
     )
 }
