@@ -21,8 +21,6 @@ import com.h0tk3y.rally.PositionLineModifier.OdoDistance
 import com.h0tk3y.rally.PositionLineModifier.SetAvg
 import com.h0tk3y.rally.PositionLineModifier.SetAvgSpeed
 import com.h0tk3y.rally.PositionLineModifier.ThenAvgSpeed
-import com.h0tk3y.rally.android.racecervice.RaceService
-import com.h0tk3y.rally.android.racecervice.RaceService.TelemetryPublicState
 import com.h0tk3y.rally.RallyTimesIntervalsCalculator
 import com.h0tk3y.rally.RallyTimesResult
 import com.h0tk3y.rally.RallyTimesResultFailure
@@ -35,6 +33,10 @@ import com.h0tk3y.rally.TimeHr
 import com.h0tk3y.rally.android.LoadState
 import com.h0tk3y.rally.android.PreferenceRepository
 import com.h0tk3y.rally.android.db.Database
+import com.h0tk3y.rally.android.racecervice.CommonRaceService
+import com.h0tk3y.rally.android.racecervice.LocalRaceService
+import com.h0tk3y.rally.android.racecervice.TcpStreamedRaceService
+import com.h0tk3y.rally.android.racecervice.TelemetryPublicState
 import com.h0tk3y.rally.android.views.GridKey
 import com.h0tk3y.rally.android.views.StartOption
 import com.h0tk3y.rally.db.Section
@@ -50,14 +52,21 @@ import com.h0tk3y.rally.model.duration
 import com.h0tk3y.rally.modifier
 import com.h0tk3y.rally.preprocessRoadmap
 import com.h0tk3y.rally.roundTo3Digits
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.combineTransform
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.future.await
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
@@ -67,68 +76,251 @@ import kotlinx.datetime.atStartOfDayIn
 import kotlinx.datetime.atTime
 import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
+import java.util.concurrent.CompletableFuture
 import kotlin.math.sign
 
-class SectionViewModel(
-    private val sectionId: Long,
-    private val database: Database,
-    private val prefs: PreferenceRepository,
-) : ViewModel(), EditorControls {
-    private val parser = InputRoadmapParser(DefaultModifierValidator())
+interface RaceServiceHolder<S : CommonRaceService> {
+    fun setRaceServiceConnector(connector: () -> Unit)
+    fun setRaceServiceDisconnector(disconnector: () -> Unit)
+    fun onServiceConnected(raceService: S)
+    fun onServiceDisconnected()
+}
 
-    private val _section: MutableStateFlow<LoadState<Section>> = MutableStateFlow(LoadState.LOADING)
-    private val _inputPositions: MutableStateFlow<List<RoadmapInputLine>> = MutableStateFlow(emptyList())
-    private val _selectedLineNumber: MutableStateFlow<LineNumber> = MutableStateFlow(LineNumber(1, 0))
-    private val _raceCurrentLineNumber: MutableStateFlow<LineNumber> = MutableStateFlow(LineNumber(1, 0))
-    private val _preprocessedPositions: MutableStateFlow<List<RoadmapInputLine>> = MutableStateFlow(emptyList())
-    private val _results: MutableStateFlow<RallyTimesResult> = MutableStateFlow(RallyTimesResultFailure(emptyList()))
-    private val _odoValues: MutableStateFlow<Map<LineNumber, DistanceKm>> = MutableStateFlow(emptyMap())
-    private val _editorFocus: MutableStateFlow<EditorFocus> = MutableStateFlow(EditorFocus(0, DataKind.Distance))
-    private val _editorState: MutableStateFlow<EditorState> = MutableStateFlow(EditorState(false))
-    private val _subsMatching: MutableStateFlow<SubsMatch> = MutableStateFlow(SubsMatch.EMPTY)
+interface CommonSectionViewModel {
+    val viewModelScope: CoroutineScope
 
-    // Race mode:
-    private val _raceUiVisible: MutableStateFlow<Boolean> = MutableStateFlow(false)
-    private val _raceState: MutableStateFlow<RaceUiState> = MutableStateFlow(RaceUiState.NoRaceServiceConnection)
-    private val _rememberSpeed: MutableStateFlow<SpeedKmh?> = MutableStateFlow(null)
-    private val _btState: MutableStateFlow<TelemetryPublicState> = MutableStateFlow(TelemetryPublicState.NotInitialized)
+    val section: StateFlow<LoadState<Section>>
+    val inputPositions: StateFlow<List<RoadmapInputLine>>
+    val preprocessedPositions: StateFlow<List<RoadmapInputLine>>
+    val results: StateFlow<RallyTimesResult>
+    val odoValues: StateFlow<Map<LineNumber, DistanceKm>>
+    val subsMatching: StateFlow<SubsMatch>
 
-    val calibration = prefs.userPreferencesFlow.map { it.calibration }
+    val calibration: Flow<Double>
+
+    val selectedLineIndex: StateFlow<LineNumber>
+    val raceCurrentLineIndex: Flow<LineNumber?>
+
+    val raceState: Flow<RaceUiState>
+    val speedLimitPercent: Flow<String?>
+    val rememberSpeed: StateFlow<SpeedKmh?>
+
+    val telemetryState: StateFlow<TelemetryPublicState>
+
+    val raceUiVisible: StateFlow<Boolean>
+    val timeAllowance: Flow<TimeAllowance?>
+}
+
+abstract class StatefulSectionViewModel : ViewModel(), CommonSectionViewModel {
+    protected val _section: MutableStateFlow<LoadState<Section>> = MutableStateFlow(LoadState.EMPTY)
+    protected val _inputPositions: MutableStateFlow<List<RoadmapInputLine>> = MutableStateFlow(emptyList())
+    protected val _preprocessedPositions: MutableStateFlow<List<RoadmapInputLine>> = MutableStateFlow(emptyList())
+    protected val _results: MutableStateFlow<RallyTimesResult> = MutableStateFlow(RallyTimesResultFailure(emptyList()))
+    protected val _odoValues: MutableStateFlow<Map<LineNumber, DistanceKm>> = MutableStateFlow(emptyMap())
+    protected val _subsMatching: MutableStateFlow<SubsMatch> = MutableStateFlow(SubsMatch.EMPTY)
+    protected val _selectedLineIndex: MutableStateFlow<LineNumber> = MutableStateFlow(LineNumber(1, 0))
+    protected val _rememberSpeed: MutableStateFlow<SpeedKmh?> = MutableStateFlow(null)
+    protected val _telemetryState: MutableStateFlow<TelemetryPublicState> = MutableStateFlow(TelemetryPublicState.NotInitialized)
+    protected val _raceUiVisible: MutableStateFlow<Boolean> = MutableStateFlow(false)
+
+    override val section: StateFlow<LoadState<Section>> = _section
+    override val inputPositions: StateFlow<List<RoadmapInputLine>> = _inputPositions
+    override val preprocessedPositions: StateFlow<List<RoadmapInputLine>> = _preprocessedPositions
+    override val results: StateFlow<RallyTimesResult> = _results
+    override val odoValues: StateFlow<Map<LineNumber, DistanceKm>> = _odoValues
+    override val subsMatching: StateFlow<SubsMatch> = _subsMatching
+    override val selectedLineIndex: StateFlow<LineNumber> = _selectedLineIndex
+    override val rememberSpeed: StateFlow<SpeedKmh?> = _rememberSpeed
+    override val telemetryState: StateFlow<TelemetryPublicState> = _telemetryState
+    override val raceUiVisible: StateFlow<Boolean> = _raceUiVisible
+
+    protected val _subInitComplete = CompletableFuture<Unit>()
+    protected fun subInitComplete() {
+        _subInitComplete.complete(Unit)
+    }
+
+    protected open val currentItems: Collection<RoadmapInputLine>
+        get() = preprocessedPositions.value
+
+    protected open fun onUpdateInputPositions() = Unit
+
+    protected open fun onLineNumberChange() = Unit
+
+    protected open fun onSectionUpdate(section: LoadState<Section>) = Unit
+
+    suspend fun extracted() {
+        _section.collectLatest { onSectionUpdate(it) }
+    }
 
     init {
         viewModelScope.launch {
-            _section.collectLatest {
-                _inputPositions.value = positionLines(it)
+            _subInitComplete.await()
+
+            viewModelScope.launch {
+                extracted()
+            }
+            viewModelScope.launch {
+                _inputPositions.collectLatest {
+                    _preprocessedPositions.value = maybePreprocess(it)
+                    // sanitizeSelection()
+                    onUpdateInputPositions()
+                    _subsMatching.value = SubsMatcher().matchSubs(it.filterIsInstance<PositionLine>())
+                }
+            }
+            viewModelScope.launch {
+                _selectedLineIndex.collectLatest {
+                    onLineNumberChange()
+                }
+            }
+            viewModelScope.launch {
+                combineTransform(_preprocessedPositions, calibration) { a, b -> emit(a to b) }.collectLatest { (it, calibrationFactor) ->
+                    val lines = it.filterIsInstance<PositionLine>()
+                    launch {
+                        val odo = OdoDistanceCalculator.calculateOdoDistances(lines, calibrationFactor)
+                        _odoValues.value = odo
+
+                        val rallyTimes = RallyTimesIntervalsCalculator().rallyTimes(lines)
+                        _results.value = rallyTimes
+                    }
+                }
             }
         }
+    }
+
+    private fun maybePreprocess(positions: List<RoadmapInputLine>): List<RoadmapInputLine> =
+        if (positions.isEmpty()) emptyList() else preprocessRoadmap(positions).toList()
+}
+
+
+interface RaceModelControls {
+    fun enterRaceMode()
+    fun startRace(startOption: StartOption)
+    fun finishRace()
+    fun undoFinishRace()
+    fun stopRace()
+    fun undoStopRace()
+    fun resetRace()
+    fun setGoingForward(isGoingForward: Boolean)
+    fun distanceCorrection(distanceKm: DistanceKm)
+    fun setRememberSpeed(speedKmh: SpeedKmh?)
+    fun leaveRaceMode()
+    fun setSpeedLimitPercent(value: String?)
+}
+
+interface EditableSectionViewModel : CommonSectionViewModel, EditorControls {
+    val editorState: StateFlow<EditorState>
+    val editorFocus: StateFlow<EditorFocus>
+    fun deletePosition(line: RoadmapInputLine)
+    fun maybeCreateItemAtDistance(distanceKm: DistanceKm, forceCreateIfExists: Boolean, addModifiers: List<PositionLineModifier> = emptyList()): PositionLine
+}
+
+sealed interface RaceUiState {
+    sealed interface HasRaceModel {
+        val raceModel: RaceModel
+    }
+
+    data object NoRaceServiceConnection : RaceUiState
+
+    data object RaceNotStarted : RaceUiState
+
+    data class RaceGoingInAnotherSection(
+        val raceSectionId: Long
+    ) : RaceUiState
+
+    data class RaceGoing(
+        override val raceModel: RaceModel,
+        val serial: Long,
+        val lastFinishAt: Instant?,
+        val lastFinishModel: RaceModel?,
+        val raceModelOfGoingAtSection: RaceModel
+    ) : RaceUiState, HasRaceModel
+
+    data class Going(
+        override val raceModel: RaceModel,
+        val raceModelAtFinish: RaceModel?,
+        val finishedAt: Instant?,
+        val serial: Long
+    ) : RaceUiState, HasRaceModel
+
+    data class Stopped(
+        val stoppedAt: Instant,
+        override val raceModel: RaceModel,
+        val finishedAt: Instant?,
+        val raceModelAtFinish: RaceModel?,
+    ) : RaceUiState, HasRaceModel
+}
+
+class PersistedSectionViewModel(
+    private val sectionId: Long,
+    private val database: Database,
+    private val prefs: PreferenceRepository,
+) : StatefulSectionViewModel(), EditableSectionViewModel, RaceModelControls, RaceServiceHolder<LocalRaceService> {
+
+    private val _raceCurrentLineNumber: MutableStateFlow<LineNumber> = MutableStateFlow(LineNumber(1, 0))
+    private val _editorFocus: MutableStateFlow<EditorFocus> = MutableStateFlow(EditorFocus(0, DataKind.Distance))
+    private val _editorState: MutableStateFlow<EditorState> = MutableStateFlow(EditorState(false))
+
+    override val section: StateFlow<LoadState<Section>> = _section.asStateFlow()
+
+    // Race mode:
+    private val _raceState: MutableStateFlow<RaceUiState> = MutableStateFlow(RaceUiState.NoRaceServiceConnection)
+
+    override val selectedLineIndex: StateFlow<LineNumber> = _selectedLineIndex.asStateFlow()
+    override val raceCurrentLineIndex: Flow<LineNumber?> =
+        _raceCurrentLineNumber.combine(_raceState) { number, state -> number.takeIf { state is RaceUiState.RaceGoing || state is RaceUiState.Going } }
+    override val editorState: StateFlow<EditorState> = _editorState.asStateFlow()
+    override val editorFocus: StateFlow<EditorFocus> = _editorFocus.asStateFlow()
+    override val inputPositions: StateFlow<List<RoadmapInputLine>> = _inputPositions.asStateFlow()
+    override val preprocessedPositions: StateFlow<List<RoadmapInputLine>> = _preprocessedPositions.asStateFlow()
+    override val results: StateFlow<RallyTimesResult> = _results.asStateFlow()
+    override val odoValues: StateFlow<Map<LineNumber, DistanceKm>> = _odoValues.asStateFlow()
+    override val subsMatching: StateFlow<SubsMatch> = _subsMatching.asStateFlow()
+    override val raceState: Flow<RaceUiState> = _raceState.distinctUntilChanged { _, _ -> false }
+    override val rememberSpeed: StateFlow<SpeedKmh?> = _rememberSpeed.asStateFlow()
+    override val raceUiVisible: StateFlow<Boolean> = _raceUiVisible.asStateFlow()
+    override val telemetryState: StateFlow<TelemetryPublicState> = _telemetryState.asStateFlow()
+    override val timeAllowance: Flow<TimeAllowance?> = prefs.userPreferencesFlow.map { it.allowance }
+    override val speedLimitPercent: Flow<String?> = prefs.userPreferencesFlow.map { it.speedLimitPercent }
+
+    @SuppressLint("StaticFieldLeak")
+    private var service: LocalRaceService? = null
+
+    private var serviceRelatedJob: Job? = null
+    private var serviceConnector: () -> Unit = { error("no connector") }
+    private var serviceDisconnector: () -> Unit = { error("no disconnector") }
+
+
+    override val calibration: Flow<Double> = prefs.userPreferencesFlow.map { it.calibration }
+
+    override fun onSectionUpdate(section: LoadState<Section>) {
+        _inputPositions.value = positionLines(section)
+    }
+
+    override fun onUpdateInputPositions() {
+        super.onUpdateInputPositions()
+        sanitizeSelection()
+        updateEditorConstraints()
+    }
+
+    override fun onLineNumberChange() {
+        updateEditorConstraints()
+    }
+
+    override val viewModelScope: CoroutineScope
+        get() = (this as ViewModel).viewModelScope
+
+    init {
+        subInitComplete()
+
         viewModelScope.launch {
             _inputPositions.collectLatest {
                 _preprocessedPositions.value = maybePreprocess(it)
-                sanitizeSelection()
-                updateEditorConstraints()
                 _subsMatching.value = SubsMatcher().matchSubs(it.filterIsInstance<PositionLine>())
-            }
-        }
-        viewModelScope.launch {
-            _selectedLineNumber.collectLatest {
-                updateEditorConstraints()
             }
         }
         viewModelScope.launch {
             _editorFocus.collectLatest {
                 updateEditorConstraints()
-            }
-        }
-        viewModelScope.launch {
-            combineTransform(_preprocessedPositions, calibration) { a, b -> emit(a to b) }.collectLatest { (it, calibrationFactor) ->
-                val lines = it.filterIsInstance<PositionLine>()
-                launch {
-                    val odo = OdoDistanceCalculator.calculateOdoDistances(lines, calibrationFactor)
-                    _odoValues.value = odo
-
-                    val rallyTimes = RallyTimesIntervalsCalculator().rallyTimes(lines)
-                    _results.value = rallyTimes
-                }
             }
         }
         viewModelScope.launch {
@@ -138,77 +330,33 @@ class SectionViewModel(
         }
     }
 
-    val section = _section.asStateFlow()
-
-    val selectedLineIndex = _selectedLineNumber.asStateFlow()
-    val raceCurrentLineIndex =
-        _raceCurrentLineNumber.combine(_raceState) { number, state -> number.takeIf { state is RaceUiState.RaceGoing || state is RaceUiState.Going } }
-    val editorState = _editorState.asStateFlow()
-    val editorFocus = _editorFocus.asStateFlow()
-    val inputPositions = _inputPositions.asStateFlow()
-    val preprocessedPositions = _preprocessedPositions.asStateFlow()
-    val results = _results.asStateFlow()
-    val odoValues = _odoValues.asStateFlow()
-    val subsMatching = _subsMatching.asStateFlow()
-    val raceState = _raceState.distinctUntilChanged { _, _ -> false }
-    val rememberSpeed = _rememberSpeed.asStateFlow()
-    val raceUiVisible = _raceUiVisible.asStateFlow()
-    val btState = _btState.asStateFlow()
-    val timeAllowance = prefs.userPreferencesFlow.map { it.allowance }
-    val speedLimitPercent = prefs.userPreferencesFlow.map { it.speedLimitPercent }
-
-    sealed interface RaceUiState {
-        sealed interface HasRaceModel {
-            val raceModel: RaceModel
-        }
-
-        data object NoRaceServiceConnection : RaceUiState
-
-        data object RaceNotStarted : RaceUiState
-
-        data class RaceGoingInAnotherSection(
-            val raceSectionId: Long
-        ) : RaceUiState
-
-        data class RaceGoing(
-            override val raceModel: RaceModel,
-            val serial: Long,
-            val lastFinishAt: Instant?,
-            val lastFinishModel: RaceModel?,
-            val raceModelOfGoingAtSection: RaceModel
-        ) : RaceUiState, HasRaceModel
-
-        data class Going(
-            override val raceModel: RaceModel,
-            val raceModelAtFinish: RaceModel?,
-            val finishedAt: Instant?,
-            val serial: Long
-        ) : RaceUiState, HasRaceModel
-
-        data class Stopped(
-            val stoppedAt: Instant,
-            override val raceModel: RaceModel,
-            val finishedAt: Instant?,
-            val raceModelAtFinish: RaceModel?,
-        ) : RaceUiState, HasRaceModel
-    }
-
-    @SuppressLint("StaticFieldLeak")
-    private var service: RaceService? = null
-
-    private var serviceRelatedJob: Job? = null
-    private var serviceConnector: () -> Unit = { error("no connector") }
-    private var serviceDisconnector: () -> Unit = { error("no disconnector") }
-
-    fun setRaceServiceConnector(connector: () -> Unit) {
+    override fun setRaceServiceConnector(connector: () -> Unit) {
         serviceConnector = connector
     }
 
-    fun setRaceServiceDisconnector(disconnector: () -> Unit) {
+    override fun setRaceServiceDisconnector(disconnector: () -> Unit) {
         serviceDisconnector = disconnector
     }
 
-    fun onServiceConnected(raceService: RaceService) {
+    private val parser = InputRoadmapParser(DefaultModifierValidator())
+
+    private fun positionLines(it: LoadState<Section>) = if (it is LoadState.Loaded) {
+        val result = parser.parseRoadmap(it.value.serializedPositions.reader()).filterIsInstance<PositionLine>()
+        result.ifEmpty {
+            listOf(
+                PositionLine(
+                    DistanceKm(0.0),
+                    LineNumber(1, 0),
+                    listOf(SetAvgSpeed(SpeedKmh(60.0)))
+                ),
+                PositionLine(DistanceKm(1.0), LineNumber(2, 0), listOf()),
+            )
+        }
+    } else {
+        emptyList()
+    }
+
+    override fun onServiceConnected(raceService: LocalRaceService) {
         service = raceService
 
         serviceRelatedJob = viewModelScope.launch {
@@ -219,7 +367,7 @@ class SectionViewModel(
                         val inRaceAtKm = newState.raceModel.currentDistance.roundTo3Digits()
                         val position = positionLines.lastOrNull { it is PositionLine && it.atKm <= inRaceAtKm }
                         if (position != null) {
-                            val currentRaceLineSelected = _raceCurrentLineNumber.value == _selectedLineNumber.value
+                            val currentRaceLineSelected = _raceCurrentLineNumber.value == _selectedLineIndex.value
                             _raceCurrentLineNumber.value = position.lineNumber
                             if (currentRaceLineSelected && !_editorState.value.isEnabled) {
                                 selectLine(position.lineNumber, null)
@@ -229,31 +377,41 @@ class SectionViewModel(
                     _raceState.value = raceStateToUiState(newState)
                 }
             }
-            launch { 
-                raceService.rememberSpeedLimit.collectLatest { 
+            launch {
+                raceService.rememberSpeedLimit.collectLatest {
                     _rememberSpeed.value = it
                 }
             }
             launch {
-                raceService.btPublicState.collectLatest {
-                    _btState.value = it
+                raceService.telemetryPublicState.collectLatest {
+                    _telemetryState.value = it
                 }
             }
             launch {
-                calibration.collectLatest {
-                    raceService.calibration = it
+                _preprocessedPositions.collectLatest { lines ->
+                    raceService.updatePositions(lines.filterIsInstance<PositionLine>())
+                }
+            }
+            launch {
+                _selectedLineIndex.collectLatest { index ->
+                    raceService.updateCurrentLine(index)
+                }
+            }
+            launch {
+                _raceCurrentLineNumber.collectLatest { index ->
+                    raceService.updateCurrentRaceLine(index)
                 }
             }
         }
     }
 
-    fun onServiceDisconnected() {
+    override fun onServiceDisconnected() {
         service = null
         _raceState.value = RaceUiState.NoRaceServiceConnection
         serviceRelatedJob?.cancel()
     }
 
-    fun startRace(startOption: StartOption) {
+    override fun startRace(startOption: StartOption) {
         service?.run {
             val now = Clock.System.now()
 
@@ -280,9 +438,8 @@ class SectionViewModel(
             )
 
             val speedAtDistance: SpeedKmh? =
-                rememberSpeed.value ?:
-                currentItem?.takeIf { it.atKm == startDistance }?.modifier<SetAvg>()?.setavg
-                    ?: findPureSpeedForDistance(startDistance)
+                rememberSpeed.value ?: currentItem?.takeIf { it.atKm == startDistance }?.modifier<SetAvg>()?.setavg
+                ?: findPureSpeedForDistance(startDistance)
 
             val startTime = when (startOption.locationAndTime) {
                 StartOption.StartAtSelectedPositionAtTimeKeepOdo,
@@ -365,7 +522,9 @@ class SectionViewModel(
         service?.setDebugSpeed(speedKmh)
     }
 
-    private fun raceStateToUiState(raceState: RaceState): RaceUiState = when (raceState) {
+    private fun raceStateToUiState(
+        raceState: RaceState
+    ): RaceUiState = when (raceState) {
         is RaceState.InRace, is RaceState.Going -> {
             raceState as RaceState.HasCurrentSection
             when {
@@ -396,13 +555,13 @@ class SectionViewModel(
         sanitizeSelection()
     }
 
-    fun enterRaceMode() {
+    override fun enterRaceMode() {
         _raceState.value = RaceUiState.NoRaceServiceConnection
         _raceUiVisible.value = true
         serviceConnector()
     }
 
-    fun finishRace() {
+    override fun finishRace() {
         val currentState = _raceState.value
         if (currentState is RaceUiState.RaceGoing) {
             val addEndAvg = currentItems.filterIsInstance<PositionLine>().fold(0) { acc, it ->
@@ -426,7 +585,7 @@ class SectionViewModel(
         }
     }
 
-    fun undoFinishRace() {
+    override fun undoFinishRace() {
         val currentState = _raceState.value
         if (currentState is RaceUiState.Going && currentState.raceModelAtFinish != null) {
             val findLast = currentItems.filterIsInstance<PositionLine>().findLast {
@@ -457,7 +616,7 @@ class SectionViewModel(
         )
     }
 
-    fun stopRace() {
+    override fun stopRace() {
         service?.stopRace()
         val raceModelAtStop = (service?.raceState?.value as? RaceState.Stopped)?.raceModelAtStop
         database.insertEvent(
@@ -469,7 +628,7 @@ class SectionViewModel(
         )
     }
 
-    fun undoStopRace() {
+    override fun undoStopRace() {
         val stopDistance = (service?.raceState?.value as? RaceState.Stopped)?.raceModelAtStop?.currentDistance ?: DistanceKm.zero
         database.insertEvent(
             RaceEventKind.SECTION_UNDO_FINISH,
@@ -481,23 +640,23 @@ class SectionViewModel(
         service?.undoStop()
     }
 
-    fun resetRace() {
+    override fun resetRace() {
         service?.resetRace()
     }
 
-    fun setGoingForward(isGoingForward: Boolean) {
+    override fun setGoingForward(isGoingForward: Boolean) {
         service?.setDistanceGoingUp(isGoingForward)
     }
 
-    fun distanceCorrection(distanceKm: DistanceKm) {
+    override fun distanceCorrection(distanceKm: DistanceKm) {
         service?.distanceCorrection(distanceKm)
     }
-    
-    fun setRememberSpeed(speedKmh: SpeedKmh?) {
+
+    override fun setRememberSpeed(speedKmh: SpeedKmh?) {
         service?.setRememberSpeedLimit(speedKmh)
     }
 
-    fun leaveRaceMode() {
+    override fun leaveRaceMode() {
         if (_raceState.value is RaceUiState.RaceNotStarted) {
             service?.stopForeground(Service.STOP_FOREGROUND_REMOVE)
             service?.stopSelf()
@@ -512,7 +671,7 @@ class SectionViewModel(
 
         val item = items.find { it.lineNumber == index } ?: items.find { it.lineNumber.number == index.subNumber }
         val lineNumber = item?.lineNumber ?: LineNumber(1, 0)
-        _selectedLineNumber.value = lineNumber
+        _selectedLineIndex.value = lineNumber
 
         updateEditorConstraints()
 
@@ -564,7 +723,7 @@ class SectionViewModel(
         deletePosition(line)
     }
 
-    fun deletePosition(line: RoadmapInputLine) {
+    override fun deletePosition(line: RoadmapInputLine) {
         val lines = currentItems
         if (line !in lines) {
             return
@@ -576,7 +735,7 @@ class SectionViewModel(
 
     override fun selectNextItem() {
         val items = currentItems.toList()
-        val currentItemIndex = items.indexOfFirst { it.lineNumber == _selectedLineNumber.value }
+        val currentItemIndex = items.indexOfFirst { it.lineNumber == _selectedLineIndex.value }
         if (currentItemIndex != -1 && currentItemIndex != items.lastIndex) {
             selectLine(items[currentItemIndex + 1].lineNumber, null)
         }
@@ -584,7 +743,7 @@ class SectionViewModel(
 
     override fun selectPreviousItem() {
         val items = currentItems.toList()
-        val currentItemIndex = items.indexOfFirst { it.lineNumber == _selectedLineNumber.value }
+        val currentItemIndex = items.indexOfFirst { it.lineNumber == _selectedLineIndex.value }
         if (currentItemIndex != -1 && currentItemIndex != 0) {
             selectLine(items[currentItemIndex - 1].lineNumber, null)
         }
@@ -598,25 +757,13 @@ class SectionViewModel(
         createNewItem(1)?.let { viewModelScope.launch { selectLine(it, DataKind.Distance) } }
     }
 
-    fun setAllowance(timeAllowance: TimeAllowance?) {
-        viewModelScope.launch {
-            prefs.saveTimeAllowance(timeAllowance)
-        }
-    }
-    
-    fun setSpeedLimitPercent(value: String?) {
+    override fun setSpeedLimitPercent(value: String?) {
         viewModelScope.launch {
             prefs.saveSpeedLimitPercent(value)
         }
     }
 
-    fun setCalibration(calibration: Double) {
-        viewModelScope.launch {
-            prefs.saveCalibrationFactor(calibration)
-        }
-    }
-
-    fun deleteCharacter() {
+    override fun deleteCharacter() {
         currentItem?.let { item ->
             val editorFocus = _editorFocus.value
             val currentText = itemText(item, editorFocus.kind)
@@ -713,7 +860,7 @@ class SectionViewModel(
     }
 
     private val currentItem: PositionLine?
-        get() = currentItems.find { it.lineNumber == _selectedLineNumber.value } as? PositionLine
+        get() = currentItems.find { it.lineNumber == _selectedLineIndex.value } as? PositionLine
 
     private fun updateFocus(editorFocus: EditorFocus) {
         val focusWithSanitizedCursor = if (editorFocus.kind == DataKind.AstroTime) {
@@ -758,7 +905,7 @@ class SectionViewModel(
         }
     }
 
-    private val currentItems: Collection<RoadmapInputLine>
+    override val currentItems: Collection<RoadmapInputLine>
         get() = if (_editorState.value.isEnabled) {
             _inputPositions.value
         } else {
@@ -792,7 +939,7 @@ class SectionViewModel(
         val focus = _editorFocus.value
 
         val items = currentItems
-        val lineNumber = _selectedLineNumber.value
+        val lineNumber = _selectedLineIndex.value
 
         val itemIndex = items.indexOfFirst { it.lineNumber == lineNumber }
         val canMoveUp = if (itemIndex != -1) itemIndex != 0 else false
@@ -935,13 +1082,12 @@ class SectionViewModel(
             when (roadmapInputLine) {
                 is CommentLine -> roadmapInputLine.copy(lineNumber = lineNumber)
                 is PositionLine -> roadmapInputLine.copy(lineNumber = lineNumber)
-                else -> error("Unexpected line $roadmapInputLine")
             }
         }
 
     private fun createNewItem(positionRelativeToCurrent: Int): LineNumber? {
         val items = currentItems
-        val selectedIndex = items.indexOfFirst { it.lineNumber == _selectedLineNumber.value }
+        val selectedIndex = items.indexOfFirst { it.lineNumber == _selectedLineIndex.value }
         if (selectedIndex != -1) {
             val positions = recalculateLineNumbers(
                 items.take(selectedIndex + positionRelativeToCurrent) +
@@ -959,11 +1105,12 @@ class SectionViewModel(
         val avgSpeedInNewModifiers = newModifiers.any { it is SetAvg || it is EndAvg }
         return originalModifiers.filter { original ->
             newModifiers.none { new -> new::class == original::class }
+
                     && (!avgSpeedInNewModifiers || (original !is SetAvg && original !is EndAvg))
         } + newModifiers
     }
 
-    fun maybeCreateItemAtDistance(distanceKm: DistanceKm, forceCreateIfExists: Boolean, addModifiers: List<PositionLineModifier> = emptyList()): PositionLine {
+    override fun maybeCreateItemAtDistance(distanceKm: DistanceKm, forceCreateIfExists: Boolean, addModifiers: List<PositionLineModifier>): PositionLine {
         val roundedDistance = distanceKm.roundTo3Digits()
 
         val items = _inputPositions.value
@@ -1061,7 +1208,7 @@ class SectionViewModel(
     }
 
     private fun sanitizeSelection() {
-        val currentIndex = _selectedLineNumber.value
+        val currentIndex = _selectedLineIndex.value
         if (currentItems.any { it.lineNumber == currentIndex }) {
             return
         }
@@ -1078,22 +1225,129 @@ class SectionViewModel(
             }
         }
     }
+}
 
-    private fun positionLines(it: LoadState<Section>) = if (it is LoadState.Loaded) {
-        val result = parser.parseRoadmap(it.value.serializedPositions.reader()).filterIsInstance<PositionLine>()
-        if (result.isEmpty()) {
-            listOf(
-                PositionLine(
-                    DistanceKm(0.0),
-                    LineNumber(1, 0),
-                    listOf(SetAvgSpeed(SpeedKmh(60.0)))
-                ),
-                PositionLine(DistanceKm(1.0), LineNumber(2, 0), listOf()),
-            )
-        } else {
-            result
+class StreamedSectionViewModel : StatefulSectionViewModel(), RaceServiceHolder<TcpStreamedRaceService> {
+    override val viewModelScope: CoroutineScope
+        get() = (this as ViewModel).viewModelScope
+
+    private val _calibration = MutableStateFlow(1.0)
+
+    override val calibration: Flow<Double> get() = _calibration
+
+    private val _raceCurrentLineIndex = MutableStateFlow<LineNumber?>(null)
+    override val raceCurrentLineIndex: Flow<LineNumber?> get() = _raceCurrentLineIndex
+
+    private val _raceState = MutableStateFlow<RaceUiState>(RaceUiState.RaceNotStarted)
+    override val raceState: Flow<RaceUiState> get() = _raceState
+
+    private val _speedLimitPercent = MutableStateFlow<String?>(null)
+    override val speedLimitPercent: Flow<String?> get() = _speedLimitPercent
+
+    private val _timeAllowance = MutableStateFlow<TimeAllowance?>(null)
+    override val timeAllowance: Flow<TimeAllowance?> get() = _timeAllowance
+
+    @SuppressLint("StaticFieldLeak")
+    private var service: TcpStreamedRaceService? = null
+
+    private var serviceRelatedJob: Job? = null
+    private var serviceConnector: () -> Unit = { error("no connector") }
+    private var serviceDisconnector: () -> Unit = { error("no disconnector") }
+
+    init {
+        subInitComplete()
+    }
+
+    override fun setRaceServiceConnector(connector: () -> Unit) {
+        serviceConnector = connector
+    }
+
+    override fun setRaceServiceDisconnector(disconnector: () -> Unit) {
+        serviceDisconnector = disconnector
+    }
+
+    override fun onServiceConnected(raceService: TcpStreamedRaceService) {
+        service = raceService
+        _raceUiVisible.value = true
+        serviceRelatedJob = viewModelScope.launch {
+            viewModelScope.launch {
+                service?.telemetryPublicState?.collectLatest { teleState ->
+                    _telemetryState.value = teleState
+                }
+            }
+            viewModelScope.launch {
+                service?.section?.collectLatest {
+                    _section.value = it?.let { LoadState.Loaded(it) } ?: LoadState.EMPTY
+                }
+            }
+            viewModelScope.launch {
+                service?.positions?.collectLatest {
+                    _inputPositions.value = it.orEmpty()
+                    _preprocessedPositions.value = it.orEmpty()
+                }
+            }
+            viewModelScope.launch {
+                service?.currentLine?.collectLatest {
+                    _selectedLineIndex.value = it
+                }
+            }
+            viewModelScope.launch {
+                service?.currentRaceLine?.collectLatest {
+                    _raceCurrentLineIndex.value = it
+                }
+            }
+            viewModelScope.launch {
+                service?.raceState?.collectLatest {
+                    _raceState.value = raceStateToUiState(it)
+                }
+            }
+            viewModelScope.launch {
+                service?.rememberSpeedLimit?.collectLatest {
+                    _rememberSpeed.value = it
+                }
+            }
         }
-    } else {
-        emptyList()
+    }
+
+    private fun raceStateToUiState(
+        raceState: RaceState
+    ): RaceUiState = when (raceState) {
+        is RaceState.InRace, is RaceState.Going -> {
+            raceState as RaceState.HasCurrentSection
+            when (raceState) {
+                is RaceState.Going -> RaceUiState.Going(
+                    raceState.raceModel,
+                    raceState.finishedRaceModel,
+                    raceState.finishedAt,
+                    0L
+                )
+
+                is RaceState.InRace -> RaceUiState.RaceGoing(
+                    raceState.raceModel,
+                    0L,
+                    raceState.previousFinishAt,
+                    raceState.previousFinishModel,
+                    raceState.goingModel
+                )
+            }
+        }
+
+        RaceState.NotStarted -> RaceUiState.RaceNotStarted
+        is RaceState.Stopped -> RaceUiState.Stopped(raceState.stoppedAt, raceState.raceModelAtStop, raceState.finishedAt, raceState.finishedModel)
+    }
+
+    override fun onServiceDisconnected() {
+        service = null
+        _raceState.value = RaceUiState.NoRaceServiceConnection
+        serviceRelatedJob?.cancel()
+        _raceUiVisible.value = false
+    }
+
+    fun dispose() {
+        service?.stopForeground(Service.STOP_FOREGROUND_REMOVE)
+        service?.stopSelf()
+        serviceDisconnector()
+        _raceUiVisible.value = false
+        _raceState.value = RaceUiState.NoRaceServiceConnection
     }
 }
