@@ -373,7 +373,9 @@ class PersistedSectionViewModel(
                             }
                         }
                     }
+                    val old = _raceState.value
                     _raceState.value = raceStateToUiState(newState)
+                    handleRaceStatesDelta(old, _raceState.value)
                 }
             }
             launch {
@@ -403,6 +405,30 @@ class PersistedSectionViewModel(
             }
         }
     }
+
+    private fun handleRaceStatesDelta(old: RaceUiState, new: RaceUiState) {
+        if (old is RaceUiState.RaceGoing && new is RaceUiState.RaceGoing && !old.raceModel.distanceGoingUp && !new.raceModel.distanceGoingUp &&
+            new.raceModel.currentDistance >= new.raceModel.startAtDistance
+            ) {
+            val range = listOf(old.raceModel.currentDistance, new.raceModel.currentDistance).sorted().let { (from, to) -> from..to }
+            val removeThenAvgFrom = currentItems.filterIsInstance<PositionLine>().filter { it.atKm in range && it.modifier<ThenAvgSpeed>() != null }
+            removeThenAvgFrom.forEach { item ->
+                removeModifiersFromItem(item) { it is ThenAvgSpeed }
+            }
+        }
+    }
+
+    private fun removeModifiersFromItem(
+        item: PositionLine,
+        removePredicate: (PositionLineModifier) -> Boolean
+    ): PositionLine {
+        val indexOfItem = _inputPositions.value.indexOf(item)
+        return updateInputPositionAt(
+            _inputPositions.value[indexOfItem].lineNumber,
+            item.copy(modifiers = item.modifiers.filterNot(removePredicate))
+        )
+    }
+
 
     override fun onServiceDisconnected() {
         service = null
@@ -1074,7 +1100,7 @@ class PersistedSectionViewModel(
             item.copy(modifiers = addOrReplaceModifiers(item.modifiers, modifiersToAdd))
         )
     }
-
+    
     private fun recalculateLineNumbers(lines: Collection<RoadmapInputLine>) =
         lines.mapIndexed { index, roadmapInputLine ->
             val lineNumber = LineNumber(index + 1, 0)
@@ -1245,7 +1271,7 @@ class StreamedSectionViewModel : StatefulSectionViewModel(), RaceServiceHolder<T
 
     private val _timeAllowance = MutableStateFlow<TimeAllowance?>(null)
     override val timeAllowance: Flow<TimeAllowance?> get() = _timeAllowance
-
+    
     @SuppressLint("StaticFieldLeak")
     private var service: TcpStreamedRaceService? = null
 
