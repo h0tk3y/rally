@@ -4,7 +4,6 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,30 +20,24 @@ import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Button
 import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.Divider
-import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
-import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Slider
 import androidx.compose.material.Surface
 import androidx.compose.material.Text
 import androidx.compose.material.TextButton
-import androidx.compose.material.TextFieldDefaults.TextFieldDecorationBox
-import androidx.compose.material.TextFieldDefaults.indicatorLine
-import androidx.compose.material.TextFieldDefaults.textFieldColors
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.automirrored.rounded.Undo
 import androidx.compose.material.icons.rounded.ArrowOutward
 import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.Cancel
+import androidx.compose.material.icons.rounded.Clear
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ControlPoint
 import androidx.compose.material.icons.rounded.Done
@@ -55,7 +48,6 @@ import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -66,33 +58,25 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.text.input.TransformedText
-import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.h0tk3y.rally.BuildConfig
 import com.h0tk3y.rally.DistanceKm
 import com.h0tk3y.rally.PositionLine
 import com.h0tk3y.rally.PositionLineModifier
-import com.h0tk3y.rally.android.racecervice.RaceService
 import com.h0tk3y.rally.SpeedKmh
 import com.h0tk3y.rally.TimeDistanceLocalizer
 import com.h0tk3y.rally.TimeHr
 import com.h0tk3y.rally.TimeMinSec
-import com.h0tk3y.rally.android.scenes.SectionViewModel
-import com.h0tk3y.rally.android.scenes.SectionViewModel.RaceUiState.RaceNotStarted
+import com.h0tk3y.rally.android.racecervice.TelemetryPublicState
+import com.h0tk3y.rally.android.scenes.RaceModelControls
+import com.h0tk3y.rally.android.scenes.RaceUiState
+import com.h0tk3y.rally.android.scenes.RaceUiState.RaceNotStarted
 import com.h0tk3y.rally.android.scenes.TimeAllowance
 import com.h0tk3y.rally.android.theme.LocalCustomColorsPalette
 import com.h0tk3y.rally.android.theme.LocalCustomTypography
@@ -116,29 +100,21 @@ import kotlin.time.Duration.Companion.hours
 
 @Composable
 fun RaceView(
-    race: SectionViewModel.RaceUiState,
+    race: RaceUiState,
     distanceLocalizer: TimeDistanceLocalizer?,
     sectionDistanceLocalizer: TimeDistanceLocalizer?,
-    btState: RaceService.BtPublicState,
-    macAddressInPreferences: String?,
-    updateMacAddress: (String?) -> Unit,
+    telemetryState: TelemetryPublicState,
     speedLimitPercent: String?,
-    setSpeedLimitPercent: (String?) -> Unit,
     selectedPosition: PositionLine?,
-    onStartRace: (option: StartOption) -> Unit,
-    onFinishRace: () -> Unit,
-    onUndoFinishRace: () -> Unit,
-    onStopRace: () -> Unit,
-    onUndoStopRace: () -> Unit,
-    onResetRace: () -> Unit,
-    distanceCorrection: (DistanceKm) -> Unit,
-    onSetGoingForward: (Boolean) -> Unit,
-    onSetDebugSpeed: (Int) -> Unit,
     navigateToSection: (Long) -> Unit,
-    goToEventLog: () -> Unit,
+    goToEventLog: (() -> Unit)?,
+    goToSettings: () -> Unit,
     modifier: Modifier,
     addPositionMaybeWithSpeed: (SpeedKmh?) -> Unit,
-    allowance: TimeAllowance?
+    allowance: TimeAllowance?,
+    rememberSpeed: SpeedKmh?,
+    setDebugSpeed: (Int) -> Unit,
+    raceControls: RaceModelControls?
 ) {
     val time by produceState(Clock.System.now()) {
         while (true) {
@@ -151,31 +127,38 @@ fun RaceView(
         }
     }
 
-    VolumeKeyHandler(onVolumeUp = { distanceCorrection(DistanceKm(0.01)) }, onVolumeDown = { distanceCorrection(DistanceKm(-0.01)) }) {
+    var showRememberedSpeedControls by remember { mutableStateOf(false) }
+    
+    WithVolumeControlsIfAvailable(raceControls) {
         Surface(modifier.padding(4.dp)) {
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                InRaceEditorControls(
+                MoreRaceControls(
+                    race is RaceUiState.Going,
+                    raceControls,
+                    telemetryState,
                     onAddPositionAtCurrentDistance = { addPositionMaybeWithSpeed(null) },
-                    onGoToEventLog = { goToEventLog() }
+                    onGoToEventLog = goToEventLog,
+                    onGoToSettings = goToSettings,
+                    switchRememberedSpeedControls = {
+                        if (race is RaceUiState.Going)
+                            showRememberedSpeedControls = !showRememberedSpeedControls
+                    },
+                    rememberSpeed
                 )
-                BtStatus(btState, macAddressInPreferences, updateMacAddress)
-                RaceStatus(race, time, onSetGoingForward, distanceLocalizer, sectionDistanceLocalizer, distanceCorrection, allowance, selectedPosition)
-                RaceControls(
-                    race,
-                    selectedPosition,
-                    onStartRace,
-                    onFinishRace,
-                    onUndoFinishRace,
-                    onStopRace,
-                    onUndoStopRace,
-                    onResetRace,
-                    navigateToSection,
-                    addPositionMaybeWithSpeed,
-                    speedLimitPercent,
-                    setSpeedLimitPercent
-                )
-                if (BuildConfig.DEBUG) {
-                    DebugSpeedSlider(onSetDebugSpeed)
+                RaceStatus(race, time, raceControls, distanceLocalizer, sectionDistanceLocalizer, allowance, selectedPosition)
+                if (raceControls != null) {
+                    RaceControls(
+                        race,
+                        showRememberedSpeedControls,
+                        selectedPosition,
+                        navigateToSection,
+                        speedLimitPercent,
+                        raceControls,
+                        addPositionMaybeWithSpeed
+                    )
+                }
+                if (telemetryState == TelemetryPublicState.Simulation) {
+                    DebugSpeedSlider(setDebugSpeed, (race as? RaceUiState.HasRaceModel)?.raceModel?.instantSpeed)
                 }
             }
         }
@@ -183,17 +166,50 @@ fun RaceView(
 }
 
 @Composable
-private fun InRaceEditorControls(
+private fun WithVolumeControlsIfAvailable(raceModelControls: RaceModelControls?, content: @Composable () -> Unit) {
+    if (raceModelControls != null) {
+        VolumeKeyHandler(
+            onVolumeUp = { raceModelControls.distanceCorrection(DistanceKm(0.01)) },
+            onVolumeDown = { raceModelControls.distanceCorrection(DistanceKm(-0.01)) }
+        ) {
+            content()
+        }
+    } else {
+        content()
+    }
+}
+
+@Composable
+private fun MoreRaceControls(
+    canRememberSpeed: Boolean,
+    raceModelControls: RaceModelControls?,
+    telemetryState: TelemetryPublicState,
     onAddPositionAtCurrentDistance: () -> Unit,
-    onGoToEventLog: () -> Unit
+    onGoToEventLog: (() -> Unit)?,
+    onGoToSettings: () -> Unit,
+    switchRememberedSpeedControls: () -> Unit,
+    rememberSpeed: SpeedKmh?
 ) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        IconButton(onClick = { onAddPositionAtCurrentDistance() }) {
-            Icon(Icons.Rounded.ControlPoint, contentDescription = "Add passed position")
+        if (raceModelControls != null) {
+            IconButton(onClick = { onAddPositionAtCurrentDistance() }) {
+                Icon(Icons.Rounded.ControlPoint, contentDescription = "Add passed position")
+            }
+        }
+        SpeedLimitLikeButton(
+            label = rememberSpeed?.valueKmh?.roundToInt()?.toString() ?: "v",
+            isEnabled = canRememberSpeed,
+            size = 28.dp,
+            MaterialTheme.typography.caption
+        ) {
+            switchRememberedSpeedControls()
         }
         Spacer(Modifier.weight(1f))
-        IconButton(onClick = { onGoToEventLog() }) {
-            Icon(Icons.Rounded.History, contentDescription = "Event log")
+        TelemetryStatus(telemetryState, onGoToSettings)
+        if (onGoToEventLog != null) {
+            IconButton(onClick = { onGoToEventLog() }) {
+                Icon(Icons.Rounded.History, contentDescription = "Event log")
+            }
         }
     }
 
@@ -208,102 +224,93 @@ private fun RaceViewElement(modifier: Modifier = Modifier, content: @Composable 
 }
 
 @Composable
-private fun BtStatus(btPublicState: RaceService.BtPublicState, macAddressInPreferences: String?, updateMacAddress: (String?) -> Unit) {
-    var isEditingMacAddress by remember { mutableStateOf(false) }
+private fun TelemetryStatus(
+    telemetryPublicState: TelemetryPublicState,
+    goToSettings: () -> Unit
+) {
+    RaceViewElement(Modifier.clickable(onClick = { goToSettings() })) {
+        val text = when (telemetryPublicState) {
+            TelemetryPublicState.NotInitialized -> "Telemetry not initialized"
+            TelemetryPublicState.BtConnecting -> "OBD: connecting…"
 
-    if (isEditingMacAddress) {
-        var text by rememberSaveable(macAddressInPreferences) { mutableStateOf(macAddressInPreferences) }
-        RaceViewElement {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    text.orEmpty(),
-                    onValueChange = {
-                        text = it
-                    },
-                    label = { Text("Bluetooth MAC address") }
-                )
-                IconButton(onClick = {
-                    updateMacAddress(text)
-                    isEditingMacAddress = false
-                }) {
-                    Icon(Icons.Rounded.Done, "Apply")
-                }
-            }
+            TelemetryPublicState.BtReconnecting -> "OBD: reconnecting…"
+
+            TelemetryPublicState.BtNoPermissions -> "OBD: permissions!"
+            TelemetryPublicState.BtNoTargetMacAddress -> "OBD: no MAC!"
+
+            TelemetryPublicState.BtWorking -> "OBD ✔"
+            TelemetryPublicState.Simulation -> "Simulation ✔"
+            is TelemetryPublicState.ReceivesStream -> 
+                "Data " + (if (telemetryPublicState.isDelayed) "???" else "✔")
+
+            TelemetryPublicState.WaitingForStream -> "Data: waiting"
         }
-    } else {
-        RaceViewElement(Modifier.clickable(onClick = {
-            isEditingMacAddress = true
-        })) {
-            val text = when (btPublicState) {
-                RaceService.BtPublicState.Connecting -> "connecting..."
-                RaceService.BtPublicState.NoPermissions -> "lacking permissions"
-                RaceService.BtPublicState.NoTargetMacAddress -> "click here to set the MAC"
-                RaceService.BtPublicState.NotInitialized -> "not initialized"
-                RaceService.BtPublicState.Reconnecting -> "reconnecting..."
-                RaceService.BtPublicState.Working -> "OK"
+        val color = when (telemetryPublicState) {
+            is TelemetryPublicState.ReceivesStream -> {
+                if (telemetryPublicState.isDelayed) LocalCustomColorsPalette.current.warning else Color.Unspecified
             }
-            val color = when (btPublicState) {
-                RaceService.BtPublicState.Working -> Color.Unspecified
-                RaceService.BtPublicState.Connecting,
-                RaceService.BtPublicState.NoPermissions,
-                RaceService.BtPublicState.NoTargetMacAddress,
-                RaceService.BtPublicState.NotInitialized,
-                RaceService.BtPublicState.Reconnecting -> LocalCustomColorsPalette.current.warning
-            }
-            Text("OBD: $text", color = color)
+            TelemetryPublicState.BtWorking -> Color.Unspecified
+
+            TelemetryPublicState.BtConnecting,
+            TelemetryPublicState.BtNoPermissions,
+            TelemetryPublicState.BtNoTargetMacAddress,
+            TelemetryPublicState.NotInitialized,
+            TelemetryPublicState.WaitingForStream,
+            TelemetryPublicState.BtReconnecting -> LocalCustomColorsPalette.current.warning
+
+            TelemetryPublicState.Simulation -> LocalCustomColorsPalette.current.warning
         }
+        Text(text, color = color)
     }
 }
 
 
 @Composable
 private fun RaceStatus(
-    race: SectionViewModel.RaceUiState,
+    race: RaceUiState,
     time: Instant,
-    onSetGoingForward: (Boolean) -> Unit,
+    raceControls: RaceModelControls?,
     distanceLocalizer: TimeDistanceLocalizer?,
     sectionDistanceLocalizer: TimeDistanceLocalizer?,
-    distanceCorrection: (DistanceKm) -> Unit,
     allowance: TimeAllowance?,
     selectedPosition: PositionLine?
 ) {
     val actualTime = maxOf(time, Clock.System.now())
 
-    if (race is SectionViewModel.RaceUiState.Going || race is SectionViewModel.RaceUiState.RaceGoing) {
+    if (race is RaceUiState.Going || race is RaceUiState.RaceGoing) {
         KeepScreenOn()
     }
 
     RaceViewElement {
         when (race) {
-            SectionViewModel.RaceUiState.NoRaceServiceConnection -> Text("Not connected to race service")
-            is SectionViewModel.RaceUiState.RaceGoing -> {
+            RaceUiState.NoRaceServiceConnection -> Text("Not connected to race service")
+            is RaceUiState.RaceGoing -> {
                 Column {
                     if (race.lastFinishAt != null && race.lastFinishModel != null) {
                         Text("Finished: ${raceTimeDistanceString(race.lastFinishAt, race.lastFinishModel)}")
                     }
                     RaceTimeDistance(
-                        actualTime, race.raceModel, selectedPosition, isSectionTime = false, onSetGoingForward, distanceCorrection, distanceLocalizer, allowance
+                        actualTime, race.raceModel, selectedPosition, isSectionTime = false, raceControls, distanceLocalizer, allowance
                     )
                     RaceSpeed(actualTime, race)
                 }
             }
 
-            is SectionViewModel.RaceUiState.Going -> {
+            is RaceUiState.Going -> {
                 Column {
                     if (race.finishedAt != null && race.raceModelAtFinish != null) {
                         Text("Finished: ${raceTimeDistanceString(race.finishedAt, race.raceModelAtFinish)}")
                     }
                     RaceTimeDistance(
-                        actualTime, race.raceModel, selectedPosition, isSectionTime = true,
-                        onSetGoingForward, distanceCorrection, sectionDistanceLocalizer, allowance
+                        actualTime, race.raceModel, selectedPosition, isSectionTime = true, raceControls, sectionDistanceLocalizer, allowance
                     )
                     GoingSpeed(race)
                 }
             }
 
-            is SectionViewModel.RaceUiState.RaceGoingInAnotherSection -> Text("Race going in another section")
+            is RaceUiState.RaceGoingInAnotherSection -> Text("Race going in another section")
             RaceNotStarted -> Text("Race not started")
-            is SectionViewModel.RaceUiState.Stopped -> Column {
+            is RaceUiState.Stopped -> Column {
                 if (race.finishedAt != null && race.raceModelAtFinish != null) {
                     Text("Finished, ${raceTimeDistanceString(race.finishedAt, race.raceModelAtFinish)}")
                 }
@@ -319,8 +326,7 @@ private fun RaceTimeDistance(
     race: RaceModel,
     selectedPosition: PositionLine?,
     isSectionTime: Boolean,
-    onSetGoingForward: (Boolean) -> Unit,
-    distanceCorrection: (DistanceKm) -> Unit,
+    raceControls: RaceModelControls?,
     distanceLocalizer: TimeDistanceLocalizer?,
     allowance: TimeAllowance?
 ) {
@@ -381,23 +387,27 @@ private fun RaceTimeDistance(
             }
             TextButton(
                 onClick = {
-                    hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
-                    onSetGoingForward(!race.distanceGoingUp)
+                    if (raceControls != null) {
+                        hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                        raceControls.setGoingForward(!race.distanceGoingUp)
+                    }
                 },
                 colors = ButtonDefaults.buttonColors(if (!race.distanceGoingUp) LocalCustomColorsPalette.current.dangerous else Color.Unspecified)
             ) {
                 Icon(Icons.AutoMirrored.Default.Undo, "Switch direction")
             }
             Spacer(Modifier.weight(1.0f))
-            TextButton(onClick = {
-                hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
-                distanceCorrection(DistanceKm(-0.1))
-            }) { Text("-0.1", color = MaterialTheme.colors.onSurface, style = LocalCustomTypography.current.raceControlButton) }
-            TextButton(onClick = {
-                hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
-                distanceCorrection(DistanceKm(0.1))
-            }) { Text("+0.1", color = MaterialTheme.colors.onSurface, style = LocalCustomTypography.current.raceControlButton) }
-        } else {
+            if (raceControls != null) {
+                TextButton(onClick = {
+                    hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                    raceControls.distanceCorrection(DistanceKm(-0.1))
+                }) { Text("-0.1", color = MaterialTheme.colors.onSurface, style = LocalCustomTypography.current.raceControlButton) }
+                TextButton(onClick = {
+                    hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                    raceControls.distanceCorrection(DistanceKm(0.1))
+                }) { Text("+0.1", color = MaterialTheme.colors.onSurface, style = LocalCustomTypography.current.raceControlButton) }
+            }
+        } else if (raceControls != null) {
             val text = rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue(distanceString(race.currentDistance))) }
             val focusRequester = FocusRequester()
             SmallNumberTextField(Modifier, text, { }, "0.000", null, focusRequester = focusRequester)
@@ -405,7 +415,7 @@ private fun RaceTimeDistance(
             IconButton(
                 enabled = text.value.text.toDoubleOrNull() != null,
                 onClick = {
-                    distanceCorrection(DistanceKm(text.value.text.toDouble()) - race.currentDistance)
+                    raceControls.distanceCorrection(DistanceKm(text.value.text.toDouble()) - race.currentDistance)
                     isEditing = false
                 }) {
                 Icon(Icons.Rounded.Done, "Apply")
@@ -422,7 +432,7 @@ private fun RaceTimeDistance(
             if (selectedPosition != null) {
                 TextButton({
                     hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
-                    distanceCorrection(selectedPosition.atKm - race.currentDistance)
+                    raceControls.distanceCorrection(selectedPosition.atKm - race.currentDistance)
                     isEditing = false
                 }) { Text("Set to position ${selectedPosition.atKm.valueKm.strRound3()}") }
             }
@@ -431,7 +441,7 @@ private fun RaceTimeDistance(
 }
 
 @Composable
-private fun RaceSpeed(time: Instant, race: SectionViewModel.RaceUiState.RaceGoing) {
+private fun RaceSpeed(time: Instant, race: RaceUiState.RaceGoing) {
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Absolute.SpaceBetween) {
         Text("v=${race.raceModel.instantSpeed.valueKmh.roundToInt()}/h", style = LocalCustomTypography.current.raceIndicatorText)
         Text("ṽ=${race.raceModel.averageSpeed(time).valueKmh.strRound1()}/h", style = LocalCustomTypography.current.raceIndicatorText)
@@ -439,7 +449,7 @@ private fun RaceSpeed(time: Instant, race: SectionViewModel.RaceUiState.RaceGoin
 }
 
 @Composable
-private fun GoingSpeed(race: SectionViewModel.RaceUiState.Going) {
+private fun GoingSpeed(race: RaceUiState.Going) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Absolute.SpaceBetween) {
         Text("v=${race.raceModel.instantSpeed.valueKmh.roundToInt()}/h", style = LocalCustomTypography.current.raceIndicatorText)
     }
@@ -465,85 +475,97 @@ data class StartOption(val locationAndTime: StartLocationAndTime, val isRace: Bo
     data object StartAtSelectedPositionAtTime : StartLocationAndTime
     data object StartAtSelectedPositionAtTimeKeepOdo : StartLocationAndTime
     data object StartNowFromGoingState : StartLocationAndTime
-
 }
 
 @Composable
 private fun RaceControls(
-    race: SectionViewModel.RaceUiState,
+    race: RaceUiState,
+    showRememberedSpeedControls: Boolean,
     selectedPosition: PositionLine?,
-    onStartRace: (option: StartOption) -> Unit,
-    onFinishRace: () -> Unit,
-    onUndoFinishRace: () -> Unit,
-    onStopRace: () -> Unit,
-    onUndoStopRace: () -> Unit,
-    onResetRace: () -> Unit,
     navigateToSection: (Long) -> Unit,
-    applyLimit: (SpeedKmh?) -> Unit,
     speedLimitPercent: String?,
-    setSpeedLimitPercent: (String?) -> Unit
+    raceControls: RaceModelControls,
+    addPositionMaybeWithSpeed: (SpeedKmh?) -> Unit
 ) {
     val hapticFeedback = LocalHapticFeedback.current
     when (race) {
         RaceNotStarted -> {
-            GoRow(selectedPosition, hapticFeedback, onStartRace, keepOdo = false)
-            RaceRow(selectedPosition, hapticFeedback, onStartRace, keepOdo = false)
+            GoRow(selectedPosition, hapticFeedback, raceControls::startRace, keepOdo = false)
+            RaceRow(selectedPosition, hapticFeedback, raceControls::startRace, keepOdo = false)
         }
 
-        is SectionViewModel.RaceUiState.RaceGoing -> {
+        is RaceUiState.RaceGoing -> {
             RaceViewElement {
-                NewSpeedLimits(applyLimit, speedLimitPercent, setSpeedLimitPercent)
+                NewSpeedLimits(
+                    false,
+                    {
+                        raceControls.setRememberSpeed(it)
+                        addPositionMaybeWithSpeed(it)
+                    },
+                    speedLimitPercent,
+                    raceControls::setSpeedLimitPercent
+                )
             }
             RaceViewElement {
                 StateSwitchButtonsRow {
-                    FinishRace(onFinishRace)
+                    FinishRace(raceControls::finishRace)
                     FinishAndStartRace {
-                        onFinishRace()
-                        onStartRace(StartOption(StartOption.StartNowFromGoingState, true))
+                        raceControls.finishRace()
+                        raceControls.startRace(StartOption(StartOption.StartNowFromGoingState, true))
                     }
                 }
             }
         }
 
-        is SectionViewModel.RaceUiState.RaceGoingInAnotherSection -> {
+        is RaceUiState.RaceGoingInAnotherSection -> {
             RaceViewElement {
                 StateSwitchButtonsRow {
                     Button(onClick = { navigateToSection(race.raceSectionId) }) {
                         Icon(Icons.Rounded.ArrowOutward, "Go to section")
                         Text("Go to race section")
                     }
-                    Reset(onResetRace)
+                    Reset(raceControls::resetRace)
                 }
             }
         }
 
-        SectionViewModel.RaceUiState.NoRaceServiceConnection -> Unit
+        RaceUiState.NoRaceServiceConnection -> Unit
 
-        is SectionViewModel.RaceUiState.Stopped -> {
-            GoRow(selectedPosition, hapticFeedback, onStartRace, keepOdo = true)
-            RaceRow(selectedPosition, hapticFeedback, onStartRace, keepOdo = true)
+        is RaceUiState.Stopped -> {
+            GoRow(selectedPosition, hapticFeedback, raceControls::startRace, keepOdo = true)
+            RaceRow(selectedPosition, hapticFeedback, raceControls::startRace, keepOdo = true)
             RaceViewElement {
                 StateSwitchButtonsRow {
                     Button({
                         hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onUndoStopRace()
+                        raceControls.undoStopRace()
                     }) {
                         Icon(Icons.AutoMirrored.Rounded.Undo, "Undo stop")
                         Text("Undo stop")
                     }
-                    Reset(onResetRace)
+                    Reset(raceControls::resetRace)
                 }
             }
         }
 
-        is SectionViewModel.RaceUiState.Going -> {
-            StartOrNextRaceRow(race, hapticFeedback, onStartRace, selectedPosition)
+        is RaceUiState.Going -> {
+            if (showRememberedSpeedControls) {
+                RaceViewElement {
+                    NewSpeedLimits(
+                        withClearButton = true,
+                        applyLimit = { raceControls.setRememberSpeed(it) },
+                        percent = speedLimitPercent,
+                        onPercentChange = raceControls::setSpeedLimitPercent
+                    )
+                }
+            }
+            StartOrNextRaceRow(race, hapticFeedback, raceControls::startRace, selectedPosition)
             RaceViewElement {
                 StateSwitchButtonsRow {
                     if (race.finishedAt != null && race.raceModelAtFinish != null) {
-                        UndoFinish(onUndoFinishRace)
+                        UndoFinish(raceControls::undoFinishRace)
                     }
-                    StopRace(onStopRace)
+                    StopRace(raceControls::stopRace)
                 }
             }
         }
@@ -552,7 +574,7 @@ private fun RaceControls(
 
 @Composable
 private fun StartOrNextRaceRow(
-    race: SectionViewModel.RaceUiState.Going,
+    race: RaceUiState.Going,
     hapticFeedback: HapticFeedback,
     onStartRace: (option: StartOption) -> Unit,
     selectedPosition: PositionLine?
@@ -731,7 +753,12 @@ private fun deltaDistanceString(distance: DistanceKm) = (if (distance.valueKm > 
 private val speedLimitValues: List<Int> = listOf(5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110)
 
 @Composable
-private fun NewSpeedLimits(applyLimit: (SpeedKmh?) -> Unit, percent: String?, onPercentChange: (String?) -> Unit) {
+private fun NewSpeedLimits(
+    withClearButton: Boolean,
+    applyLimit: (SpeedKmh?) -> Unit,
+    percent: String?,
+    onPercentChange: (String?) -> Unit
+) {
     // Hold the full TextFieldValue (text + selection) locally.
     val textFieldValue = remember { mutableStateOf(TextFieldValue(text = percent.orEmpty())) }
 
@@ -747,6 +774,11 @@ private fun NewSpeedLimits(applyLimit: (SpeedKmh?) -> Unit, percent: String?, on
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 CustomSpeedLimitInput("=/h →", { it }, applyLimit)
                 Spacer(Modifier.size(2.dp))
+                if (withClearButton) {
+                    IconButton(onClick = { applyLimit(null) }) {
+                        Icon(Icons.Rounded.Clear, "Clear")
+                    }
+                }
                 Divider(
                     Modifier
                         .height(45.dp)
@@ -789,93 +821,6 @@ private fun NewSpeedLimits(applyLimit: (SpeedKmh?) -> Unit, percent: String?, on
     }
 }
 
-@OptIn(ExperimentalMaterialApi::class)
-@Composable
-private fun SmallNumberTextField(
-    modifier: Modifier,
-    text: MutableState<TextFieldValue>,
-    onChange: (TextFieldValue) -> Unit = { },
-    placeholderString: String?,
-    suffix: String?,
-    focusRequester: FocusRequester = FocusRequester(),
-    isAllowMinus: Boolean = false
-) {
-    val source = remember { MutableInteractionSource() }
-
-    BasicTextField(
-        value = text.value,
-        onValueChange = { it: TextFieldValue ->
-            text.value = it.copy(text = it.text.filter { char -> char.isDigit() || char == '.' || isAllowMinus && char == '-' })
-            onChange(it)
-        },
-        textStyle = TextStyle(brush = SolidColor(MaterialTheme.colors.onSurface)).plus(LocalCustomTypography.current.raceEditableValue),
-        cursorBrush = SolidColor(MaterialTheme.colors.onSurface),
-        modifier = modifier
-            .indicatorLine(
-                enabled = true,
-                isError = text.value.text.let { it.isNotEmpty() && it.toDoubleOrNull() == null },
-                interactionSource = source,
-                colors = textFieldColors(backgroundColor = Color.Transparent),
-                focusedIndicatorLineThickness = 2.dp,
-                unfocusedIndicatorLineThickness = 2.dp
-            )
-            .focusRequester(focusRequester)
-            .onFocusChanged { if (it.isFocused) text.value = TextFieldValue(text.value.text, TextRange(0, text.value.text.length)) }
-            .height(45.dp)
-            .width(70.dp),
-        interactionSource = source,
-        visualTransformation = if (text.value.text.isEmpty())
-            VisualTransformation.None
-        else if (suffix != null) SuffixTransformation(suffix) else VisualTransformation.None,
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-        enabled = true,
-        singleLine = true,
-        decorationBox = {
-            TextFieldDecorationBox(
-                value = text.value.text,
-                isError = text.value.text.let { it.isNotEmpty() && it.toDoubleOrNull() == null },
-                innerTextField = it,
-                singleLine = true,
-                enabled = true,
-                visualTransformation = VisualTransformation.None,
-                placeholder = {
-                    if (placeholderString != null) {
-                        Text(
-                            text = placeholderString,
-                            style = LocalCustomTypography.current.raceEditableValue,
-                        )
-                    }
-                },
-                colors = textFieldColors(backgroundColor = Color.Transparent),
-                interactionSource = source,
-                contentPadding = PaddingValues(4.dp, 0.dp)
-            )
-        }
-    )
-}
-
-private class SuffixTransformation(val suffix: String) : VisualTransformation {
-    override fun filter(text: AnnotatedString): TransformedText {
-
-        val result = text + AnnotatedString(suffix)
-
-        val textWithSuffixMapping = object : OffsetMapping {
-            override fun originalToTransformed(offset: Int): Int {
-                return offset
-            }
-
-            override fun transformedToOriginal(offset: Int): Int {
-                if (text.isEmpty()) return 0
-                if (offset >= text.length) return text.length
-                return offset
-            }
-        }
-
-        return TransformedText(result, textWithSuffixMapping)
-    }
-}
-
-
 @Composable
 private fun CustomSpeedLimitInput(placeholder: String, mapSpeed: (Double) -> Double, applyLimit: (SpeedKmh?) -> Unit) {
     val exactNumber = rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue("")) }
@@ -890,16 +835,40 @@ private fun CustomSpeedLimitInput(placeholder: String, mapSpeed: (Double) -> Dou
 
 @Composable
 private fun SpeedLimitButton(label: String, limit: Double?, applyLimit: (SpeedKmh?) -> Unit) {
+    SpeedLimitLikeButton(
+        label,
+        isEnabled = true,
+        speedLimitButtonSize,
+        LocalCustomTypography.current.raceControlButton
+    ) {
+        applyLimit(limit?.let(::SpeedKmh))
+    }
+}
+
+@Composable
+private fun SpeedLimitLikeButton(
+    label: String,
+    isEnabled: Boolean,
+    size: Dp,
+    typography: TextStyle,
+    onClick: () -> Unit
+) {
     TextButton(
         modifier = Modifier
-            .size(speedLimitButtonSize)
-            .border(BorderStroke(4.dp, LocalCustomColorsPalette.current.speedLimit), CircleShape),
+            .border(
+                BorderStroke(
+                    (size.value / 10).dp,
+                    LocalCustomColorsPalette.current.speedLimit
+                ), CircleShape
+            )
+            .size(size),
+        enabled = isEnabled,
         shape = CircleShape,
         contentPadding = PaddingValues(0.dp),
         colors = ButtonDefaults.buttonColors(backgroundColor = Color.Transparent),
-        onClick = { applyLimit(limit?.let(::SpeedKmh)) })
-    {
-        Text(label, style = LocalCustomTypography.current.raceControlButton)
+        onClick = { onClick() }
+    ) {
+        Text(label, style = typography)
     }
 }
 
@@ -966,10 +935,22 @@ private fun StopRace(onStopRace: () -> Unit) {
 }
 
 @Composable
-private fun DebugSpeedSlider(onSetDebugSpeed: (Int) -> Unit) {
+private fun DebugSpeedSlider(
+    onSetDebugSpeed: (Int) -> Unit,
+    speed: SpeedKmh?
+) {
     var speedSliderValue by remember { mutableIntStateOf(0) }
+    var isDragging by remember { mutableStateOf(false) }
+
     val maxDebugSpeed = 100
     RaceViewElement {
+
+        // Keep slider in sync with external state when not dragging
+        LaunchedEffect(speed) {
+            if (!isDragging) {
+                speedSliderValue = speed?.valueKmh?.roundToInt() ?: 0
+            }
+        }
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -980,10 +961,14 @@ private fun DebugSpeedSlider(onSetDebugSpeed: (Int) -> Unit) {
             Slider(
                 value = speedSliderValue.toFloat() / maxDebugSpeed,
                 onValueChange = {
+                    isDragging = true
                     speedSliderValue = (it * maxDebugSpeed).roundToInt()
                     onSetDebugSpeed(speedSliderValue)
                 },
-                Modifier.width(200.dp)
+                onValueChangeFinished = {
+                    isDragging = false
+                },
+                modifier = Modifier.width(200.dp)
             )
             Text("$speedSliderValue/h", Modifier.wrapContentWidth())
         }

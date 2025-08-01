@@ -22,7 +22,9 @@ import androidx.compose.material.Text
 import androidx.compose.material.TopAppBar
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Create
+import androidx.compose.material.icons.filled.DriveEta
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -45,7 +47,9 @@ import com.h0tk3y.rally.db.Section
 fun AllSectionsScene(
     database: Database,
     sections: LoadState<List<Section>>,
-    onSelectSection: (Section) -> Unit
+    onSelectSection: (Section) -> Unit,
+    onGoToSettings: () -> Unit,
+    onOpenDriverHud: () -> Unit
 ) {
     var showNewListDialog by rememberSaveable { mutableStateOf(false) }
     var showImportDialog by rememberSaveable { mutableStateOf(false) }
@@ -53,8 +57,8 @@ fun AllSectionsScene(
 
 
     if (showNewListDialog) {
-        CreateOrRenameSectionDialog(DialogKind.CREATE, existing = null, onDismiss = { showNewListDialog = false }, onSave = { name, _ ->
-            when (val result = database.createEmptySection(name)) {
+        CreateOrRenameSectionDialog(DialogKind.CREATE, existing = null, onDismiss = { showNewListDialog = false }, onSave = { name, content ->
+            when (val result = database.createSection(name, content)) {
                 is SectionInsertOrRenameResult.Success -> {
                     onSelectSection(result.section)
                     showNewListDialog = false
@@ -95,12 +99,28 @@ fun AllSectionsScene(
                     }
                     DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                         DropdownMenuItem(onClick = {
+                            onOpenDriverHud()
+                            showMenu = false
+                        }) {
+                            Icon(Icons.Default.DriveEta, "Driver HUD")
+                            Spacer(Modifier.width(8.dp))
+                            Text("Driver HUD")
+                        }
+                        DropdownMenuItem(onClick = {
                             showImportDialog = true
                             showMenu = false
                         }) {
                             Icon(Icons.Default.Create, "Import section")
                             Spacer(Modifier.width(8.dp))
                             Text("Import section")
+                        }
+                        DropdownMenuItem(onClick = {
+                            onGoToSettings()
+                            showMenu = false
+                        }) {
+                            Icon(Icons.Default.Settings, "Settings")
+                            Spacer(Modifier.width(8.dp))
+                            Text("Settings")
                         }
                     }
                 }
@@ -114,7 +134,7 @@ fun AllSectionsScene(
                     }
 
                     LoadState.LOADING -> CenterTextBox("Loading sections...")
-                    LoadState.EMPTY -> CenterTextBox("The section does not exist")
+                    LoadState.EMPTY -> CenterTextBox("No section data")
                     LoadState.FAILED -> CenterTextBox("Something went wrong")
                 }
             }

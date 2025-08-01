@@ -1,8 +1,11 @@
 package com.h0tk3y.rally
 
 import kotlinx.datetime.LocalTime
+import kotlinx.serialization.Contextual
+import kotlinx.serialization.Serializable
 import kotlin.math.roundToInt
 
+@Serializable
 data class SpeedKmh(val valueKmh: Double) {
     companion object {
         fun averageAt(distance: DistanceKm, timeHr: TimeHr): SpeedKmh =
@@ -26,6 +29,7 @@ data class SpeedKmh(val valueKmh: Double) {
     override fun toString(): String = if (valueKmh.isInfinite()) "∞" else "${(valueKmh * 100).roundToInt() / 100.0}$KMH_SUFFIX"
 }
 
+@Serializable
 data class DistanceKm(val valueKm: Double) : Comparable<DistanceKm> {
     operator fun plus(other: DistanceKm) = DistanceKm(valueKm + other.valueKm)
     operator fun times(other: Double) = DistanceKm(valueKm * other)
@@ -42,6 +46,7 @@ data class DistanceKm(val valueKm: Double) : Comparable<DistanceKm> {
     override fun compareTo(other: DistanceKm): Int = compareValues(valueKm, other.valueKm)
 }
 
+@Serializable
 data class TimeHr(val timeHours: Double) : Comparable<TimeHr> {
     init {
         if (timeHours.isNaN())
@@ -104,12 +109,15 @@ data class TimeMinSec(val min: Int, val sec: Int, val isInfinity: Boolean) {
     }
 }
 
+@Serializable
 data class TimeDayHrMinSec(val dayOverflow: Int = 0, val hr: Int, val min: Int, val sec: Int) {
     init {
         require(hr in 0..23)
         require(min in 0..59)
         require(sec in 0..59)
     }
+
+    fun toHr(): TimeHr = TimeHr(0.0 + dayOverflow * 24.0 + hr + min / 60.0 + sec / 3600.0)
 
     val timeSinceMidnight: TimeHr get() = TimeHr(dayOverflow * 24 + hr + min / 60.0 + sec / 3600.0)
 
@@ -189,12 +197,12 @@ data class TimeDayHrMinSec(val dayOverflow: Int = 0, val hr: Int, val min: Int, 
                 throw IllegalArgumentException("expected time of day, got $string")
             }
         }
-        
+
         fun of(time: LocalTime): TimeDayHrMinSec = TimeDayHrMinSec(0, time.hour, time.minute, time.second)
     }
 }
 
 fun Double.minusWithInf(other: Double) = if (this.isInfinite()) this else this - other
 
-fun DistanceKm.roundTo3Digits(): DistanceKm = 
+fun DistanceKm.roundTo3Digits(): DistanceKm =
     valueKm.strRound3().toDouble().let(::DistanceKm)
