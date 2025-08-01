@@ -242,10 +242,10 @@ class TcpStreamedRaceService : StreamedRaceService, Service() {
     private suspend fun CoroutineContext.startNetworkReceiverLoop() {
         while (isActive) {
             try {
-                ServerSocket(9999).apply { 
+                ServerSocket(9999).apply {
                     soTimeout = 2000
                 }.use { serverSocket ->
-                    serverSocket.accept().apply { 
+                    serverSocket.accept().apply {
                         soTimeout = 2000
                     }.use { socket ->
                         _telemetryState.value = TelemetryState.Connected
@@ -641,44 +641,52 @@ class LocalRaceService : CommonRaceService, RaceServiceControls, StreamSourceSer
     }
 
     private fun CoroutineScope.startSendTeleJob() {
-        this.launch(Dispatchers.IO) {
-            sendTeleToIp.collectLatest { ip ->
-                if (ip != null) {
-                    while (isActive) {
-                        try {
-                            Socket(ip, 9999).apply { 
-                                soTimeout = 2000
-                            }.use { socket ->
-                                DataOutputStream(socket.getOutputStream()).use { out ->
-                                    fun sendFrame(data: ByteArray) {
-                                        out.writeInt(data.size)
-                                        out.write(data)
-                                        out.flush()
-                                    }
-
-                                    while (isActive) {
-                                        val data = TelemetryFrame(
-                                            _section.value?.let { SectionData(it.name) },
-                                            _positions.value,
-                                            _currentLine.value,
-                                            _currentRaceLine.value,
-                                            _rememberSpeedLimit.value,
-                                            _raceState.value
-                                        )
-                                        sendFrame(
-                                            json.encodeToString<TelemetryFrame>(data).toByteArray()
-                                        )
-                                        delay(50)
-                                    }
-                                }
-                            }
-                        } catch (e: IOException) {
-                            Log.d("raceService", "network failure in tele sender", e)
-                            delay(1000)
+        var sendJob: Job? = null
+        launch(Dispatchers.IO) {
+            sendTeleToIp.distinctUntilChanged().onEach { ip ->
+                sendJob?.cancel()
+                sendJob = launch {
+                    if (ip != null) {
+                        while (isActive) {
+                            sendDataWithSocket(ip)
                         }
                     }
                 }
+            }.launchIn(this)
+        }
+    }
+
+    private suspend fun CoroutineScope.sendDataWithSocket(ip: String) {
+        try {
+            Socket(ip, 9999).apply {
+                soTimeout = 2000
+            }.use { socket ->
+                DataOutputStream(socket.getOutputStream()).use { out ->
+                    fun sendFrame(data: ByteArray) {
+                        out.writeInt(data.size)
+                        out.write(data)
+                        out.flush()
+                    }
+
+                    while (isActive) {
+                        val data = TelemetryFrame(
+                            _section.value?.let { SectionData(it.name) },
+                            _positions.value,
+                            _currentLine.value,
+                            _currentRaceLine.value,
+                            _rememberSpeedLimit.value,
+                            _raceState.value
+                        )
+                        sendFrame(
+                            json.encodeToString<TelemetryFrame>(data).toByteArray()
+                        )
+                        delay(50)
+                    }
+                }
             }
+        } catch (e: IOException) {
+            Log.d("raceService", "network failure in tele sender", e)
+            delay(1000)
         }
     }
 
@@ -858,7 +866,7 @@ private object RaceNotificationUtils {
     enum class RaceNotificationKind {
         LOCAL, TELE
     }
-    
+
     fun postRaceStateNotification(
         context: Context,
         notificationManager: NotificationManagerCompat,
@@ -896,7 +904,7 @@ private object RaceNotificationUtils {
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or FLAG_IMMUTABLE
         )
-        
+
         val titleMarker = when (kind) {
             RaceNotificationKind.LOCAL -> ""
             RaceNotificationKind.TELE -> " (driver HUD)"
@@ -940,7 +948,7 @@ private object RaceNotificationUtils {
         )
         notificationManager.createNotificationChannel(serviceChannel)
     }
-    
+
     private const val NOTIFICATION_TITLE_PREFIX = "Rally"
 
     const val RACE_NOTIFICATION_ID = 1
