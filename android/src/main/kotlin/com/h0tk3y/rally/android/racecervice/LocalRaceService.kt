@@ -619,8 +619,12 @@ class LocalRaceService : CommonRaceService, RaceServiceControls, StreamSourceSer
 
                         if (newBtMac != null) {
                             telemetryJob = serviceScope.launch(Dispatchers.IO) {
-                                startBtMainLoopJob(newBtMac)
-                                startSendTeleJob()
+                                launch {
+                                    startBtMainLoopJob(newBtMac)
+                                }
+                                launch {
+                                    startSendTeleJob()
+                                }
                             }
                         } else {
                             btState.value = TelemetryState.BtTelemetry(BtConnectionState.NoTargetMacAddress)
