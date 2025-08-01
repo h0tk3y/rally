@@ -4,6 +4,7 @@ import com.h0tk3y.rally.DistanceKm
 import com.h0tk3y.rally.SpeedKmh
 import com.h0tk3y.rally.TimeHr
 import kotlinx.datetime.Instant
+import kotlinx.serialization.Serializable
 import kotlin.time.Duration
 
 sealed interface RaceState {
@@ -15,8 +16,10 @@ sealed interface RaceState {
         val raceModel: RaceModel
     }
     
+    @Serializable
     data object NotStarted : RaceState
 
+    @Serializable
     data class Stopped(
         val raceSectionIdAtStop: Long,
         val raceModelAtStop: RaceModel,
@@ -25,6 +28,7 @@ sealed interface RaceState {
         val finishedModel: RaceModel?,
     ) : RaceState
     
+    @Serializable
     data class InRace(
         override val raceSectionId: Long,
         override val raceModel: RaceModel,
@@ -33,6 +37,7 @@ sealed interface RaceState {
         val goingModel: RaceModel
     ) : RaceState, MovingWithRaceModel
     
+    @Serializable
     data class Going(
         override val raceSectionId: Long,
         override val raceModel: RaceModel,
@@ -41,6 +46,7 @@ sealed interface RaceState {
     ) : RaceState, MovingWithRaceModel
 }
 
+@Serializable
 data class RaceModel(
     val startAtTime: Instant,
     val startAtDistance: DistanceKm,

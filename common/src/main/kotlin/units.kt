@@ -1,8 +1,11 @@
 package com.h0tk3y.rally
 
 import kotlinx.datetime.LocalTime
+import kotlinx.serialization.Contextual
+import kotlinx.serialization.Serializable
 import kotlin.math.roundToInt
 
+@Serializable
 data class SpeedKmh(val valueKmh: Double) {
     companion object {
         fun averageAt(distance: DistanceKm, timeHr: TimeHr): SpeedKmh =
@@ -26,6 +29,7 @@ data class SpeedKmh(val valueKmh: Double) {
     override fun toString(): String = if (valueKmh.isInfinite()) "∞" else "${(valueKmh * 100).roundToInt() / 100.0}$KMH_SUFFIX"
 }
 
+@Serializable
 data class DistanceKm(val valueKm: Double) : Comparable<DistanceKm> {
     operator fun plus(other: DistanceKm) = DistanceKm(valueKm + other.valueKm)
     operator fun times(other: Double) = DistanceKm(valueKm * other)
@@ -42,6 +46,7 @@ data class DistanceKm(val valueKm: Double) : Comparable<DistanceKm> {
     override fun compareTo(other: DistanceKm): Int = compareValues(valueKm, other.valueKm)
 }
 
+@Serializable
 data class TimeHr(val timeHours: Double) : Comparable<TimeHr> {
     init {
         if (timeHours.isNaN())
@@ -104,6 +109,7 @@ data class TimeMinSec(val min: Int, val sec: Int, val isInfinity: Boolean) {
     }
 }
 
+@Serializable
 data class TimeDayHrMinSec(val dayOverflow: Int = 0, val hr: Int, val min: Int, val sec: Int) {
     init {
         require(hr in 0..23)

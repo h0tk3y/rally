@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Surface
+import androidx.compose.material.Text
 import androidx.compose.material.darkColors
 import androidx.compose.material.lightColors
 import androidx.compose.runtime.Composable
@@ -24,14 +25,21 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navOptions
 import androidx.navigation.toRoute
 import com.h0tk3y.rally.android.db.Database
-import com.h0tk3y.rally.android.racecervice.RaceService
+import com.h0tk3y.rally.android.db.SectionInsertOrRenameResult
+import com.h0tk3y.rally.android.racecervice.CommonRaceService
+import com.h0tk3y.rally.android.racecervice.LocalRaceService
+import com.h0tk3y.rally.android.racecervice.TcpStreamedRaceService
 import com.h0tk3y.rally.android.scenes.AllSectionsScene
 import com.h0tk3y.rally.android.scenes.SectionEventLogScene
 import com.h0tk3y.rally.android.scenes.SectionEventLogViewModel
 import com.h0tk3y.rally.android.scenes.SectionScene
-import com.h0tk3y.rally.android.scenes.SectionViewModel
+import com.h0tk3y.rally.android.scenes.PersistedSectionViewModel
+import com.h0tk3y.rally.android.scenes.SectionOperations
 import com.h0tk3y.rally.android.scenes.SettingsScene
 import com.h0tk3y.rally.android.scenes.SettingsViewModel
+import com.h0tk3y.rally.android.scenes.StreamedSectionViewModel
+import com.h0tk3y.rally.android.util.IpAddressDisplay
+import com.h0tk3y.rally.android.util.StreamingServerEmptyInfo
 import com.h0tk3y.rally.db.Section
 import kotlinx.serialization.Serializable
 
@@ -41,6 +49,9 @@ object HomeScene
 
 @Serializable
 data class SectionScene(val sectionId: Long, val withRace: Boolean)
+
+@Serializable
+data object StreamedSectionScene
 
 @Serializable
 data class SectionEventLogScene(val sectionId: Long)
@@ -72,9 +83,10 @@ fun App(
                         val sections: LoadState<List<Section>> by database.selectAllSections()
                             .collectAsState(LoadState.LOADING)
                         AllSectionsScene(
-                            database, sections, 
+                            database, sections,
                             onSelectSection = { navController.navigate(SectionScene(it.id, false)) },
-                            onGoToSettings = { navController.navigate(SettingsScene(null)) }
+                            onGoToSettings = { navController.navigate(SettingsScene(null)) },
+                            onOpenDriverHud = { navController.navigate(StreamedSectionScene) }
                         )
                     }
 
@@ -83,20 +95,13 @@ fun App(
                         val withRace = it.toRoute<SectionScene>().withRace
 
                         val context = LocalContext.current
-                        val model = viewModel { SectionViewModel(sectionId, database, userPreferences) }
+                        val model = viewModel { PersistedSectionViewModel(sectionId, database, userPreferences) }
                         val connection = remember(context) {
-                            RaceServiceConnection(context, model::onServiceConnected, model::onServiceDisconnected)
+                            localRaceServiceConnection(context, model::onServiceConnected, model::onServiceDisconnected)
                         }
-
-                        val connector: () -> Unit = {
-                            val intent = Intent(context, RaceService::class.java)
-                            context.bindService(intent, connection, Context.BIND_AUTO_CREATE)
-                            ContextCompat.startForegroundService(context, intent)
-                        }
-                        model.setRaceServiceConnector(connector)
-                        model.setRaceServiceDisconnector {
-                            connection.disconnectIfConnected()
-                        }
+                        model.setRaceServiceConnector { connectToService(context, LocalRaceService::class.java, connection) }
+                        model.setRaceServiceDisconnector(connection::disconnectIfConnected)
+                        DisposableEffect(context) { onDispose(connection::disconnectIfConnected) }
 
                         if (withRace) {
                             LaunchedEffect(sectionId) {
@@ -104,32 +109,63 @@ fun App(
                             }
                         }
 
-                        DisposableEffect(context) {
+                        val sectionOps = object : SectionOperations {
+                            override fun deleteThisSection() {
+                                database.deleteSectionById(sectionId)
+                            }
+
+                            override fun navigateToEventLog() {
+                                navController.navigate(SectionEventLogScene(sectionId))
+                            }
+
+                            override fun renameThisSection(newName: String): SectionInsertOrRenameResult =
+                                database.renameSection(sectionId, newName)
+
+                            override fun createSection(
+                                newName: String,
+                                serializedPositions: String
+                            ): SectionInsertOrRenameResult =
+                                database.createSection(newName, serializedPositions)
+
+                            override fun navigateToNewSection(sectionId: Long, isRace: Boolean) =
+                                navController.navigate(SectionScene(sectionId, isRace), navOptions { popUpTo(HomeScene) })
+                        }
+
+                        SectionScene(
+                            sectionOps,
+                            onBack = navController::popBackStack,
+                            model = model,
+                            emptySectionView = { Text("No section data") },
+                            onGoToSettings = { navController.navigate(SettingsScene(it)) },
+                        )
+                    }
+                    composable<StreamedSectionScene> {
+                        val context = LocalContext.current
+                        val model = viewModel { StreamedSectionViewModel() }
+
+                        val connection = remember(context) {
+                            tcpStreamedRaceServiceConnection(context, model::onServiceConnected, model::onServiceDisconnected)
+                        }
+                        val connector = { connectToService(context, TcpStreamedRaceService::class.java, connection) }
+                        model.setRaceServiceConnector(connector)
+                        model.setRaceServiceDisconnector(connection::disconnectIfConnected)
+                        
+                        LaunchedEffect(Unit) { 
+                            connector()
+                        }
+                        DisposableEffect(context) { 
                             onDispose {
+                                model.dispose()
                                 connection.disconnectIfConnected()
                             }
                         }
 
                         SectionScene(
-                            sectionId,
-                            database,
-                            onDeleteSection = {
-                                database.deleteSectionById(sectionId)
-                                navController.popBackStack()
-                            },
-                            onNavigateToNewSection = { id, isRace ->
-                                navController.navigate(SectionScene(id, isRace), navOptions { popUpTo(HomeScene) })
-                            },
-                            onBack = {
-                                navController.popBackStack()
-                            },
-                            onNavigateToEventLog = {
-                                navController.navigate(SectionEventLogScene(sectionId))
-                            },
-                            onGoToSettings = {
-                                navController.navigate(SettingsScene(it))
-                            },
-                            model = model
+                            sectionOps = null,
+                            onBack = navController::popBackStack,
+                            model = model,
+                            emptySectionView = { StreamingServerEmptyInfo() },
+                            onGoToSettings = { navController.navigate(SettingsScene(it)) },
                         )
                     }
                     composable<SectionEventLogScene> {
@@ -149,4 +185,14 @@ fun App(
             }
         }
     }
+}
+
+private fun <S : CommonRaceService> connectToService(
+    context: Context,
+    serviceClass: Class<S>,
+    connection: RaceServiceConnection<S>
+) {
+    val intent = Intent(context, serviceClass)
+    context.bindService(intent, connection, Context.BIND_AUTO_CREATE)
+    ContextCompat.startForegroundService(context, intent)
 }
