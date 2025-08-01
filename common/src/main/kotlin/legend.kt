@@ -1,5 +1,8 @@
 package com.h0tk3y.rally
 
+import kotlinx.serialization.Serializable
+
+@Serializable
 data class LineNumber(val number: Int, val subNumber: Int) : Comparable<LineNumber> {
     init {
         require(number >= 1) { "line numbers should be positive" }
@@ -27,6 +30,7 @@ data class CommentLine(
     }
 }
 
+@Serializable
 data class PositionLine(
     val atKm: DistanceKm,
     override val lineNumber: LineNumber,
@@ -45,49 +49,63 @@ inline fun <reified T> PositionLine.modifier(): T? =
         }
     }
 
+@Serializable
 sealed interface PositionLineModifier {
+    @Serializable
     sealed interface SetAvg : PositionLineModifier {
         val setavg: SpeedKmh
     }
 
+    @Serializable
     sealed interface EndAvg : PositionLineModifier {
         val endavg: SpeedKmh?
     }
 
+    @Serializable
     data class SetAvgSpeed(
         override val setavg: SpeedKmh,
     ) : SetAvg
 
+    @Serializable
     data class ThenAvgSpeed(
         override val setavg: SpeedKmh
     ) : SetAvg, EndAvg {
         override val endavg get() = null
     }
-
+    
+    @Serializable
     data class EndAvgSpeed(
         override val endavg: SpeedKmh?,
     ) : EndAvg
 
+    @Serializable
     data class AstroTime(
         val timeOfDay: TimeDayHrMinSec
     ) : PositionLineModifier
-
+    
+    @Serializable
     data class OdoDistance(
         val distanceKm: DistanceKm
     ) : PositionLineModifier
-
+    
+    @Serializable
     data class Here(
         val atTime: TimeHr
     ) : PositionLineModifier
 
+    @Serializable
     data class AddSynthetic(
         val interval: DistanceKm,
         val count: Int
     ) : PositionLineModifier
 
+    @Serializable
     object IsSynthetic : PositionLineModifier
 
+    @Serializable
     object CalculateAverage : PositionLineModifier
+    
+    @Serializable
     object EndCalculateAverage : PositionLineModifier
 }
 

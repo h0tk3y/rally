@@ -21,6 +21,7 @@ private object PreferencesKeys {
     val TELEMETRY_SOURCE = stringPreferencesKey("telemetrySource")
     val BT_MAC = stringPreferencesKey("btMac")
     val SPEED_LIMIT_PERCENT_TEXT = stringPreferencesKey("speedLimitPercentText")
+    val SEND_TELE_TO_IP = stringPreferencesKey("sendTeleToIp")
 }
 
 data class UserPreferences(
@@ -28,7 +29,8 @@ data class UserPreferences(
     val calibration: Double,
     val telemetrySource: TelemetrySource,
     val btMac: String?,
-    val speedLimitPercent: String?
+    val speedLimitPercent: String?,
+    val sendTeleToIp: String?
 )
 
 enum class TelemetrySource {
@@ -69,6 +71,12 @@ class PreferenceRepository(val dataStore: DataStore<Preferences>) {
             preferences[PreferencesKeys.TELEMETRY_SOURCE] = telemetrySource.name
         }
     }
+    
+    suspend fun saveSendTeleToIp(value: String?) {
+        dataStore.edit { preferences -> 
+            preferences[PreferencesKeys.SEND_TELE_TO_IP] = value ?: ""
+        }
+    }
 }
 
 private fun mapUserPreferences(preferences: Preferences): UserPreferences {
@@ -80,5 +88,6 @@ private fun mapUserPreferences(preferences: Preferences): UserPreferences {
         ?: TelemetrySource.BT_OBD
     val btMac = preferences[PreferencesKeys.BT_MAC]
     val speedLimitPercent = preferences[PreferencesKeys.SPEED_LIMIT_PERCENT_TEXT]
-    return UserPreferences(timeAllowance, calibration, telemetrySource, btMac, speedLimitPercent)
+    val sendTeleToIp = preferences[PreferencesKeys.SEND_TELE_TO_IP]
+    return UserPreferences(timeAllowance, calibration, telemetrySource, btMac, speedLimitPercent, sendTeleToIp?.takeIf { it.isNotEmpty() })
 }
