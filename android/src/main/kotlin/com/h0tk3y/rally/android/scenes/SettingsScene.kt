@@ -289,11 +289,6 @@ private fun Calibration(model: SettingsViewModel, calibrateByCurrentDistance: Do
                 }
             }
         }
-
-        val context = LocalContext.current
-        IconButton(onClick = { model.pickAndSetBluetoothDevice(context) }) {
-            Icon(Icons.AutoMirrored.Rounded.BluetoothSearching, contentDescription = null)
-        }
     }
 }
 
