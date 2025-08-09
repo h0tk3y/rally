@@ -33,7 +33,9 @@ dependencies {
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("app.cash.sqldelight:android-driver:2.1.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7")
-    implementation("androidx.navigation:navigation-compose:2.8.5")
+    implementation(libs.androidx.navigation3.ui)
+    implementation(libs.androidx.navigation3.runtime)
+    implementation(libs.androidx.lifecycle.viewmodel.navigation3)
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("androidx.compose.material3:material3-window-size-class:1.1.2")
 
@@ -57,7 +59,7 @@ sqldelight {
 
 android {
     namespace = "com.h0tk3y.rally"
-    compileSdk = 35
+    compileSdk = 36
     sourceSets["main"].manifest.srcFile("src/androidMain/AndroidManifest.xml")
     signingConfigs {
         create("release") {
