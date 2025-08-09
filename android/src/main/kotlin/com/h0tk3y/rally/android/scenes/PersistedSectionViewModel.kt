@@ -389,6 +389,12 @@ class PersistedSectionViewModel(
                 }
             }
             launch {
+                _section.collectLatest { section ->
+                    if (section is LoadState.Loaded)
+                        raceService.updateSection(section.value)
+                }
+            }
+            launch {
                 _preprocessedPositions.collectLatest { lines ->
                     raceService.updatePositions(lines.filterIsInstance<PositionLine>())
                 }
