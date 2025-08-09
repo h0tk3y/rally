@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.rounded.Cancel
 import androidx.compose.material.icons.rounded.Done
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Flag
@@ -244,7 +245,7 @@ fun SectionScene(
                                     is RaceUiState.Stopped,
                                     is RaceUiState.Going,
                                     RaceUiState.RaceNotStarted ->
-                                        if (raceUiVisible) model.leaveRaceMode() else model.enterRaceMode()
+                                        if (raceUiVisible) model.leaveRaceMode(false) else model.enterRaceMode()
                                 }
                                 showMenu = false
                             }) {
@@ -265,6 +266,17 @@ fun SectionScene(
                                         }
                                 )
                             }
+                            if (raceState is RaceUiState.Stopped) {
+                                DropdownMenuItem(onClick = {
+                                    model.leaveRaceMode(forceStop = true)
+                                    showMenu = false
+                                }) {
+                                    Icon(imageVector = Icons.Rounded.Cancel, "Drop race state and stop")
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("Reset and stop race service")
+                                }
+                            }
+
                             Divider()
                         }
 
@@ -283,6 +295,9 @@ fun SectionScene(
                                     showMenu = false
                                     inDeleteConfirmation = false
                                     sectionOps.deleteThisSection()
+                                    if (model is RaceModelControls) {
+                                        model.leaveRaceMode(forceStop = true)
+                                    }
                                 }) {
                                     Icon(Icons.Default.Delete, "Tap again to delete")
                                     Spacer(Modifier.width(8.dp))
@@ -410,7 +425,11 @@ fun SectionScene(
                         selectedPosition = preprocessed.firstOrNull { it.lineNumber == selectedLineIndex } as? PositionLine,
                         navigateToSection = { sectionOps?.navigateToNewSection(it, true) },
                         goToEventLog = sectionOps?.let { it::navigateToEventLog },
-                        goToSettings = { onGoToSettings((model.raceState as? RaceUiState.HasRaceModel)?.raceModel?.currentDistance?.valueKm) },
+                        goToSettings = { 
+                            if (model is RaceModelControls)
+                                onGoToSettings((model.raceState as? RaceUiState.HasRaceModel)?.raceModel?.currentDistance?.valueKm)
+                            else null
+                        },
                         modifier = keyboardModifier,
                         addPositionMaybeWithSpeed = { speed ->
                             val currentRaceState = raceState
