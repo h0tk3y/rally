@@ -112,6 +112,7 @@ fun App(
                         val sectionOps = object : SectionOperations {
                             override fun deleteThisSection() {
                                 database.deleteSectionById(sectionId)
+                                navController.popBackStack()
                             }
 
                             override fun navigateToEventLog() {

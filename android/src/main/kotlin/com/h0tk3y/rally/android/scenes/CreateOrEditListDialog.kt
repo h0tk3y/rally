@@ -28,11 +28,9 @@ import com.h0tk3y.rally.SpeedKmh
 import com.h0tk3y.rally.SpeedKmh.Companion.averageAt
 import com.h0tk3y.rally.TimeDayHrMinSec
 import com.h0tk3y.rally.TimeHr
-import com.h0tk3y.rally.android.theme.Typography
 import com.h0tk3y.rally.android.views.LeftAlignedRow
 import com.h0tk3y.rally.android.views.SmallNumberTextField
 import com.h0tk3y.rally.db.Section
-import com.h0tk3y.rally.strRound1
 import com.h0tk3y.rally.strRound3
 
 enum class DialogKind {
@@ -134,8 +132,8 @@ fun CreateOrRenameSectionDialog(
                 }
 
                 if (kind == DialogKind.CREATE) {
-                    EditableStageData { distance, speed ->
-                        importText = importTextFromData(distance, speed)
+                    EditableStageData { distance, speed, start ->
+                        importText = importTextFromData(distance, speed, start)
                     }
                 }
 
@@ -168,15 +166,15 @@ fun CreateOrRenameSectionDialog(
     }
 }
 
-private fun importTextFromData(distanceKm: DistanceKm, speedKmh: SpeedKmh) =
+private fun importTextFromData(distanceKm: DistanceKm, speedKmh: SpeedKmh, start: TimeDayHrMinSec?) =
     """
-        0.0 setavg ${speedKmh.valueKmh}
+        0.0 setavg ${speedKmh.valueKmh}${if (start != null) " atime ${start.timeStrNoDayOverflow()}" else "" }
         ${distanceKm.valueKm}
     """.trimIndent()
 
 @Composable
 private fun ColumnScope.EditableStageData(
-    updateData: (DistanceKm, SpeedKmh) -> Unit
+    updateData: (DistanceKm, SpeedKmh, TimeDayHrMinSec?) -> Unit
 ) {
     val defaultDistanceText = "60.0"
     val defaultTimeText = "01:00"
@@ -186,6 +184,7 @@ private fun ColumnScope.EditableStageData(
     val timeText = rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue("")) }
     val speedText = rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue("")) }
     var preferTimeOverSpeed by rememberSaveable { mutableStateOf(true) }
+    val startTimeText = rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue("")) }
 
     fun distanceValue(): DistanceKm =
         distanceText.value.text.ifEmpty { defaultDistanceText }.toDoubleOrNull()?.let(::DistanceKm) ?: DistanceKm(0.0)
@@ -196,6 +195,9 @@ private fun ColumnScope.EditableStageData(
     fun speedValue(): SpeedKmh =
         speedText.value.text.ifEmpty { defaultSpeedText }.toDoubleOrNull()?.let(::SpeedKmh) ?: SpeedKmh(defaultSpeedText.toDouble())
 
+    fun startTimeValue(): TimeDayHrMinSec? =
+        parseTimeInput(startTimeText.value.text) 
+
     fun updateValues(distance: DistanceKm?, time: TimeDayHrMinSec?, speedKmh: SpeedKmh?) {
         val distanceToUse = distance ?: DistanceKm(defaultDistanceText.toDouble())
         if (preferTimeOverSpeed && time != null) {
@@ -204,15 +206,15 @@ private fun ColumnScope.EditableStageData(
                     copy(valueKmh = valueKmh.strRound3().toDouble()) // avoid redundant precision
                 }
                 speedText.value = TextFieldValue(averageAt.valueKmh.strRound3())
-                updateData(distanceToUse, averageAt)
+                updateData(distanceToUse, averageAt, startTimeValue())
             }
         } else if (!preferTimeOverSpeed && speedKmh != null) {
             if ((distanceToUse.valueKm / speedKmh.valueKmh).isFinite()) {
                 timeText.value = TextFieldValue(TimeHr.byMoving(distanceToUse, speedKmh).toTimeDayHrMinSec().timeStrNoDayOverflow())
-                updateData(distanceToUse, speedKmh)
+                updateData(distanceToUse, speedKmh, startTimeValue())
             }
         } else {
-            updateData(distanceToUse, SpeedKmh(defaultSpeedText.toDouble()))
+            updateData(distanceToUse, SpeedKmh(defaultSpeedText.toDouble()), startTimeValue())
         }
     }
 
@@ -220,7 +222,7 @@ private fun ColumnScope.EditableStageData(
         updateValues(distanceValue(), timeValue(), speedValue())
 
     LaunchedEffect(Unit) {
-        updateData(distanceValue(), speedValue())
+        updateData(distanceValue(), speedValue(), startTimeValue())
     }
 
     val maxLeftWidth = remember { mutableIntStateOf(0) }
@@ -282,6 +284,26 @@ private fun ColumnScope.EditableStageData(
             isError = { speedText.value.text.ifEmpty { "0.0" }.toDoubleOrNull() == null }
         )
     })
+    
+    Spacer(Modifier.height(16.dp))
+
+    LeftAlignedRow(maxLeftWidth, {
+        Text("Start at HH:MM(:SS)", fontWeight = if (!preferTimeOverSpeed) FontWeight.Bold else FontWeight.Normal)
+    }, {
+        SmallNumberTextField(
+            Modifier.weight(1.0f),
+            startTimeText,
+            onChange = {
+                startTimeText.value = it
+                updateFromCurrentValues()
+            },
+            placeholderString = "",
+            "",
+            addSuffixToPlaceholder = false,
+            isError = { it.isNotEmpty() && parseTimeInput(it) == null }
+        )
+    })
+
 }
 
 sealed interface ItemSaveResult<out T> {
