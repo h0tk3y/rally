@@ -37,6 +37,7 @@ import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.automirrored.rounded.Undo
 import androidx.compose.material.icons.filled.OutlinedFlag
 import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.rounded.AddLocationAlt
 import androidx.compose.material.icons.rounded.ArrowOutward
 import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.Cancel
@@ -224,18 +225,18 @@ private fun MoreRaceControls(
         }
         TelemetryStatus(telemetryState, onGoToSettings ?: { })
         Spacer(Modifier.weight(1f))
+        SpeedLimitLikeButton(
+            label = rememberSpeed?.valueKmh?.roundToInt()?.toString() ?: "v",
+            isEnabled = canRememberSpeed && raceModelControls != null,
+            typography = if (isBigUi) LocalCustomTypography.current.raceControlButton else MaterialTheme.typography.caption,
+            size = if (isBigUi) 48.dp else 24.dp,
+        ) {
+            switchRememberedSpeedControls()
+        }
         if (raceModelControls != null) {
-            SpeedLimitLikeButton(
-                label = rememberSpeed?.valueKmh?.roundToInt()?.toString() ?: "v",
-                isEnabled = canRememberSpeed,
-                typography = if (isBigUi) LocalCustomTypography.current.raceControlButton else MaterialTheme.typography.caption,
-                size = if (isBigUi) 48.dp else 24.dp,
-            ) {
-                switchRememberedSpeedControls()
-            }
             IconButton(onClick = { onAddPositionAtCurrentDistance() }) {
                 Icon(
-                    Icons.Rounded.ControlPoint, contentDescription = "Add passed position",
+                    Icons.Rounded.AddLocationAlt, contentDescription = "Add passed position",
                     Modifier.size(if (isBigUi) 56.dp else 28.dp)
                 )
             }
