@@ -52,7 +52,6 @@ import com.h0tk3y.rally.model.duration
 import com.h0tk3y.rally.modifier
 import com.h0tk3y.rally.preprocessRoadmap
 import com.h0tk3y.rally.roundTo3Digits
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -203,7 +202,7 @@ interface RaceModelControls {
     fun setGoingForward(isGoingForward: Boolean)
     fun distanceCorrection(distanceKm: DistanceKm)
     fun setRememberSpeed(speedKmh: SpeedKmh?)
-    fun leaveRaceMode()
+    fun leaveRaceMode(forceStop: Boolean)
     fun setSpeedLimitPercent(value: String?)
 }
 
@@ -656,8 +655,8 @@ class PersistedSectionViewModel(
         service?.setRememberSpeedLimit(speedKmh)
     }
 
-    override fun leaveRaceMode() {
-        if (_raceState.value is RaceUiState.RaceNotStarted) {
+    override fun leaveRaceMode(forceStop: Boolean) {
+        if (forceStop || _raceState.value is RaceUiState.RaceNotStarted) {
             service?.stopForeground(Service.STOP_FOREGROUND_REMOVE)
             service?.stopSelf()
         }
@@ -1299,6 +1298,10 @@ class StreamedSectionViewModel : StatefulSectionViewModel(), RaceServiceHolder<T
             viewModelScope.launch {
                 service?.raceState?.collectLatest {
                     _raceState.value = raceStateToUiState(it)
+                }
+                delay(1000L)
+                if (isActive) {
+                    _telemetryState.value = TelemetryPublicState.ReceivesStream(isDelayed = true)
                 }
             }
             viewModelScope.launch {
