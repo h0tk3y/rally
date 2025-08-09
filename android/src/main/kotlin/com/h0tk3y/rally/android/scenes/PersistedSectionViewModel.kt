@@ -1374,7 +1374,6 @@ class StreamedSectionViewModel : StatefulSectionViewModel(), RaceServiceHolder<T
     }
 
     fun close() {
-        service?.stopForeground(Service.STOP_FOREGROUND_REMOVE)
         service?.stopSelf()
     }
 
