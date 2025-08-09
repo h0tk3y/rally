@@ -13,7 +13,7 @@ plugins {
 }
 
 group = "com.h0tk3y.flashcards"
-version = "1.0-SNAPSHOT"
+version = "1.1-SNAPSHOT"
 
 dependencies {
     implementation(project(":common"))
@@ -35,6 +35,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7")
     implementation("androidx.navigation:navigation-compose:2.8.5")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
+    implementation("androidx.compose.material3:material3-window-size-class:1.1.2")
 
     implementation(project(":common"))
     implementation("androidx.activity:activity-compose:1.10.0")
