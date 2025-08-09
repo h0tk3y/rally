@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.app.Service
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.github.h0tk3y.betterParse.grammar.parser
 import com.h0tk3y.rally.CommentLine
 import com.h0tk3y.rally.DefaultModifierValidator
 import com.h0tk3y.rally.DistanceKm
@@ -254,6 +255,7 @@ class PersistedSectionViewModel(
     private val database: Database,
     private val prefs: PreferenceRepository,
 ) : StatefulSectionViewModel(), EditableSectionViewModel, RaceModelControls, RaceServiceHolder<LocalRaceService> {
+    private val parser = InputRoadmapParser(DefaultModifierValidator())
 
     private val _raceCurrentLineNumber: MutableStateFlow<LineNumber> = MutableStateFlow(LineNumber(1, 0))
     private val _editorFocus: MutableStateFlow<EditorFocus> = MutableStateFlow(EditorFocus(0, DataKind.Distance))
@@ -336,9 +338,7 @@ class PersistedSectionViewModel(
     override fun setRaceServiceDisconnector(disconnector: () -> Unit) {
         serviceDisconnector = disconnector
     }
-
-    private val parser = InputRoadmapParser(DefaultModifierValidator())
-
+    
     private fun positionLines(it: LoadState<Section>) = if (it is LoadState.Loaded) {
         val result = parser.parseRoadmap(it.value.serializedPositions.reader()).filterIsInstance<PositionLine>()
         result.ifEmpty {
