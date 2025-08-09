@@ -16,6 +16,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager.PERMISSION_GRANTED
 import android.os.Binder
+import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.annotation.RequiresPermission
@@ -717,7 +718,7 @@ class LocalRaceService : CommonRaceService, RaceServiceControls, StreamSourceSer
 
     private suspend fun CoroutineContext.btMainLoop(device: BluetoothDevice) {
         while (isActive) {
-            if (ActivityCompat.checkSelfPermission(this@LocalRaceService, BLUETOOTH_CONNECT) != PERMISSION_GRANTED) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && ActivityCompat.checkSelfPermission(this@LocalRaceService, BLUETOOTH_CONNECT) != PERMISSION_GRANTED) {
                 btState.value = TelemetryState.BtTelemetry(BtConnectionState.NoPermissions)
                 Log.d("raceService", "missing Bluetooth permissions")
                 delay(5000L)
