@@ -1294,6 +1294,7 @@ class StreamedSectionViewModel : StatefulSectionViewModel(), RaceServiceHolder<T
     override fun onServiceConnected(raceService: TcpStreamedRaceService) {
         service = raceService
         _raceUiVisible.value = true
+        serviceRelatedJob?.cancel()
         serviceRelatedJob = viewModelScope.launch {
             viewModelScope.launch {
                 service?.telemetryPublicState?.collectLatest { teleState ->
@@ -1372,11 +1373,12 @@ class StreamedSectionViewModel : StatefulSectionViewModel(), RaceServiceHolder<T
         _raceUiVisible.value = false
     }
 
-    fun dispose() {
+    fun close() {
         service?.stopForeground(Service.STOP_FOREGROUND_REMOVE)
         service?.stopSelf()
+    }
+
+    fun disconnectFromReceiver() {
         serviceDisconnector()
-        _raceUiVisible.value = false
-        _raceState.value = RaceUiState.NoRaceServiceConnection
     }
 }
