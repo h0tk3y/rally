@@ -226,7 +226,7 @@ class TcpStreamedRaceService : StreamedRaceService, Service() {
 
     private fun receiveJob(): Job = serviceScope.launch {
         launch {
-            while (true) {
+            while (isActive) {
                 RaceNotificationUtils.postRaceStateNotification(
                     this@TcpStreamedRaceService,
                     NotificationManagerCompat.from(this@TcpStreamedRaceService),
@@ -521,6 +521,7 @@ class LocalRaceService : CommonRaceService, RaceServiceControls, StreamSourceSer
 
     override fun stopService(name: Intent?): Boolean {
         raceJob?.cancel()
+        stopForeground(STOP_FOREGROUND_REMOVE)
         return true
     }
 
