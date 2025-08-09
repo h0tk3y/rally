@@ -271,7 +271,7 @@ class TcpStreamedRaceService : StreamedRaceService, Service() {
     @OptIn(ExperimentalSerializationApi::class)
     private fun handleFrame(byteArray: ByteArray) {
         val raceState = json.decodeFromStream<TelemetryFrame>(byteArray.inputStream())
-        _section.value = Section(-1, raceState.section?.name ?: "", "")
+        _section.value = Section(-1, raceState.section?.name ?: "", raceState.section?.serializedPositions ?: "")
         _positions.value = raceState.serializedPositions
         _raceState.value = raceState.raceState
         _currentLine.value = raceState.currentLine
@@ -281,7 +281,7 @@ class TcpStreamedRaceService : StreamedRaceService, Service() {
 }
 
 @Serializable
-data class SectionData(val name: String)
+data class SectionData(val name: String, val serializedPositions: String)
 
 @Serializable
 data class TelemetryFrame(
@@ -672,7 +672,7 @@ class LocalRaceService : CommonRaceService, RaceServiceControls, StreamSourceSer
 
                     while (isActive) {
                         val data = TelemetryFrame(
-                            _section.value?.let { SectionData(it.name) },
+                            _section.value?.let { SectionData(it.name, it.serializedPositions) },
                             _positions.value,
                             _currentLine.value,
                             _currentRaceLine.value,
