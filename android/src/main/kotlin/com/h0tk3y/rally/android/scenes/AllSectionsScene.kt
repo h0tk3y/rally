@@ -21,8 +21,8 @@ import androidx.compose.material.Scaffold
 import androidx.compose.material.Text
 import androidx.compose.material.TopAppBar
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CarCrash
 import androidx.compose.material.icons.filled.Create
-import androidx.compose.material.icons.filled.DriveEta
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.rounded.Add
@@ -92,35 +92,35 @@ fun AllSectionsScene(
                 title = { Text(stringResource(R.string.appName)) },
                 actions = {
                     IconButton(onClick = { showNewListDialog = true }) {
-                        Icon(imageVector = Icons.Rounded.Add, contentDescription = "Create section")
+                        Icon(imageVector = Icons.Rounded.Add, contentDescription = stringResource(R.string.createSection))
                     }
                     IconButton(onClick = { showMenu = true }) {
-                        Icon(Icons.Default.MoreVert, "Show menu")
+                        Icon(Icons.Default.MoreVert, stringResource(R.string.showMenu))
                     }
                     DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                         DropdownMenuItem(onClick = {
                             onOpenDriverHud()
                             showMenu = false
                         }) {
-                            Icon(Icons.Default.DriveEta, "Driver HUD")
+                            Icon(Icons.Default.CarCrash, stringResource(R.string.driverHud))
                             Spacer(Modifier.width(8.dp))
-                            Text("Driver HUD")
+                            Text(stringResource(R.string.driverHud))
                         }
                         DropdownMenuItem(onClick = {
                             showImportDialog = true
                             showMenu = false
                         }) {
-                            Icon(Icons.Default.Create, "Import section")
+                            Icon(Icons.Default.Create, stringResource(R.string.importSection))
                             Spacer(Modifier.width(8.dp))
-                            Text("Import section")
+                            Text(stringResource(R.string.importSection))
                         }
                         DropdownMenuItem(onClick = {
                             onGoToSettings()
                             showMenu = false
                         }) {
-                            Icon(Icons.Default.Settings, "Settings")
+                            Icon(Icons.Default.Settings, stringResource(R.string.settings))
                             Spacer(Modifier.width(8.dp))
-                            Text("Settings")
+                            Text(stringResource(R.string.settings))
                         }
                     }
                 }
@@ -133,9 +133,9 @@ fun AllSectionsScene(
                         SectionsListView(sections.value, onSelectSection)
                     }
 
-                    LoadState.LOADING -> CenterTextBox("Loading sections...")
-                    LoadState.EMPTY -> CenterTextBox("No section data")
-                    LoadState.FAILED -> CenterTextBox("Something went wrong")
+                    LoadState.LOADING -> CenterTextBox(stringResource(R.string.stateLoadingSections))
+                    LoadState.EMPTY -> CenterTextBox(stringResource(R.string.stateNoSectionData))
+                    LoadState.FAILED -> CenterTextBox(stringResource(R.string.stateSomethingWentWrong))
                 }
             }
         }
@@ -164,7 +164,7 @@ fun SectionsListView(
             }
         }
     } else {
-        CenterTextBox("There is no sections yet, create one using the action bar button")
+        CenterTextBox(stringResource(R.string.stateNoSectionsYet))
     }
 }
 

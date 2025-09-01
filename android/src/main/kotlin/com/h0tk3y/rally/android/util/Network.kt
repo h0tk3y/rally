@@ -21,8 +21,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.h0tk3y.rally.R
 import java.io.Closeable
 import java.net.Inet4Address
 import java.util.concurrent.ConcurrentHashMap
@@ -102,8 +104,8 @@ fun StreamingServerEmptyInfo() {
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.padding(48.dp)
     ) { 
-        Text("The other device must be on the same Wi-Fi network.", textAlign = TextAlign.Center)
-        Text("In the Settings on the other device, enter the IP address of this device.", textAlign = TextAlign.Center)
+        Text(stringResource(R.string.otherDeviceNetworkHint), textAlign = TextAlign.Center)
+        Text(stringResource(R.string.settingsOnOtherDeviceIpHint), textAlign = TextAlign.Center)
         IpAddressDisplay()
     }
 }
@@ -124,8 +126,8 @@ fun IpAddressDisplay() {
     
     Text(
         when (val currentIps = ips) {
-            null -> "Detecting IP address..."
-            emptyList<LocalIp>() -> "No network found, please connect to Wi-Fi"
+            null -> stringResource(R.string.detectingIpAddress)
+            emptyList<LocalIp>() -> stringResource(R.string.noNetworkFoundPleaseConnectToWiFi)
             else -> currentIps.joinToString("\n") { "• ${it.address} (${it.transport})" }
         },
         textAlign = TextAlign.Center
