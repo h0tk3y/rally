@@ -88,7 +88,6 @@ fun GridKey.localizedText(): String {
 }
 
 private val keyboardButtonsOrder = listOf(
-    null,
     listOf(REMOVE, SYNTH, ADD_ABOVE, ADD_BELOW),
     null,
     listOf(ATIME, ODO, SETAVG, THENAVG, ENDAVG),
