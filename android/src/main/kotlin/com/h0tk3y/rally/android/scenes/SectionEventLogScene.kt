@@ -25,9 +25,11 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment.Companion.CenterVertically
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.h0tk3y.rally.R
 import com.h0tk3y.rally.android.LoadState
 import com.h0tk3y.rally.android.db.Database
 import com.h0tk3y.rally.db.Event
@@ -57,7 +59,7 @@ fun SectionEventLogScene(
             TopAppBar(
                 backgroundColor = MaterialTheme.colors.surface,
                 title = {
-                    Text("Event log")
+                    Text(stringResource(R.string.eventLog))
                 },
                 navigationIcon = {
                     IconButton(onClick = { onBack() }) {
@@ -68,7 +70,7 @@ fun SectionEventLogScene(
                     IconButton(onClick = {
                         model.deleteAllForCurrentSection()
                     }) {
-                        Icon(Icons.Default.DeleteSweep, "Delete events")
+                        Icon(Icons.Default.DeleteSweep, stringResource(R.string.buttonDeleteEvents))
                     }
                 }
             )
@@ -91,18 +93,18 @@ fun SectionEventLogScene(
                                         RaceEventKind.RACE_FINISH -> Icons.Default.Flag
                                         RaceEventKind.SECTION_UNDO_FINISH,
                                         RaceEventKind.RACE_UNDO_FINISH -> Icons.AutoMirrored.Default.Undo
-                                    }, "Event kind: ${item.kind}", Modifier.weight(1f)
+                                    }, stringResource(R.string.eventKindPrefix) + item.kind, Modifier.weight(1f)
                                 )
                                 Text(item.distance.strRound3(), Modifier.weight(1.5f))
                                 Text(item.timestamp.toLocalDateTime(TimeZone.currentSystemDefault()).time.format(localTimeFormat), Modifier.weight(2f))
                                 Text(
                                     when (item.kind) {
-                                        RaceEventKind.SECTION_START -> "Section started"
-                                        RaceEventKind.SECTION_FINISH -> "Section finished"
-                                        RaceEventKind.SECTION_UNDO_FINISH -> "Undo section finish"
-                                        RaceEventKind.RACE_START -> "Race started"
-                                        RaceEventKind.RACE_FINISH -> "Race finished"
-                                        RaceEventKind.RACE_UNDO_FINISH -> "Undo race finish"
+                                        RaceEventKind.SECTION_START -> stringResource(R.string.eventSectionStarted)
+                                        RaceEventKind.SECTION_FINISH -> stringResource(R.string.eventSectionFinished)
+                                        RaceEventKind.SECTION_UNDO_FINISH -> stringResource(R.string.eventUndoSectionFinish)
+                                        RaceEventKind.RACE_START -> stringResource(R.string.eventRaceStarted)
+                                        RaceEventKind.RACE_FINISH -> stringResource(R.string.eventRaceFinished)
+                                        RaceEventKind.RACE_UNDO_FINISH -> stringResource(R.string.eventUndoRaceFinish)
                                     } + durationText, Modifier.weight(4f)
                                 )
                             }
