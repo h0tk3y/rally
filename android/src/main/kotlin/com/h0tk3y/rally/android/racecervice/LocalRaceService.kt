@@ -37,6 +37,7 @@ import com.h0tk3y.rally.DistanceKm
 import com.h0tk3y.rally.LineNumber
 import com.h0tk3y.rally.PositionLine
 import com.h0tk3y.rally.PositionLineModifier
+import com.h0tk3y.rally.R
 import com.h0tk3y.rally.SpeedKmh
 import com.h0tk3y.rally.TimeHr
 import com.h0tk3y.rally.android.MainActivity
@@ -181,7 +182,7 @@ class TcpStreamedRaceService : StreamedRaceService, Service() {
 
     override fun onCreate() {
         super.onCreate()
-        RaceNotificationUtils.createNotificationChannel(NotificationManagerCompat.from(this))
+        RaceNotificationUtils.createNotificationChannel(this, NotificationManagerCompat.from(this))
         startForeground(RaceNotificationUtils.RECEIVE_STREAM_NOTIFICATION_ID, RaceNotificationUtils.serviceStartNotification(this))
     }
 
@@ -515,7 +516,7 @@ class LocalRaceService : CommonRaceService, RaceServiceControls, StreamSourceSer
 
     override fun onCreate() {
         super.onCreate()
-        RaceNotificationUtils.createNotificationChannel(NotificationManagerCompat.from(this))
+        RaceNotificationUtils.createNotificationChannel(this, NotificationManagerCompat.from(this))
         startForeground(RACE_NOTIFICATION_ID, RaceNotificationUtils.serviceStartNotification(this))
     }
 
@@ -876,10 +877,10 @@ private object RaceNotificationUtils {
         kind: RaceNotificationKind
     ) {
         val titleState = when (state) {
-            is RaceState.Going -> ": Going"
-            is RaceState.InRace -> ": In race"
+            is RaceState.Going -> context.getString(R.string.notificationGoing)
+            is RaceState.InRace -> context.getString(R.string.notificationInRace)
             RaceState.NotStarted -> ""
-            is RaceState.Stopped -> ": Stopped"
+            is RaceState.Stopped -> context.getString(R.string.notificationStopped)
         }
 
         fun deltaTimeText(startAtTime: Instant) =
@@ -891,7 +892,7 @@ private object RaceNotificationUtils {
             }
 
             is RaceState.InRace -> state.raceModel.currentDistance.valueKm.strRound3() + " / " + deltaTimeText(state.raceModel.startAtTime)
-            RaceState.NotStarted -> "Not started"
+            RaceState.NotStarted -> context.getString(R.string.notificationTextNotStarted)
             else -> null
         }
 
@@ -909,13 +910,13 @@ private object RaceNotificationUtils {
 
         val titleMarker = when (kind) {
             RaceNotificationKind.LOCAL -> ""
-            RaceNotificationKind.TELE -> " (driver HUD)"
+            RaceNotificationKind.TELE -> " " + context.getString(R.string.notificationDriverHud)
         }
 
         val notification = NotificationCompat.Builder(context, TIMER_SERVICE_NOTIFICATION_CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_notify_sync_noanim)
             .setCategory(Notification.CATEGORY_SERVICE)
-            .setContentTitle("$NOTIFICATION_TITLE_PREFIX$titleMarker$titleState")
+            .setContentTitle("${titlePrefix(context)}$titleMarker$titleState")
             .let { if (contentText != null) it.setContentText(contentText) else it }
             .setOngoing(true)
             .setOnlyAlertOnce(true)
@@ -936,22 +937,22 @@ private object RaceNotificationUtils {
         NotificationCompat.Builder(context, TIMER_SERVICE_NOTIFICATION_CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_notify_sync_noanim)
             .setCategory(Notification.CATEGORY_SERVICE)
-            .setContentTitle(NOTIFICATION_TITLE_PREFIX)
-            .setContentText("Starting race service")
+            .setContentTitle(titlePrefix(context))
+            .setContentText(context.getString(R.string.notificationTextStartingRaceService))
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .build()
 
-    fun createNotificationChannel(notificationManager: NotificationManagerCompat) {
+    fun createNotificationChannel(context: Context, notificationManager: NotificationManagerCompat) {
         val serviceChannel = NotificationChannel(
             TIMER_SERVICE_NOTIFICATION_CHANNEL_ID,
-            "Race Service",
+            context.getString(R.string.notificationChannelRaceService),
             NotificationManager.IMPORTANCE_LOW
         )
         notificationManager.createNotificationChannel(serviceChannel)
     }
 
-    private const val NOTIFICATION_TITLE_PREFIX = "Rally"
+    private fun titlePrefix(context: Context) = context.getString(R.string.notificationTitleRally)
 
     const val RACE_NOTIFICATION_ID = 1
     const val RECEIVE_STREAM_NOTIFICATION_ID = 2

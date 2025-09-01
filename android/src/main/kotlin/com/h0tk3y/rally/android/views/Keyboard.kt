@@ -10,9 +10,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.h0tk3y.rally.R
 import com.h0tk3y.rally.android.scenes.EditorControls
 import com.h0tk3y.rally.android.scenes.EditorState
 import com.h0tk3y.rally.android.theme.LocalCustomColorsPalette
@@ -55,7 +57,7 @@ fun Keyboard(
                             modifier = Modifier.weight(1f),
                         ) {
                             Text(
-                                it.text,
+                                it.localizedText(),
                                 modifier = Modifier.padding(4.dp),
                                 fontSize = if (it == DOT || it == DEL || it.name.startsWith("N_")) 24.sp else 14.sp,
                                 style = TextStyle(
@@ -66,6 +68,22 @@ fun Keyboard(
                     }
             }
         }
+    }
+}
+
+@Composable
+fun GridKey.localizedText(): String {
+    return when (this) {
+        SETAVG -> stringResource(R.string.keySetavg)
+        THENAVG -> stringResource(R.string.keyThen)
+        ENDAVG -> stringResource(R.string.keyEndavg)
+        SYNTH -> stringResource(R.string.keySynth)
+        ATIME -> stringResource(R.string.keyAtime)
+        ODO -> stringResource(R.string.keyOdo)
+        ADD_BELOW -> stringResource(R.string.keyAddBelow)
+        ADD_ABOVE -> stringResource(R.string.keyAddAbove)
+        REMOVE -> stringResource(R.string.keyRemove)
+        else -> text
     }
 }
 
