@@ -1,5 +1,5 @@
 [versions]
-nav3Core = "1.0.0-alpha06"
+nav3Core = "1.0.0-alpha08"
 lifecycleViewmodelNav3 = "1.0.0-alpha04"
 
 [libraries]
