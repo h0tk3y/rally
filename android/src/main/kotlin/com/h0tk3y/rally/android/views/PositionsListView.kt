@@ -17,9 +17,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.h0tk3y.rally.*
 import com.h0tk3y.rally.PositionLineModifier.IsSynthetic
+import com.h0tk3y.rally.R
 import com.h0tk3y.rally.android.scenes.*
 import com.h0tk3y.rally.android.scenes.DataKind.*
 import com.h0tk3y.rally.android.theme.LocalCustomColorsPalette
@@ -78,7 +80,7 @@ fun PositionsListView(
                     .fillMaxWidth()
                     .background(LocalCustomColorsPalette.current.dangerous)
             ) {
-                Text(modifier = Modifier.padding(8.dp), text = "Failed to calculate because of errors")
+                Text(modifier = Modifier.padding(8.dp), text = stringResource(R.string.failedToCalculateErrors))
             }
         }
         LaunchedEffect(key1 = positionsList, key2 = editorFocus, key3 = selectedLineIndex) {
@@ -156,7 +158,7 @@ fun PositionsListView(
                                     val matchSpeed = subsMatch.endSubMatch[line]?.modifier<PositionLineModifier.SetAvg>()
                                     LabelForField(
                                         buildString {
-                                            append("endavg")
+                                            append(stringResource(R.string.labelEndavg))
                                             if (matchId != null) append(matchId)
                                         }, Modifier.align(Alignment.CenterVertically)
                                     )
@@ -200,11 +202,11 @@ fun PositionsListView(
                                             failuresInCurrentLine.forEach {
                                                 if (!editorState.isEnabled || showFailureInEditor(it.reason)) {
                                                     val text = when (val reason = it.reason) {
-                                                        is FailureReason.AverageSpeedUnknown -> "outside intervals"
-                                                        is FailureReason.UnexpectedAverageEnd -> "no setavg for this position"
-                                                        is FailureReason.NonMatchingAverageEnd -> "endavg speed does not match"
+                                                        is FailureReason.AverageSpeedUnknown -> stringResource(R.string.errOutsideIntervals)
+                                                        is FailureReason.UnexpectedAverageEnd -> stringResource(R.string.errNoSetavg)
+                                                        is FailureReason.NonMatchingAverageEnd -> stringResource(R.string.errEndAvgDoesNotMatch)
                                                         is FailureReason.DistanceIsNotIncreasing -> "< ${reason.shouldBeAtLeast.valueKm.strRound3()}"
-                                                        is FailureReason.OuterIntervalNotCovered -> "outer interval not covered by subs"
+                                                        is FailureReason.OuterIntervalNotCovered -> stringResource(R.string.errOuterNotCovered)
                                                     }
                                                     Text(
                                                         text = text,
@@ -232,7 +234,10 @@ fun PositionsListView(
                                                 }
                                                 warningsInCurrentLine.forEach {
                                                     val text = when (val reason = it.reason) {
-                                                        is WarningReason.ImpossibleToGetInTime -> "🚫late by ${(reason.takes - reason.available).toMinSec()}"
+                                                        is WarningReason.ImpossibleToGetInTime -> stringResource(
+                                                            R.string.warnLateBy,
+                                                            (reason.takes - reason.available).toMinSec()
+                                                        )
                                                     }
                                                     Text(
                                                         modifier = Modifier
@@ -370,23 +375,23 @@ fun LabelForField(kind: DataKind, line: PositionLine, matchId: Int?, modifier: M
     val padding = modifier.padding(end = 2.dp)
     when (kind) {
         Distance -> Unit
-        OdoDistance -> Text("odo", padding)
+        OdoDistance -> Text(stringResource(R.string.labelOdo), padding)
         AverageSpeed -> {
             val matchStr = matchId?.toString().orEmpty()
             val setavg = line.modifier<PositionLineModifier.SetAvg>()
             if (setavg != null) {
                 LabelForField(
-                    text = if (setavg is PositionLineModifier.SetAvgSpeed) "setavg$matchStr" else
-                        if (setavg is PositionLineModifier.ThenAvgSpeed) "thenavg$matchStr"
+                    text = if (setavg is PositionLineModifier.SetAvgSpeed) stringResource(R.string.labelSetavg, matchStr) else
+                        if (setavg is PositionLineModifier.ThenAvgSpeed) stringResource(R.string.labelThenAvg, matchStr)
                         else "???",
                     padding
                 )
             } else Unit
         }
 
-        SyntheticCount -> Text("synth", padding)
-        SyntheticInterval -> Text("each", padding)
-        AstroTime -> Text("atime", modifier)
+        SyntheticCount -> Text(stringResource(R.string.labelSynth), padding)
+        SyntheticInterval -> Text(stringResource(R.string.labelEach), padding)
+        AstroTime -> Text(stringResource(R.string.labelAtime), modifier)
     }
 }
 

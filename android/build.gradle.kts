@@ -79,6 +79,11 @@ android {
             keyPassword = keystoreProperties["keyPassword"] as String
         }
     }
+    androidResources {
+        @Suppress("UnstableApiUsage")
+        generateLocaleConfig = true
+    }
+
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
