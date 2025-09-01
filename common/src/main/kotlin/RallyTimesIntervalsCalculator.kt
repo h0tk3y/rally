@@ -269,13 +269,14 @@ internal class IntervalBuilder {
         var current = startAt
         var hasSynthRoot = false
         do {
-            val setAvg = roadmap[current].modifier<SetAvg>()
-                ?: return BuildIntervalResult.Failure(
-                    CalculationFailure(
-                        roadmap[current],
-                        FailureReason.OuterIntervalNotCovered
-                    )
-                )
+            val line = roadmap[current]
+            val maybeSetAvg = line.modifier<SetAvg>()
+            if (maybeSetAvg == null && roadmap.getOrNull(current + 1)?.atKm == line.atKm) {
+                ++current
+                continue
+            }
+            val setAvg = maybeSetAvg
+                ?: return BuildIntervalResult.Failure(CalculationFailure(line, FailureReason.OuterIntervalNotCovered))
 
             val call = recurse(current, setAvg.setavg)
             if (outermost != null) {
