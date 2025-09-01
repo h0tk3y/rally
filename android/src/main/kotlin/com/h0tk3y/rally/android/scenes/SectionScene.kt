@@ -31,6 +31,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Settings
@@ -53,6 +54,7 @@ import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
 import com.h0tk3y.rally.InputToTextSerializer
@@ -62,6 +64,7 @@ import com.h0tk3y.rally.PositionLineModifier
 import com.h0tk3y.rally.PositionLineModifier.AddSynthetic
 import com.h0tk3y.rally.PositionLineModifier.IsSynthetic
 import com.h0tk3y.rally.PositionLineModifier.SetAvg
+import com.h0tk3y.rally.R
 import com.h0tk3y.rally.RallyTimesResultFailure
 import com.h0tk3y.rally.RallyTimesResultSuccess
 import com.h0tk3y.rally.RoadmapInputLine
@@ -194,9 +197,9 @@ fun SectionScene(
                     Text(
                         when (currentSection) {
                             is LoadState.Loaded -> currentSection.value.name
-                            is LoadState.LOADING -> "Loading"
+                            is LoadState.LOADING -> stringResource(R.string.stateLoading)
                             LoadState.EMPTY -> ""
-                            LoadState.FAILED -> "Failed to load section"
+                            LoadState.FAILED -> stringResource(R.string.stateFailedToLoadSection)
                         }
                     )
                 },
@@ -211,9 +214,9 @@ fun SectionScene(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
                                     imageVector = if (!editorState.isEnabled) Icons.Rounded.Edit else Icons.Rounded.Done,
-                                    "Switch editor"
+                                    stringResource(R.string.buttonSwitchEditor)
                                 )
-                                Text(if (editorState.isEnabled) "Calculate" else "Edit")
+                                Text(if (editorState.isEnabled) stringResource(R.string.buttonCalculate) else stringResource(R.string.buttonEdit))
                             }
                         }
 
@@ -221,7 +224,7 @@ fun SectionScene(
                     }
 
                     IconButton(onClick = { showMenu = true }) {
-                        Icon(Icons.Default.MoreVert, "Show menu")
+                        Icon(Icons.Default.MoreVert, stringResource(R.string.showMenu))
                     }
                     DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                         if (model is RaceModelControls) {
@@ -229,7 +232,7 @@ fun SectionScene(
                             val launchServiceAfterObtainingPermission = permissionRequester(whenObtained = {
                                 model.enterRaceMode()
                             }, whenFailedToObtain = {
-                                Toast.makeText(context, "Please grant the required permissions", Toast.LENGTH_LONG).show()
+                                Toast.makeText(context, context.getString(R.string.toastGrantPermission), Toast.LENGTH_LONG).show()
                             })
                             DropdownMenuItem(onClick = {
                                 if (editorState.isEnabled && model is EditableSectionViewModel) {
@@ -249,20 +252,20 @@ fun SectionScene(
                                 }
                                 showMenu = false
                             }) {
-                                Icon(imageVector = Icons.Rounded.Flag, "Race")
+                                Icon(imageVector = Icons.Rounded.Flag, stringResource(R.string.buttonRaceMode))
                                 Spacer(Modifier.width(8.dp))
                                 Text(
-                                    if (editorState.isEnabled) "Race mode" else
+                                    if (editorState.isEnabled) stringResource(R.string.buttonRaceMode) else
                                         when (raceState) {
-                                            RaceUiState.NoRaceServiceConnection -> "Race mode"
+                                            RaceUiState.NoRaceServiceConnection -> stringResource(R.string.buttonRaceMode)
 
                                             is RaceUiState.RaceGoingInAnotherSection,
                                             is RaceUiState.Stopped,
                                             is RaceUiState.Going,
                                             is RaceUiState.RaceGoing ->
-                                                if (raceUiVisible) "Hide race panel" else "Show race panel"
+                                                if (raceUiVisible) stringResource(R.string.buttonHideRacePanel) else stringResource(R.string.buttonShowRacePanel)
 
-                                            RaceUiState.RaceNotStarted -> "Stop race service"
+                                            RaceUiState.RaceNotStarted -> stringResource(R.string.buttonStopRaceService)
                                         }
                                 )
                             }
@@ -271,9 +274,9 @@ fun SectionScene(
                                     model.leaveRaceMode(forceStop = true)
                                     showMenu = false
                                 }) {
-                                    Icon(imageVector = Icons.Rounded.Cancel, "Drop race state and stop")
+                                    Icon(imageVector = Icons.Rounded.Cancel, stringResource(R.string.buttonDropRaceState))
                                     Spacer(Modifier.width(8.dp))
-                                    Text("Reset and stop race service")
+                                    Text(stringResource(R.string.buttonDropRaceState))
                                 }
                             }
 
@@ -286,9 +289,9 @@ fun SectionScene(
                                 DropdownMenuItem(onClick = {
                                     inDeleteConfirmation = true
                                 }) {
-                                    Icon(Icons.Default.Delete, "Delete section")
+                                    Icon(Icons.Default.Delete, stringResource(R.string.buttonDeleteThisSection))
                                     Spacer(Modifier.width(8.dp))
-                                    Text("Delete this section")
+                                    Text(stringResource(R.string.buttonDeleteThisSection))
                                 }
                             } else {
                                 DropdownMenuItem(onClick = {
@@ -299,27 +302,27 @@ fun SectionScene(
                                         model.leaveRaceMode(forceStop = true)
                                     }
                                 }) {
-                                    Icon(Icons.Default.Delete, "Tap again to delete")
+                                    Icon(Icons.Default.DeleteForever, stringResource(R.string.buttonTapAgainToDelete))
                                     Spacer(Modifier.width(8.dp))
-                                    Text("Tap again to delete")
+                                    Text(stringResource(R.string.buttonTapAgainToDelete))
                                 }
                             }
                             DropdownMenuItem(onClick = {
                                 showMenu = false
                                 showDuplicateDialog = true
                             }) {
-                                Icon(Icons.Default.Add, "Duplicate this section")
+                                Icon(Icons.Default.Add, stringResource(R.string.buttonDuplicateThisSection))
                                 Spacer(Modifier.width(8.dp))
-                                Text("Duplicate this section")
+                                Text(stringResource(R.string.buttonDuplicateThisSection))
                             }
 
                             DropdownMenuItem(onClick = {
                                 showMenu = false
                                 showRenameDialog = true
                             }) {
-                                Icon(Icons.Default.Edit, "Rename this section")
+                                Icon(Icons.Default.Edit, stringResource(R.string.buttonRenameThisSection))
                                 Spacer(Modifier.width(8.dp))
-                                Text("Rename this section")
+                                Text(stringResource(R.string.buttonRenameThisSection))
                             }
                         }
 
@@ -338,9 +341,9 @@ fun SectionScene(
                                 }
                                 showMenu = false
                             }) {
-                                Icon(Icons.Default.Share, "Export as text")
+                                Icon(Icons.Default.Share, stringResource(R.string.buttonCopyAsText))
                                 Spacer(Modifier.width(8.dp))
-                                Text("Copy as text")
+                                Text(stringResource(R.string.buttonCopyAsText))
                             }
                             Divider()
                         }
@@ -348,9 +351,9 @@ fun SectionScene(
                             onGoToSettings((raceState as? RaceUiState.HasRaceModel)?.raceModel?.currentDistance?.valueKm)
                             showMenu = false
                         }) {
-                            Icon(Icons.Default.Settings, "Settings")
+                            Icon(Icons.Default.Settings, stringResource(R.string.settings))
                             Spacer(Modifier.width(8.dp))
-                            Text("Settings")
+                            Text(stringResource(R.string.settings))
                         }
                     }
                 }
@@ -408,9 +411,9 @@ fun SectionScene(
                             )
                         }
 
-                        LoadState.LOADING -> CenterTextBox("Loading sections...")
+                        LoadState.LOADING -> CenterTextBox(stringResource(R.string.stateLoadingSections))
                         LoadState.EMPTY -> Box(Modifier.fillMaxSize(), Alignment.Center) { emptySectionView() }
-                        LoadState.FAILED -> CenterTextBox("Something went wrong")
+                        LoadState.FAILED -> CenterTextBox(stringResource(R.string.stateSomethingWentWrong))
                     }
                 }
                 if (model is EditorControls && editorState.isEnabled) {
