@@ -81,6 +81,9 @@ private class NavigationModel(private val backStack: NavBackStack) {
     }
     
     fun popBack(times: Int = 1) {
+        if (backStack.size <= 1) 
+            return
+        
         fun popOne() {
             val popped = backStack.removeLastOrNull()
             backHandlers[popped]?.forEach { it() }
