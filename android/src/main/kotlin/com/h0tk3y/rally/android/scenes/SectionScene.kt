@@ -260,42 +260,52 @@ fun SectionScene(
                                 }, whenFailedToObtain = {
                                     Toast.makeText(context, context.getString(R.string.toastGrantPermission), Toast.LENGTH_LONG).show()
                                 })
-                                DropdownMenuItem(onClick = {
-                                    if (editorState.isEnabled && model is EditableSectionViewModel) {
-                                        model.switchEditor()
-                                        when (raceState) {
-                                            is RaceUiState.NoRaceServiceConnection -> launchServiceAfterObtainingPermission()
-                                            else -> Unit
-                                        }
-                                    } else when (raceState) {
-                                        is RaceUiState.NoRaceServiceConnection -> launchServiceAfterObtainingPermission()
-                                        is RaceUiState.RaceGoing,
-                                        is RaceUiState.RaceGoingInAnotherSection,
-                                        is RaceUiState.Stopped,
-                                        is RaceUiState.Going,
-                                        RaceUiState.RaceNotStarted ->
-                                            if (raceUiVisible) model.leaveRaceMode(false) else model.enterRaceMode()
-                                    }
-                                    showMenu = false
-                                }) {
-                                    Icon(imageVector = Icons.Rounded.Flag, stringResource(R.string.buttonRaceMode))
-                                    Spacer(Modifier.width(8.dp))
-                                    Text(
-                                        if (editorState.isEnabled) stringResource(R.string.buttonRaceMode) else
+
+                                if (raceState !is RaceUiState.RaceNotStarted) {
+                                    DropdownMenuItem(onClick = {
+                                        if (editorState.isEnabled && model is EditableSectionViewModel) {
+                                            model.switchEditor()
                                             when (raceState) {
-                                                RaceUiState.NoRaceServiceConnection -> stringResource(R.string.buttonRaceMode)
-
-                                                is RaceUiState.RaceGoingInAnotherSection,
-                                                is RaceUiState.Stopped,
-                                                is RaceUiState.Going,
-                                                is RaceUiState.RaceGoing ->
-                                                    if (raceUiVisible) stringResource(R.string.buttonHideRacePanel) else stringResource(R.string.buttonShowRacePanel)
-
-                                                RaceUiState.RaceNotStarted -> stringResource(R.string.buttonStopRaceService)
+                                                is RaceUiState.NoRaceServiceConnection -> launchServiceAfterObtainingPermission()
+                                                else -> Unit
                                             }
-                                    )
+                                        } else when (raceState) {
+                                            is RaceUiState.NoRaceServiceConnection -> launchServiceAfterObtainingPermission()
+                                            is RaceUiState.RaceGoing,
+                                            is RaceUiState.RaceGoingInAnotherSection,
+                                            is RaceUiState.Stopped,
+                                            is RaceUiState.Going,
+                                            RaceUiState.RaceNotStarted ->
+                                                if (raceUiVisible) model.hideRaceUi() else model.enterRaceMode()
+                                        }
+                                        showMenu = false
+                                    }) {
+                                        Icon(imageVector = Icons.Rounded.Flag, stringResource(R.string.buttonRaceMode))
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(
+                                            if (editorState.isEnabled) {
+                                                when (raceState) {
+                                                    is RaceUiState.NoRaceServiceConnection -> stringResource(R.string.buttonRaceMode)
+                                                    else -> stringResource(R.string.buttonShowRacePanel)
+                                                }
+                                            } else
+                                                when (raceState) {
+                                                    RaceUiState.NoRaceServiceConnection -> stringResource(R.string.buttonRaceMode)
+
+                                                    is RaceUiState.RaceGoingInAnotherSection,
+                                                    is RaceUiState.Stopped,
+                                                    is RaceUiState.Going,
+                                                    RaceUiState.RaceNotStarted,
+                                                    is RaceUiState.RaceGoing ->
+                                                        if (raceUiVisible)
+                                                            stringResource(R.string.buttonHideRacePanel)
+                                                        else
+                                                            stringResource(R.string.buttonShowRacePanel)
+                                                }
+                                        )
+                                    }
                                 }
-                                if (raceState is RaceUiState.Stopped) {
+                                if (raceState is RaceUiState.Stopped || raceState is RaceUiState.RaceNotStarted) {
                                     DropdownMenuItem(onClick = {
                                         model.leaveRaceMode(forceStop = true)
                                         showMenu = false
