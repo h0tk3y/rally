@@ -71,8 +71,8 @@
     <string name="buttonAddPassedPosition">Добавить позицию здесь</string>
     <string name="telemetryDataIncompatible">Данные: несовместимая версия</string>
     <string name="telemetryNotInitialized">Телеметрия не запущена</string>
-    <string name="telemetryObdConnecting">OBD: подключение...</string>
-    <string name="telemetryObdReconnecting">OBD: переподключение...</string>
+    <string name="telemetryObdConnecting">OBD: подключение…</string>
+    <string name="telemetryObdReconnecting">OBD: переподключение…</string>
     <string name="telemetryObdPermissions">OBD: нет разрешений!</string>
     <string name="telemetryObdNoMac">OBD: нет MAC-адреса в настройках!</string>
     <string name="telemetryGpsNoPosition">GPS: нет позиции</string>
