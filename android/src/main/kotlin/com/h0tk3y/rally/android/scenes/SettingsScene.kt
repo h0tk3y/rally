@@ -29,6 +29,7 @@ import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.RadioButton
 import androidx.compose.material.RadioButtonDefaults
 import androidx.compose.material.Scaffold
+import androidx.compose.material.Switch
 import androidx.compose.material.Text
 import androidx.compose.material.TopAppBar
 import androidx.compose.material.icons.Icons
@@ -85,6 +86,7 @@ fun SettingsScene(
             LazyColumn(Modifier.padding(padding), lazyListState, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 item { TelemetrySource(model, calibrateByCurrentDistance) }
                 item { Allowance(model) }
+                item { SoundFeedback(model) }
             }
         }
     )
@@ -342,6 +344,27 @@ private fun Allowance(
 }
 
 @Composable
+fun SoundFeedback(
+    model: SettingsViewModel
+) {
+    val soundFeedback by model.soundFeedback.collectAsState(false)
+
+    Text(stringResource(R.string.settingsRaceModeTitle), style = MaterialTheme.typography.h6, modifier = Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp))
+    
+    SettingsRow(
+        Modifier
+            .clickable { model.setSoundFeedback(!soundFeedback) }
+            .fillMaxWidth()
+    )  {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(stringResource(R.string.settingsSoundFeedback))
+        }
+        Spacer(Modifier.weight(1f))
+        Switch(soundFeedback, onCheckedChange = model::setSoundFeedback)
+    }
+}
+
+@Composable
 private fun SettingsRow(modifier: Modifier = Modifier, content: @Composable RowScope.() -> Unit) {
     Row(
         modifier
@@ -359,6 +382,7 @@ class SettingsViewModel(
 ) : ViewModel() {
     val currentTelemetrySource = prefs.userPreferencesFlow.map { it.telemetrySource }
     val sendTeleToIp = prefs.userPreferencesFlow.map { it.sendTeleToIp }
+    val soundFeedback = prefs.userPreferencesFlow.map { it.soundFeedback }
     val currentMacSelection = prefs.userPreferencesFlow.map { it.btMac }
     val currentAllowance = prefs.userPreferencesFlow.map { it.allowance }
     val currentCalibration = prefs.userPreferencesFlow.map { it.calibration }
@@ -390,6 +414,12 @@ class SettingsViewModel(
     fun setSendTeleToIp(newIp: String?) {
         viewModelScope.launch {
             prefs.saveSendTeleToIp(newIp)
+        }
+    }
+
+    fun setSoundFeedback(soundFeedback: Boolean) {
+        viewModelScope.launch {
+            prefs.saveSoundFeedback(soundFeedback)
         }
     }
 
