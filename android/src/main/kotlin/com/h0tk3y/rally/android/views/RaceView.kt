@@ -237,7 +237,11 @@ private fun MoreRaceControls(
             switchRememberedSpeedControls()
         }
         if (raceModelControls != null) {
-            IconButton(onClick = { onAddPositionAtCurrentDistance() }) {
+            val hapticFeedback = LocalHapticFeedback.current
+            IconButton(onClick = {
+                hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                onAddPositionAtCurrentDistance()
+            }) {
                 Icon(
                     Icons.Rounded.AddLocationAlt, contentDescription = stringResource(R.string.buttonAddPassedPosition),
                     Modifier.size(if (isBigUi) 56.dp else 28.dp)
