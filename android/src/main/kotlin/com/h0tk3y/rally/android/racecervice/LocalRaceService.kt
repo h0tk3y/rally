@@ -92,6 +92,7 @@ import java.net.Socket
 import java.util.UUID
 import kotlin.coroutines.CoroutineContext
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 
 interface CommonRaceService {
@@ -119,6 +120,17 @@ sealed interface TelemetryPublicState {
     data object BtConnecting : TelemetryPublicState
     data object BtWorking : TelemetryPublicState
     data object BtReconnecting : TelemetryPublicState
+
+    data object GpsNoPermissions : TelemetryPublicState
+
+    sealed interface GpsHasSats {
+        val sats: Int
+    }
+
+    data class GpsGood(override val sats: Int) : TelemetryPublicState, GpsHasSats
+    data class GpsProblematic(override val sats: Int) : TelemetryPublicState, GpsHasSats
+    data class GpsNoPosition(override val sats: Int) : TelemetryPublicState, GpsHasSats
+    data class GpsWaiting(override val sats: Int) : TelemetryPublicState, GpsHasSats
 }
 
 
@@ -561,12 +573,20 @@ class LocalRaceService : CommonRaceService, RaceServiceControls, StreamSourceSer
             HasSocket
     }
 
+    private sealed interface GpsReceiverState {
+        data object NoPermissions : GpsReceiverState
+        data object NoSatellite : GpsReceiverState
+        data object NoLocationData : GpsReceiverState
+        data object GoodLocationData : GpsReceiverState
+        data object ProblematicLocationData : GpsReceiverState
+    }
+
     private sealed interface TelemetryState {
         data object NotInitialized : TelemetryState
         data object UsesSimulator : TelemetryState
         data object ReceivesStream : TelemetryState
-        data class BtTelemetry(val connectionState: BtConnectionState) :
-            TelemetryState
+        data class BtTelemetry(val connectionState: BtConnectionState) : TelemetryState
+        data class GpsTelemetry(val gpsState: GpsReceiverState, val sats: Int) : TelemetryState
 
         fun toPublicState(): TelemetryPublicState {
             return when (this) {
@@ -583,6 +603,14 @@ class LocalRaceService : CommonRaceService, RaceServiceControls, StreamSourceSer
                 }
 
                 ReceivesStream -> TelemetryPublicState.ReceivesStream(false)
+
+                is GpsTelemetry -> when (gpsState) {
+                    GpsReceiverState.NoPermissions -> TelemetryPublicState.GpsNoPermissions
+                    GpsReceiverState.NoLocationData -> TelemetryPublicState.GpsNoPosition(sats)
+                    GpsReceiverState.GoodLocationData -> TelemetryPublicState.GpsGood(sats)
+                    GpsReceiverState.NoSatellite -> TelemetryPublicState.GpsWaiting(sats)
+                    GpsReceiverState.ProblematicLocationData -> TelemetryPublicState.GpsProblematic(sats)
+                }
             }
         }
     }
@@ -642,8 +670,64 @@ class LocalRaceService : CommonRaceService, RaceServiceControls, StreamSourceSer
                         setDebugSpeed(SpeedKmh(0.0))
                         raceDataJob = launch { startSendTeleJob() }
                     }
+
+                    TelemetrySource.GPS -> {
+                        val gpsMeasurement = GpsDistanceMeasurement(this@LocalRaceService, serviceScope)
+                        raceDataJob = serviceScope.launch gpsJob@{
+                            btState.value = TelemetryState.GpsTelemetry(GpsReceiverState.NoSatellite, 0)
+                            launch {
+                                gpsMeasurement.requestPlatformUpdates()
+                                collectGpsMeasurement(gpsMeasurement, this@gpsJob)
+                            }
+                            launch { startSendTeleJob() }
+                        }
+                        raceDataJob.invokeOnCompletion {
+                            gpsMeasurement.stopPlatformUpdates()
+                        }
+                    }
                 }
             }.launchIn(serviceScope)
+    }
+
+    private suspend fun collectGpsMeasurement(measurement: GpsDistanceMeasurement, scope: CoroutineScope) {
+        var lastDistance = measurement.distanceAccumulator.totalDistanceMeters.value
+        
+        measurement.distanceAccumulator.totalDistanceMeters.collectLatest { newDistance ->
+            fun sats() = measurement.distanceAccumulator.satsInUse.value
+            
+            fun updateGpsState(isDelayed: Boolean) {
+                btState.value = when {
+                    isDelayed && measurement.distanceAccumulator.lastFixTime.value
+                        ?.let { Clock.System.now() - it > 2.seconds } == true -> 
+                            TelemetryState.GpsTelemetry(GpsReceiverState.NoLocationData, sats())
+
+                    measurement.distanceAccumulator.lastFixTime.value == null ->
+                        TelemetryState.GpsTelemetry(GpsReceiverState.NoLocationData, sats())
+                    
+                    measurement.distanceAccumulator.isGoodLocation.value ->
+                        TelemetryState.GpsTelemetry(GpsReceiverState.GoodLocationData, sats())
+
+                    else -> TelemetryState.GpsTelemetry(GpsReceiverState.ProblematicLocationData, sats())
+                }
+
+                val speed = SpeedKmh(if (isDelayed) 0.0 else measurement.distanceAccumulator.currentSpeedKmh.value)
+                val distanceDelta = newDistance - lastDistance
+
+                updateRaceStateByMoving(
+                    newDistance = { it + DistanceKm(distanceDelta / 1000.0).times(if (deltaDistanceGoingUp.value) 1.0 else -1.0) },
+                    newInstantSpeed = { speed }
+                )
+            }
+
+            updateGpsState(isDelayed = false)
+
+            lastDistance = newDistance
+
+            while (scope.isActive) { // should normally be cancelled by next update of collectLatest, but if it isn't we report the delay
+                delay(2000L)
+                updateGpsState(true)
+            }
+        }
     }
 
     private fun CoroutineScope.startSendTeleJob() {

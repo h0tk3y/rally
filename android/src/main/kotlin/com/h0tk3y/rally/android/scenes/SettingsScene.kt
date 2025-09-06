@@ -101,21 +101,17 @@ private fun LazyItemScope.TelemetrySource(
 
     Text(stringResource(R.string.settingsTelemetrySource), style = MaterialTheme.typography.h6, modifier = Modifier.padding(16.dp))
 
+    val isGps = telemetrySource == TelemetrySource.GPS
+
     SettingsRow(
-        Modifier.clickable { model.setTelemetrySource(TelemetrySource.SIMULATION) }
+        Modifier
+            .fillMaxWidth()
+            .clickable { model.setTelemetrySource(TelemetrySource.GPS) }
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            RadioButton(colors = rbColors, selected = telemetrySource == TelemetrySource.SIMULATION, onClick = null)
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(stringResource(R.string.telemetrySourceSimulation))
-                Text(style = MaterialTheme.typography.caption, text = stringResource(R.string.telemetrySourceSimulationHint))
-            }
-        }
-    }
-    if (telemetrySource == TelemetrySource.SIMULATION) {
-        Row {
-            Spacer(Modifier.width(48.dp))
-            SendTeleToIp(model)
+        RadioButton(colors = rbColors, selected = isGps, onClick = null)
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(stringResource(R.string.telemetrySourceGps))
+            Text(style = MaterialTheme.typography.caption, text = stringResource(R.string.telemetrySourceGpsHint))
         }
     }
     
@@ -167,20 +163,32 @@ private fun LazyItemScope.TelemetrySource(
         Spacer(Modifier.height(24.dp))
         Row {
             Spacer(Modifier.width(48.dp))
-            SendTeleToIp(model)
         }
+    }
+
+    SettingsRow(
+        Modifier.clickable { model.setTelemetrySource(TelemetrySource.SIMULATION) }
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            RadioButton(colors = rbColors, selected = telemetrySource == TelemetrySource.SIMULATION, onClick = null)
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(stringResource(R.string.telemetrySourceSimulation))
+                Text(style = MaterialTheme.typography.caption, text = stringResource(R.string.telemetrySourceSimulationHint))
+            }
+        }
+    }
+
+    SettingsRow {
+        SendTeleToIp(model)
     }
 }
 
 @Composable
 private fun SendTeleToIp(model: SettingsViewModel) {
     val sendTeleToIp by model.sendTeleToIp.collectAsState(null)
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(stringResource(R.string.settingsSendDataToAnotherDevice))
-        Text(
-            style = MaterialTheme.typography.caption,
-            text = stringResource(R.string.settingsSendDataToAnotherDeviceHint)
-        )
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(text = stringResource(R.string.settingsSendDataToAnotherDevice), style = MaterialTheme.typography.h6, modifier = Modifier.padding(bottom = 8.dp))
+        Text(text = stringResource(R.string.settingsSendDataToAnotherDeviceHint))
         var text by rememberSaveable(sendTeleToIp) { mutableStateOf(sendTeleToIp ?: "") }
         OutlinedTextField(
             modifier = Modifier.fillMaxWidth(),
