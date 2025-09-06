@@ -24,6 +24,7 @@ data class CustomColorsPalette(
     val dangerous: Color = Color.Unspecified,
     val speedLimit: Color = Color.Unspecified,
     val warning: Color = Color.Unspecified,
+    val onWarning: Color = Color.Unspecified,
     val raceCurrent: Color = Color.Unspecified
 )
 
@@ -44,6 +45,7 @@ val OnLightCustomColorsPalette = CustomColorsPalette(
     dangerous = Color.Red,
     warning = Color(color = 0xFFEB7A34),
     speedLimit = Color(0xFFD47972),
+    onWarning = Color(0xFFFFFFFF),
     raceCurrent = Color(color = 0xFF99FF99),
 )
 
@@ -52,6 +54,7 @@ val OnDarkCustomColorsPalette = CustomColorsPalette(
     dangerous = Color.Red,
     warning = Color(color = 0xFFF2A16F),
     speedLimit = Color(0xFF6e3c38),
+    onWarning = Color(0xFF000000),
     raceCurrent = Color(color = 0xFF235523),
 )
 
