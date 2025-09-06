@@ -270,7 +270,7 @@ private fun Calibration(model: SettingsViewModel, calibrateByCurrentDistance: Do
                 )
             } else {
                 Text(text = stringResource(R.string.settingsCalibrateByOdoCheckRoute))
-                Text(text = "Odometer distance: ${calibrateByCurrentDistance.strRound3()}")
+                Text(text = stringResource(R.string.settingsCalibrateOdometerDistance, calibrateByCurrentDistance.strRound3()))
 
                 var exactValueString by rememberSaveable(calibration) { mutableStateOf("") }
                 var isErrorInvalidExactDistance by rememberSaveable { mutableStateOf(false) }
