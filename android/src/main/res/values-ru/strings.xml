@@ -39,7 +39,7 @@
     <string name="toastGrantPermission">Дайте приложению необходимые разрешения</string>
     <string name="buttonRaceMode">Режим гонки</string>
     <string name="buttonHideRacePanel">Скрыть панель гонки</string>
-    <string name="buttonShowRacePanel">Покзаать панель гонки</string>
+    <string name="buttonShowRacePanel">Показать панель гонки</string>
     <string name="buttonStopRaceService">Остановить режим гонки</string>
     <string name="buttonDropRaceState">Выйти из режима гонки</string>
     <string name="buttonDeleteThisSection">Удалить эту секцию</string>
