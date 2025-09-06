@@ -244,7 +244,7 @@ private fun MoreRaceControls(
             }) {
                 Icon(
                     Icons.Rounded.AddLocationAlt, contentDescription = stringResource(R.string.buttonAddPassedPosition),
-                    Modifier.size(if (isBigUi) 56.dp else 28.dp)
+                    Modifier.size(if (isBigUi) 48.dp else 28.dp)
                 )
             }
         }
