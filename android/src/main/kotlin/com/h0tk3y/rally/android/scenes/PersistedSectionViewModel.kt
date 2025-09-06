@@ -87,6 +87,8 @@ interface RaceServiceHolder<S : CommonRaceService> {
 }
 
 interface CommonSectionViewModel {
+    val instant: Instant
+    
     val viewModelScope: CoroutineScope
 
     val section: StateFlow<LoadState<Section>>
@@ -112,6 +114,8 @@ interface CommonSectionViewModel {
 }
 
 abstract class StatefulSectionViewModel : ViewModel(), CommonSectionViewModel {
+    override val instant: Instant get() = Clock.System.now()
+    
     protected val _section: MutableStateFlow<LoadState<Section>> = MutableStateFlow(LoadState.EMPTY)
     protected val _inputPositions: MutableStateFlow<List<RoadmapInputLine>> = MutableStateFlow(emptyList())
     protected val _preprocessedPositions: MutableStateFlow<List<RoadmapInputLine>> = MutableStateFlow(emptyList())
@@ -1265,6 +1269,9 @@ class PersistedSectionViewModel(
 }
 
 class StreamedSectionViewModel : StatefulSectionViewModel(), RaceServiceHolder<TcpStreamedRaceService> {
+    protected val _instant: MutableStateFlow<Instant> = MutableStateFlow(Clock.System.now())
+    override val instant: Instant get() = _instant.value
+    
     override val viewModelScope: CoroutineScope
         get() = (this as ViewModel).viewModelScope
 
@@ -1322,6 +1329,11 @@ class StreamedSectionViewModel : StatefulSectionViewModel(), RaceServiceHolder<T
                 service?.positions?.collectLatest {
                     _inputPositions.value = it.orEmpty()
                     _preprocessedPositions.value = it.orEmpty()
+                }
+            }
+            viewModelScope.launch {
+                service?.instant?.collectLatest {
+                    _instant.value = it
                 }
             }
             viewModelScope.launch {
