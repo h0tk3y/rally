@@ -204,6 +204,7 @@ interface RaceModelControls {
     fun distanceCorrection(distanceKm: DistanceKm)
     fun setRememberSpeed(speedKmh: SpeedKmh?)
     fun leaveRaceMode(forceStop: Boolean)
+    fun hideRaceUi()
     fun setSpeedLimitPercent(value: String?)
 }
 
@@ -295,6 +296,10 @@ class PersistedSectionViewModel(
 
     override fun onSectionUpdate(section: LoadState<Section>) {
         _inputPositions.value = positionLines(section)
+    }
+
+    override fun hideRaceUi() {
+        _raceUiVisible.value = false
     }
 
     override fun onUpdateInputPositions() {
@@ -587,9 +592,10 @@ class PersistedSectionViewModel(
     }
 
     override fun enterRaceMode() {
-        _raceState.value = RaceUiState.NoRaceServiceConnection
         _raceUiVisible.value = true
-        serviceConnector()
+        if (_raceState.value is RaceUiState.NoRaceServiceConnection) {
+            serviceConnector()
+        }
     }
 
     override fun finishRace() {
