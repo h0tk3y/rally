@@ -1005,8 +1005,8 @@ private object RaceNotificationUtils {
         }
 
         val intent = Intent(context, MainActivity::class.java)
-        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        intent.setAction(Intent.ACTION_MAIN)
+        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        intent.action = Intent.ACTION_MAIN
         intent.addCategory(Intent.CATEGORY_LAUNCHER)
 
         val pendingIntent = PendingIntent.getActivity(
