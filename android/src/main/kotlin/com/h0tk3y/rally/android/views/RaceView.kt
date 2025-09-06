@@ -109,6 +109,7 @@ import kotlin.time.Duration.Companion.hours
 
 @Composable
 fun RaceView(
+    timeProvider: () -> Instant,
     race: RaceUiState,
     distanceLocalizer: TimeDistanceLocalizer?,
     sectionDistanceLocalizer: TimeDistanceLocalizer?,
@@ -127,7 +128,7 @@ fun RaceView(
 ) {
     val time by produceState(Clock.System.now()) {
         while (true) {
-            val time = Clock.System.now()
+            val time = timeProvider()
             val currentTime = time.toLocalDateTime(TimeZone.currentSystemDefault())
             val millisToNextWholeSecond = 1000 - (currentTime.time.toMillisecondOfDay() - currentTime.time.toSecondOfDay() * 1000)
             value = time

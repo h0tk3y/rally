@@ -435,6 +435,7 @@ fun SectionScene(
             Keyboard(editorState, model, keyboardModifier)
         } else if (raceUiVisible) {
             RaceView(
+                timeProvider = { model.instant },
                 race = raceState,
                 distanceLocalizer = (results as? RallyTimesResultSuccess)?.raceTimeDistanceLocalizer,
                 sectionDistanceLocalizer = (results as? RallyTimesResultSuccess)?.sectionTimeDistanceLocalizer,
