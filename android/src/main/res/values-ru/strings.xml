@@ -150,4 +150,6 @@
     <string name="notificationTitleRally">Ралли</string>
     <string name="settingsSoundFeedback">Звуки при действиях в режиме гонки</string>
     <string name="settingsRaceModeTitle">Режим гонки</string>
+    <string name="settingsCalibrateOdometerDistance">Дистанция по одометру: %1$s</string>
+    <string name="noSectionData">Нет данных</string>
 </resources>
