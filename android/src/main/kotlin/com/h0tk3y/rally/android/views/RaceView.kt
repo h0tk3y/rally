@@ -504,7 +504,7 @@ private fun RaceTimeDistance(
                 Spacer(Modifier.weight(1.0f))
 
                 if (selectedPosition != null) {
-                    TextButton({
+                    Button({
                         hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
                         raceControls.distanceCorrection(selectedPosition.atKm - raceModel.currentDistance)
                         isEditing = false
