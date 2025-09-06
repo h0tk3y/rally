@@ -81,6 +81,7 @@
     <string name="telemetrySimulationOk">Simulation ✔</string>
     <string name="telemetryData">"Data "</string>
     <string name="telemetryDataDelay" translatable="false">\???</string>
+    <string name="telemetryDataIncompatible">Data: incompatible version</string>
     <string name="telemetryOk" translatable="false">✔</string>
     <string name="telemetryGpsGood" translatable="false">GPS ✔</string>
     <string name="telemetryGpsProblematic" translatable="false">GPS ±</string>
