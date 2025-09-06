@@ -69,6 +69,7 @@
     <string name="allowanceT10DownHint">9 мин  → 0; 10 мин → 1; 11 мин → 1</string>
     <string name="allowanceT10UpHint">9 мин → 1; 10 мин → 1; 11 мин → 2</string>
     <string name="buttonAddPassedPosition">Добавить позицию здесь</string>
+    <string name="telemetryDataIncompatible">Данные: несовместимая версия</string>
     <string name="telemetryNotInitialized">Телеметрия не запущена</string>
     <string name="telemetryObdConnecting">OBD: подключение...</string>
     <string name="telemetryObdReconnecting">OBD: переподключение...</string>

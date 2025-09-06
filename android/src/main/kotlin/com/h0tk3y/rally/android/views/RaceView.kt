@@ -280,6 +280,8 @@ private fun TelemetryStatus(
             is TelemetryPublicState.ReceivesStream ->
                 stringResource(R.string.telemetryData) + (if (telemetryPublicState.isDelayed) stringResource(R.string.telemetryDataDelay) else stringResource(R.string.telemetryOk))
 
+            TelemetryPublicState.IncompatibleStream -> stringResource(R.string.telemetryDataIncompatible)
+
             TelemetryPublicState.WaitingForStream -> stringResource(R.string.telemetryDataWaiting)
 
             is TelemetryPublicState.GpsGood -> stringResource(R.string.telemetryGpsGood) + satsString(telemetryPublicState.sats)
