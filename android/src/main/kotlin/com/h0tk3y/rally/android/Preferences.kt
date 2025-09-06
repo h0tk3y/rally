@@ -34,7 +34,7 @@ data class UserPreferences(
 )
 
 enum class TelemetrySource {
-    BT_OBD, SIMULATION
+    BT_OBD, GPS, SIMULATION
 }
 
 class PreferenceRepository(val dataStore: DataStore<Preferences>) {
@@ -85,7 +85,7 @@ private fun mapUserPreferences(preferences: Preferences): UserPreferences {
         preferences[PreferencesKeys.ALLOWANCE]?.let { pref -> TimeAllowance.entries.find { it.name == pref } }
     val calibration = preferences[PreferencesKeys.CALIBRATION] ?: 1.0
     val telemetrySource = preferences[PreferencesKeys.TELEMETRY_SOURCE]?.let { value  -> TelemetrySource.entries.find { it.name == value } } 
-        ?: TelemetrySource.BT_OBD
+        ?: TelemetrySource.GPS
     val btMac = preferences[PreferencesKeys.BT_MAC]
     val speedLimitPercent = preferences[PreferencesKeys.SPEED_LIMIT_PERCENT_TEXT]
     val sendTeleToIp = preferences[PreferencesKeys.SEND_TELE_TO_IP]

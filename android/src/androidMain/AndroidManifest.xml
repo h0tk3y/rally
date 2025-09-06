@@ -24,7 +24,8 @@
         tools:targetApi="s" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
@@ -35,7 +36,7 @@
         <service
             android:name=".android.racecervice.LocalRaceService"
             android:enabled="true"
-            android:foregroundServiceType="connectedDevice" />
+            android:foregroundServiceType="location" />
 
         <service
             android:name=".android.racecervice.TcpStreamedRaceService"

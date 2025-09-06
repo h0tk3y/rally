@@ -74,6 +74,12 @@
     <string name="telemetryObdReconnecting">OBD: переподключение...</string>
     <string name="telemetryObdPermissions">OBD: нет разрешений!</string>
     <string name="telemetryObdNoMac">OBD: нет MAC-адреса в настройках!</string>
+    <string name="telemetryGpsNoPosition">GPS: нет позиции</string>
+    <string name="telemetryGpsWaiting">GPS: ожидание…</string>
+    <string name="telemetryGpsNoPermission">GPS: нет разрешений!</string>
+    <string name="telemetrySourceGps">GPS</string>
+    <string name="telemetrySourceGpsHint">Измерение дистанции и скорости по GPS</string>
+    <string name="satStatusPattern">" (%1$d спут.)"</string>
     <string name="telemetrySimulationOk">Симуляция ✔</string>
     <string name="telemetryData">Данные</string>
     <string name="telemetryDataWaiting">Данные: ожидание</string>
