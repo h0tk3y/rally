@@ -68,7 +68,10 @@ android {
                 load(
                     keystorePropertiesFile.takeIf { it.exists() }?.inputStream()
                         ?: StringInputStream(
-                            "keyFile=/Users/sergey.igushkin/keys/release-local\nstorePassword=mypass\nkeyPassword=mypass\nkeyAlias=key0\n"
+                            "keyFile=keystore.jks\n" +
+                                    "storePassword=${System.getenv("KEYSTORE_PASSWORD")}\n" +
+                                    "keyPassword=${System.getenv("KEY_PASSWORD")}\n" +
+                                    "keyAlias=${System.getenv("KEY_ALIAS")}\n"
                         )
                 )
             }
