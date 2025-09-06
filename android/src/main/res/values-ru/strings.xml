@@ -147,4 +147,6 @@
     <string name="notificationTextStartingRaceService">Запускается сервис гонки</string>
     <string name="notificationChannelRaceService">Сервис гонки</string>
     <string name="notificationTitleRally">Ралли</string>
+    <string name="settingsSoundFeedback">Звуки при действиях в режиме гонки</string>
+    <string name="settingsRaceModeTitle">Режим гонки</string>
 </resources>
