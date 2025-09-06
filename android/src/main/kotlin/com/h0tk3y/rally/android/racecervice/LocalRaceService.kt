@@ -108,6 +108,8 @@ interface StreamSourceService {
     fun updateCurrentRaceLine(currentLine: LineNumber)
 }
 
+private const val telemetryPort = 63663
+
 sealed interface TelemetryPublicState {
     data object Simulation : TelemetryPublicState
 
@@ -115,6 +117,8 @@ sealed interface TelemetryPublicState {
     data class ReceivesStream(val isDelayed: Boolean) : TelemetryPublicState
 
     data object NotInitialized : TelemetryPublicState
+    data object IncompatibleStream : TelemetryPublicState
+
     data object BtNoTargetMacAddress : TelemetryPublicState
     data object BtNoPermissions : TelemetryPublicState
     data object BtConnecting : TelemetryPublicState
@@ -180,6 +184,7 @@ class TcpStreamedRaceService : StreamedRaceService, Service() {
 
     private sealed interface TelemetryState {
         data object NotInitialized : TelemetryState
+        data object Incompatible : TelemetryState
         data object Connected : TelemetryState
     }
 
@@ -189,6 +194,7 @@ class TcpStreamedRaceService : StreamedRaceService, Service() {
         get() = _telemetryState.map {
             when (it) {
                 TelemetryState.NotInitialized -> TelemetryPublicState.WaitingForStream
+                TelemetryState.Incompatible -> TelemetryPublicState.IncompatibleStream
                 TelemetryState.Connected -> TelemetryPublicState.ReceivesStream(false)
             }
         }
@@ -261,7 +267,7 @@ class TcpStreamedRaceService : StreamedRaceService, Service() {
     private suspend fun CoroutineContext.startNetworkReceiverLoop() {
         while (isActive) {
             try {
-                ServerSocket(9999).apply {
+                ServerSocket(telemetryPort).apply {
                     soTimeout = 2000
                 }.use { serverSocket ->
                     serverSocket.accept().apply {
@@ -271,6 +277,11 @@ class TcpStreamedRaceService : StreamedRaceService, Service() {
                         DataInputStream(socket.getInputStream()).use { input ->
                             while (isActive) {
                                 val size = input.readInt()
+                                val version = input.readLong()
+                                if (version != telemetryStreamingVersion) {
+                                    _telemetryState.value = TelemetryState.Incompatible
+                                    Log.d("raceService", "unsupported telemetry version $version, expected $telemetryStreamingVersion")
+                                }
                                 val buffer = ByteArray(size)
                                 input.readFully(buffer)
                                 handleFrame(buffer)
@@ -756,12 +767,13 @@ class LocalRaceService : CommonRaceService, RaceServiceControls, StreamSourceSer
 
     private suspend fun CoroutineScope.sendDataWithSocket(ip: String) {
         try {
-            Socket(ip, 9999).apply {
+            Socket(ip, telemetryPort).apply {
                 soTimeout = 2000
             }.use { socket ->
                 DataOutputStream(socket.getOutputStream()).use { out ->
                     fun sendFrame(data: ByteArray) {
                         out.writeInt(data.size)
+                        out.writeLong(telemetryStreamingVersion)
                         out.write(data)
                         out.flush()
                     }
@@ -1054,3 +1066,5 @@ private object RaceNotificationUtils {
     const val RECEIVE_STREAM_NOTIFICATION_ID = 2
     private const val TIMER_SERVICE_NOTIFICATION_CHANNEL_ID = "RaceService"
 }
+
+private const val telemetryStreamingVersion = 1L
