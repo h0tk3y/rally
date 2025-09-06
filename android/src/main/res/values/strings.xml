@@ -82,6 +82,14 @@
     <string name="telemetryData">"Data "</string>
     <string name="telemetryDataDelay" translatable="false">\???</string>
     <string name="telemetryOk" translatable="false">✔</string>
+    <string name="telemetryGpsGood" translatable="false">GPS ✔</string>
+    <string name="telemetryGpsProblematic" translatable="false">GPS ±</string>
+    <string name="telemetryGpsNoPosition">GPS: no position</string>
+    <string name="telemetryGpsWaiting">GPS: waiting</string>
+    <string name="telemetryGpsNoPermission">GPS: permissions!</string>
+    <string name="telemetrySourceGps">GPS</string>
+    <string name="telemetrySourceGpsHint">Get location and speed from GPS</string>
+    <string name="satStatusPattern">" (%1$d sat)"</string>
     <string name="telemetryDataWaiting">Data: waiting</string>
     <string name="notConnectedToRaceService">Not connected to race service</string>
     <string name="finishedTimeDistancePrefix">"Finished: "</string>
