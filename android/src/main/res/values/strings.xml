@@ -18,7 +18,7 @@
     <string name="showMenu">Show menu</string>
     <string name="driverHud">Driver HUD</string>
     <string name="settings">Settings</string>
-    <string name="stateLoadingSections">Loading sections...</string>
+    <string name="stateLoadingSections">Loading sections…</string>
     <string name="stateNoSectionData">No section data</string>
     <string name="stateSomethingWentWrong">Something went wrong</string>
     <string name="stateNoSectionsYet">There is no sections yet, create one using the action bar button</string>
