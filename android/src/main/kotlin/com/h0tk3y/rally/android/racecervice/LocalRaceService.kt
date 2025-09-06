@@ -59,6 +59,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
@@ -603,17 +604,23 @@ class LocalRaceService : CommonRaceService, RaceServiceControls, StreamSourceSer
 
         /** Use an explicit job handle instead of [kotlinx.coroutines.flow.Flow.collectLatest]
          * so that cancellation does not block us from updating the state and running another job. */
-        var telemetryJob: Job? = null
+        var raceDataJob: Job? = null
 
         launch {
             prefs.map { it.calibration }.collectLatest { calibration = it }
+        }
+
+        launch { awaitCancellation() }.invokeOnCompletion {
+            raceDataJob?.cancel()
         }
 
         telemetrySource.zip(btMac, ::Pair)
             .map { if (it.first != BT_OBD) it.copy(second = "") else it }
             .distinctUntilChanged()
             .onEach { (telemetrySource, newBtMac) ->
-                telemetryJob?.cancel()
+                raceDataJob?.cancel()
+                debugSpeed = SpeedKmh(0.0)
+                debugSpeedJob?.cancel()
 
                 when (telemetrySource) {
                     BT_OBD -> {
@@ -621,13 +628,9 @@ class LocalRaceService : CommonRaceService, RaceServiceControls, StreamSourceSer
                         debugSpeedJob?.cancel()
 
                         if (newBtMac != null) {
-                            telemetryJob = serviceScope.launch(Dispatchers.IO) {
-                                launch {
-                                    startBtMainLoopJob(newBtMac)
-                                }
-                                launch {
-                                    startSendTeleJob()
-                                }
+                            raceDataJob = serviceScope.launch(Dispatchers.IO) {
+                                launch { startBtMainLoopJob(newBtMac) }
+                                launch { startSendTeleJob() }
                             }
                         } else {
                             btState.value = TelemetryState.BtTelemetry(BtConnectionState.NoTargetMacAddress)
@@ -637,7 +640,7 @@ class LocalRaceService : CommonRaceService, RaceServiceControls, StreamSourceSer
                     TelemetrySource.SIMULATION -> {
                         btState.value = TelemetryState.UsesSimulator
                         setDebugSpeed(SpeedKmh(0.0))
-                        telemetryJob = launch { startSendTeleJob() }
+                        raceDataJob = launch { startSendTeleJob() }
                     }
                 }
             }.launchIn(serviceScope)
@@ -655,7 +658,9 @@ class LocalRaceService : CommonRaceService, RaceServiceControls, StreamSourceSer
                         }
                     }
                 }
-            }.launchIn(this)
+            }.launchIn(this).invokeOnCompletion { 
+                sendJob?.cancel()
+            }
         }
     }
 
