@@ -401,11 +401,10 @@ private fun RaceTimeDistance(
                         allowanceTime
                     } else null
                     val isAheadOfAllowance = allowedTime != null && deltaSec < allowedTime * -60
-                    if (isSectionTime) Text(
-                        "(${stringResource(R.string.allowanceLetter)}${
-                            allowedTime?.takeIf { it != 0 }?.toString()?.let { "+$it" }.orEmpty()
-                        })"
-                    )
+                    if (isSectionTime && allowance != null)
+                        Text(
+                            "(${stringResource(R.string.allowanceLetter)}${allowedTime?.let { ":$it" }.orEmpty()})"
+                        )
                     Text(
                         timeText,
                         style = LocalCustomTypography.current.raceIndicatorText
