@@ -67,6 +67,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
@@ -275,6 +276,12 @@ private fun TelemetryStatus(
                 stringResource(R.string.telemetryData) + (if (telemetryPublicState.isDelayed) stringResource(R.string.telemetryDataDelay) else stringResource(R.string.telemetryOk))
 
             TelemetryPublicState.WaitingForStream -> stringResource(R.string.telemetryDataWaiting)
+
+            is TelemetryPublicState.GpsGood -> stringResource(R.string.telemetryGpsGood) + satsString(telemetryPublicState.sats)
+            is TelemetryPublicState.GpsProblematic -> stringResource(R.string.telemetryGpsProblematic) + satsString(telemetryPublicState.sats)
+            is TelemetryPublicState.GpsNoPosition -> stringResource(R.string.telemetryGpsNoPosition) + satsString(telemetryPublicState.sats)
+            is TelemetryPublicState.GpsWaiting -> stringResource(R.string.telemetryGpsWaiting) + satsString(telemetryPublicState.sats)
+            TelemetryPublicState.GpsNoPermissions -> stringResource(R.string.telemetryGpsNoPermission)
         }
         val color = when (telemetryPublicState) {
             is TelemetryPublicState.ReceivesStream -> {
@@ -282,6 +289,7 @@ private fun TelemetryStatus(
             }
 
             TelemetryPublicState.Simulation,
+            is TelemetryPublicState.GpsGood,
             TelemetryPublicState.BtWorking -> Color.Unspecified
 
             TelemetryPublicState.BtConnecting,
@@ -289,12 +297,20 @@ private fun TelemetryStatus(
             TelemetryPublicState.BtNoTargetMacAddress,
             TelemetryPublicState.NotInitialized,
             TelemetryPublicState.WaitingForStream,
+            is TelemetryPublicState.GpsNoPosition,
+            is TelemetryPublicState.GpsProblematic,
+            is TelemetryPublicState.GpsWaiting,
+            TelemetryPublicState.GpsNoPermissions,
+            TelemetryPublicState.IncompatibleStream,
             TelemetryPublicState.BtReconnecting -> LocalCustomColorsPalette.current.warning
 
         }
         Text(text, color = color)
     }
 }
+
+@Composable
+private fun satsString(sats: Int) = LocalContext.current.getString(R.string.satStatusPattern, sats)
 
 
 @Composable
