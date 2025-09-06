@@ -66,20 +66,9 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
-      - name: Sign release
-        uses: r0adkll/sign-android-release@v1
-        with:
-          releaseDirectory: android/build/outputs
-          signingKey: keystore.jks
-          keyAlias: ${{ secrets.KEY_ALIAS }}
-          keyStorePassword: ${{ secrets.KEYSTORE_PASSWORD }}
-          keyPassword: ${{ secrets.KEY_PASSWORD }}
-
       - name: Collect artifacts
         run: |
           mkdir -p dist
-          cp android/build/outputs/apk/release/*-signed.apk dist/ || true
-          cp android/build/outputs/bundle/release/*-signed.aab dist/ || true
           cp android/build/outputs/apk/release/*.apk dist/ || true
           cp android/build/outputs/bundle/release/*.aab dist/ || true
 
