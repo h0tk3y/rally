@@ -1,5 +1,6 @@
 package com.h0tk3y.rally.android.util
 
+import android.content.ClipData
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.LinkProperties
@@ -8,6 +9,7 @@ import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.os.Handler
 import android.os.Looper
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
@@ -17,17 +19,22 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.h0tk3y.rally.R
+import kotlinx.coroutines.launch
 import java.io.Closeable
 import java.net.Inet4Address
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.text.Typography.section
 
 data class LocalIp(val address: String?, val transport: String)
 
@@ -103,7 +110,7 @@ fun StreamingServerEmptyInfo() {
         verticalArrangement = Arrangement.spacedBy(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.padding(48.dp)
-    ) { 
+    ) {
         Text(stringResource(R.string.otherDeviceNetworkHint), textAlign = TextAlign.Center)
         Text(stringResource(R.string.settingsOnOtherDeviceIpHint), textAlign = TextAlign.Center)
         IpAddressDisplay()
@@ -123,13 +130,33 @@ fun IpAddressDisplay() {
         watcher.start()
         onDispose { watcher.close() }
     }
-    
-    Text(
+
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
         when (val currentIps = ips) {
-            null -> stringResource(R.string.detectingIpAddress)
-            emptyList<LocalIp>() -> stringResource(R.string.noNetworkFoundPleaseConnectToWiFi)
-            else -> currentIps.joinToString("\n") { "• ${it.address} (${it.transport})" }
-        },
-        textAlign = TextAlign.Center
-    )
+            null -> Text(stringResource(R.string.detectingIpAddress), textAlign = TextAlign.Center)
+            emptyList<LocalIp>() -> Text(stringResource(R.string.noNetworkFoundPleaseConnectToWiFi), textAlign = TextAlign.Center)
+            else -> {
+                val clipboardManager = LocalClipboard.current
+                val scope = rememberCoroutineScope()
+                currentIps.forEach { ip ->
+                    Text(
+                        modifier = Modifier.clickable {
+                            scope.launch {
+                                clipboardManager.setClipEntry(
+                                    ClipEntry(
+                                        ClipData.newPlainText(
+                                            "IP: {${ip.address}",
+                                            ip.address
+                                        )
+                                    )
+                                )
+                            }
+                        },
+                        text = "• ${ip.address} (${ip.transport})",
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        }
+    }
 }
