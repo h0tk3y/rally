@@ -149,6 +149,7 @@ interface RaceServiceControls : CommonRaceService {
 }
 
 interface StreamedRaceService : CommonRaceService {
+    val instant: StateFlow<Instant>
     val section: StateFlow<Section?>
     val positions: StateFlow<List<PositionLine>?>
     val currentLine: StateFlow<LineNumber>
@@ -156,6 +157,9 @@ interface StreamedRaceService : CommonRaceService {
 }
 
 class TcpStreamedRaceService : StreamedRaceService, Service() {
+    private val _instant = MutableStateFlow(Clock.System.now())
+    override val instant: StateFlow<Instant> get() = _instant
+    
     private val _raceState = MutableStateFlow<RaceState>(RaceState.NotStarted)
     override val raceState: StateFlow<RaceState> get() = _raceState
 
@@ -288,6 +292,7 @@ class TcpStreamedRaceService : StreamedRaceService, Service() {
         _section.value = Section(-1, raceState.section?.name ?: "", raceState.section?.serializedPositions ?: "")
         _positions.value = raceState.serializedPositions
         _raceState.value = raceState.raceState
+        _instant.value = raceState.instant
         _currentLine.value = raceState.currentLine
         _currentRaceLine.value = raceState.currentRaceLine
         _rememberSpeedLimit.value = raceState.rememberSpeed
@@ -301,6 +306,7 @@ data class SectionData(val name: String, val serializedPositions: String)
 data class TelemetryFrame(
     val section: SectionData?,
     val serializedPositions: List<PositionLine>,
+    val instant: Instant,
     val currentLine: LineNumber,
     val currentRaceLine: LineNumber?,
     val rememberSpeed: SpeedKmh?,
@@ -764,6 +770,7 @@ class LocalRaceService : CommonRaceService, RaceServiceControls, StreamSourceSer
                         val data = TelemetryFrame(
                             _section.value?.let { SectionData(it.name, it.serializedPositions) },
                             _positions.value,
+                            Clock.System.now(),
                             _currentLine.value,
                             _currentRaceLine.value,
                             _rememberSpeedLimit.value,
