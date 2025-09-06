@@ -39,7 +39,6 @@ import androidx.compose.material.icons.filled.OutlinedFlag
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.rounded.AddLocationAlt
 import androidx.compose.material.icons.rounded.ArrowOutward
-import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.Clear
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Done
@@ -976,7 +975,7 @@ private val speedLimitButtonSize = 50.dp
 private fun FinishRace(onFinishRace: () -> Unit) {
     val hapticFeedback = LocalHapticFeedback.current
     Button(
-        colors = ButtonDefaults.buttonColors(LocalCustomColorsPalette.current.warning),
+        colors = ButtonDefaults.buttonColors(LocalCustomColorsPalette.current.warning, LocalCustomColorsPalette.current.onWarning),
         onClick = {
             hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
             onFinishRace()
@@ -991,7 +990,7 @@ private fun FinishRace(onFinishRace: () -> Unit) {
 private fun FinishAndStartRace(onFinishAndStart: () -> Unit) {
     val hapticFeedback = LocalHapticFeedback.current
     Button(
-        colors = ButtonDefaults.buttonColors(LocalCustomColorsPalette.current.warning),
+        colors = ButtonDefaults.buttonColors(LocalCustomColorsPalette.current.warning, LocalCustomColorsPalette.current.onWarning),
         onClick = {
             hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
             onFinishAndStart()
@@ -1021,7 +1020,7 @@ private fun UndoFinish(onUndoFinishRace: () -> Unit) {
 private fun StopRace(onStopRace: () -> Unit) {
     val hapticFeedback = LocalHapticFeedback.current
     Button(
-        colors = ButtonDefaults.buttonColors(LocalCustomColorsPalette.current.warning),
+        colors = ButtonDefaults.buttonColors(LocalCustomColorsPalette.current.warning, LocalCustomColorsPalette.current.onWarning),
         onClick = {
             hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
             onStopRace()
