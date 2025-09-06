@@ -4,7 +4,6 @@ import android.annotation.SuppressLint
 import android.app.Service
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.github.h0tk3y.betterParse.grammar.parser
 import com.h0tk3y.rally.CommentLine
 import com.h0tk3y.rally.DefaultModifierValidator
 import com.h0tk3y.rally.DistanceKm
@@ -387,20 +386,9 @@ class PersistedSectionViewModel(
         serviceRelatedJob = viewModelScope.launch {
             launch {
                 raceService.raceState.collectLatest { newState ->
-                    if (newState is RaceState.MovingWithRaceModel && newState.raceSectionId == sectionId) {
-                        val positionLines = _preprocessedPositions.value
-                        val inRaceAtKm = newState.raceModel.currentDistance.roundTo3Digits()
-                        val position = positionLines.lastOrNull { it is PositionLine && it.atKm <= inRaceAtKm }
-                        if (position != null) {
-                            val currentRaceLineSelected = _raceCurrentLineNumber.value == _selectedLineIndex.value
-                            _raceCurrentLineNumber.value = position.lineNumber
-                            if (currentRaceLineSelected && !_editorState.value.isEnabled) {
-                                selectLine(position.lineNumber, null)
-                            }
-                        }
-                    }
                     val old = _raceState.value
                     _raceState.value = raceStateToUiState(newState)
+                    updateCurrentRaceLine()
                     handleRaceStatesDelta(old, _raceState.value)
                 }
             }
@@ -433,6 +421,21 @@ class PersistedSectionViewModel(
             launch {
                 _raceCurrentLineNumber.collectLatest { index ->
                     raceService.updateCurrentRaceLine(index)
+                }
+            }
+        }
+    }
+
+    private fun updateCurrentRaceLine() {
+        val raceState = _raceState.value
+        if (raceState is RaceUiState.HasRaceModel) {
+            val inRaceAtKm = raceState.raceModel.currentDistance
+            val position = _preprocessedPositions.value.lastOrNull { it is PositionLine && it.atKm.roundTo3Digits() <= inRaceAtKm.roundTo3Digits() }
+            if (position != null) {
+                val currentRaceLineSelected = _raceCurrentLineNumber.value == _selectedLineIndex.value
+                _raceCurrentLineNumber.value = position.lineNumber
+                if (currentRaceLineSelected && !_editorState.value.isEnabled) {
+                    selectLine(position.lineNumber, null)
                 }
             }
         }
@@ -1216,6 +1219,9 @@ class PersistedSectionViewModel(
         }
 
         val indexToInsert = items.indexOfFirst { it is PositionLine && it.atKm > roundedDistance }.takeIf { it != -1 } ?: items.size
+
+        val shouldSelectLine = indexToInsert == items.indexOfFirst { it.lineNumber == selectedLineIndex.value } + 1
+
         val positionLine = PositionLine(roundedDistance, LineNumber(1, 0), addModifiers)
         val hasATime = positionLine.modifier<AstroTime>() != null
 
@@ -1229,6 +1235,10 @@ class PersistedSectionViewModel(
         )
         val item = positions[indexToInsert]
         updateInputPositions(positions)
+        if (shouldSelectLine) {
+            selectLine(item.lineNumber, null)
+        }
+        updateCurrentRaceLine()
         return item as PositionLine
     }
 
