@@ -535,6 +535,7 @@ class PersistedSectionViewModel(
                                 it == currentItems.lastOrNull { d -> d is PositionLine && d.atKm == it.atKm }
                     }
                     ?.takeIf { PositionLineModifier.IsSynthetic !in it.modifiers }
+                    ?.takeIf { startModifiersToAdd.none { m -> m is SetAvg } || it.modifiers.none { m -> m is EndAvg } }
                     ?.let { addModifiersToItem(it, startModifiersToAdd) }
                     ?: maybeCreateItemAtDistanceFromModel(
                         startDistance,
