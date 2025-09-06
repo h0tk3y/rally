@@ -15,6 +15,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
@@ -26,6 +27,7 @@ import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSavedStateNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import androidx.navigation3.ui.rememberSceneSetupNavEntryDecorator
+import com.h0tk3y.rally.R
 import com.h0tk3y.rally.android.db.Database
 import com.h0tk3y.rally.android.db.SectionInsertOrRenameResult
 import com.h0tk3y.rally.android.racecervice.CommonRaceService
@@ -184,7 +186,7 @@ fun App(
                                 sectionOps,
                                 onBack = navigation::popBack,
                                 model = model,
-                                emptySectionView = { Text("No section data") },
+                                emptySectionView = { Text(stringResource(R.string.noSectionData)) },
                                 onGoToSettings = { navigation.navigateTo(SettingsScene(it)) },
                             )
                         }
