@@ -57,7 +57,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -217,6 +219,12 @@ interface EditableSectionViewModel : CommonSectionViewModel, EditorControls {
     val editorFocus: StateFlow<EditorFocus>
     fun deletePosition(line: RoadmapInputLine)
     fun maybeCreateItemAtDistance(distanceKm: DistanceKm, forceCreateIfExists: Boolean, addModifiers: List<PositionLineModifier> = emptyList()): PositionLine
+    
+    val soundFlow: SharedFlow<SoundEvent>
+}
+
+enum class SoundEvent {
+    BEEP_UP, BEEP_START, BEEP_FINISH, BEEP_REVERSE
 }
 
 sealed interface RaceUiState {
@@ -268,6 +276,9 @@ class PersistedSectionViewModel(
 
     override val section: StateFlow<LoadState<Section>> = _section.asStateFlow()
 
+    private val _soundFlow: MutableSharedFlow<SoundEvent> = MutableSharedFlow()
+    override val soundFlow: SharedFlow<SoundEvent> = _soundFlow
+
     // Race mode:
     private val _raceState: MutableStateFlow<RaceUiState> = MutableStateFlow(RaceUiState.NoRaceServiceConnection)
 
@@ -295,7 +306,8 @@ class PersistedSectionViewModel(
     private var serviceConnector: () -> Unit = { error("no connector") }
     private var serviceDisconnector: () -> Unit = { error("no disconnector") }
 
-
+    private var soundFeedback: Boolean = false 
+    
     override val calibration: Flow<Double> = prefs.userPreferencesFlow.map { it.calibration }
 
     override fun onSectionUpdate(section: LoadState<Section>) {
@@ -322,6 +334,11 @@ class PersistedSectionViewModel(
     init {
         subInitComplete()
 
+        viewModelScope.launch {
+            prefs.userPreferencesFlow.collectLatest {
+                soundFeedback = it.soundFeedback
+            }
+        }
         viewModelScope.launch {
             _inputPositions.collectLatest {
                 _preprocessedPositions.value = maybePreprocess(it)
@@ -452,6 +469,10 @@ class PersistedSectionViewModel(
     }
 
     override fun startRace(startOption: StartOption) {
+        viewModelScope.launch {
+            if (soundFeedback) _soundFlow.emit(SoundEvent.BEEP_START)
+        }
+        
         service?.run {
             val now = Clock.System.now()
 
@@ -515,7 +536,7 @@ class PersistedSectionViewModel(
                     }
                     ?.takeIf { PositionLineModifier.IsSynthetic !in it.modifiers }
                     ?.let { addModifiersToItem(it, startModifiersToAdd) }
-                    ?: maybeCreateItemAtDistance(
+                    ?: maybeCreateItemAtDistanceFromModel(
                         startDistance,
                         forceCreateIfExists = true,
                         addModifiers = startModifiersToAdd
@@ -603,12 +624,16 @@ class PersistedSectionViewModel(
     }
 
     override fun finishRace() {
+        viewModelScope.launch {
+            if (soundFeedback) _soundFlow.emit(SoundEvent.BEEP_FINISH)
+        }
+        
         val currentState = _raceState.value
         if (currentState is RaceUiState.RaceGoing) {
             val addEndAvg = currentItems.filterIsInstance<PositionLine>().fold(0) { acc, it ->
                 acc + (if (it.modifier<SetAvg>() != null) 1 else 0) + (if (it.modifier<EndAvg>() != null) -1 else 0)
             } >= 1
-            maybeCreateItemAtDistance(
+            maybeCreateItemAtDistanceFromModel(
                 currentState.raceModel.currentDistance.roundTo3Digits(),
                 true,
                 if (addEndAvg) listOf(EndAvgSpeed(null)) else emptyList()
@@ -650,7 +675,7 @@ class PersistedSectionViewModel(
     private fun restoreStartAtime(modelOfGoingAgSection: RaceModel) {
         val startDistance = modelOfGoingAgSection.startAtDistance.roundTo3Digits()
         val startTime = modelOfGoingAgSection.startAtTime
-        maybeCreateItemAtDistance(
+        maybeCreateItemAtDistanceFromModel(
             startDistance,
             forceCreateIfExists = false,
             listOf(AstroTime(TimeDayHrMinSec.of(startTime.toLocalDateTime(TimeZone.currentSystemDefault()).time)))
@@ -658,6 +683,10 @@ class PersistedSectionViewModel(
     }
 
     override fun stopRace() {
+        viewModelScope.launch {
+            if (soundFeedback) _soundFlow.emit(SoundEvent.BEEP_FINISH)
+        }
+        
         service?.stopRace()
         val raceModelAtStop = (service?.raceState?.value as? RaceState.Stopped)?.raceModelAtStop
         database.insertEvent(
@@ -687,6 +716,15 @@ class PersistedSectionViewModel(
 
     override fun setGoingForward(isGoingForward: Boolean) {
         service?.setDistanceGoingUp(isGoingForward)
+        
+        if (!isGoingForward) {
+            viewModelScope.launch { 
+                while (service?.raceState?.value?.let { it is RaceState.MovingWithRaceModel && !(it.raceModel.distanceGoingUp) } == true) {
+                    if (soundFeedback) _soundFlow.emit(SoundEvent.BEEP_REVERSE)
+                    delay(3000L)
+                }
+            }
+        }
     }
 
     override fun distanceCorrection(distanceKm: DistanceKm) {
@@ -1152,6 +1190,20 @@ class PersistedSectionViewModel(
     }
 
     override fun maybeCreateItemAtDistance(distanceKm: DistanceKm, forceCreateIfExists: Boolean, addModifiers: List<PositionLineModifier>): PositionLine {
+        if (_raceState.value is RaceUiState.HasRaceModel && _raceUiVisible.value) {
+            viewModelScope.launch {
+                if (soundFeedback) _soundFlow.emit(SoundEvent.BEEP_UP)
+            }
+        }
+
+        return maybeCreateItemAtDistanceFromModel(distanceKm, forceCreateIfExists, addModifiers)
+    }
+
+    private fun maybeCreateItemAtDistanceFromModel(
+        distanceKm: DistanceKm,
+        forceCreateIfExists: Boolean,
+        addModifiers: List<PositionLineModifier>
+    ): PositionLine {
         val roundedDistance = distanceKm.roundTo3Digits()
 
         val items = _inputPositions.value

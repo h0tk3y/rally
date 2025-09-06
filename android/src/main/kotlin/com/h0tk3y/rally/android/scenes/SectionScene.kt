@@ -3,6 +3,7 @@ package com.h0tk3y.rally.android.scenes
 import android.content.ClipData
 import android.content.pm.PackageManager
 import android.content.res.Configuration
+import android.media.MediaPlayer
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -41,6 +42,7 @@ import androidx.compose.material.icons.rounded.Done
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Flag
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -114,6 +116,24 @@ fun SectionScene(
     val results by model.results.collectAsState(RallyTimesResultFailure(emptyList()))
     val odoValues by model.odoValues.collectAsState(emptyMap())
     val subsMatch by model.subsMatching.collectAsState(SubsMatch.EMPTY)
+
+    if (model is EditableSectionViewModel) {
+        val context = LocalContext.current
+        val sounds = remember {
+            mapOf(
+                SoundEvent.BEEP_UP to MediaPlayer.create(context, R.raw.beep_up),
+                SoundEvent.BEEP_START to MediaPlayer.create(context, R.raw.beep_start),
+                SoundEvent.BEEP_FINISH to MediaPlayer.create(context, R.raw.beep_finish),
+                SoundEvent.BEEP_REVERSE to MediaPlayer.create(context, R.raw.beep_reverse)
+            )
+        }
+        LaunchedEffect(Unit) {
+            model.soundFlow.collect { 
+                sounds.getValue(it).start()
+            }
+        }
+    }
+
 
     val editorState by when (model) {
         is EditableSectionViewModel -> model.editorState.collectAsState(

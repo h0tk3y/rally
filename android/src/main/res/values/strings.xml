@@ -157,4 +157,6 @@
     <string name="notificationTextStartingRaceService">Starting race service</string>
     <string name="notificationChannelRaceService">Race Service</string>
     <string name="notificationTitleRally">Rally</string>
+    <string name="settingsSoundFeedback">Play sounds on race mode actions</string>
+    <string name="settingsRaceModeTitle">Race mode</string>
 </resources>

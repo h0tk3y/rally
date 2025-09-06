@@ -3,6 +3,7 @@ package com.h0tk3y.rally.android
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -22,6 +23,7 @@ private object PreferencesKeys {
     val BT_MAC = stringPreferencesKey("btMac")
     val SPEED_LIMIT_PERCENT_TEXT = stringPreferencesKey("speedLimitPercentText")
     val SEND_TELE_TO_IP = stringPreferencesKey("sendTeleToIp")
+    val SOUND_FEEDBACK = booleanPreferencesKey("soundFeedback")
 }
 
 data class UserPreferences(
@@ -30,7 +32,8 @@ data class UserPreferences(
     val telemetrySource: TelemetrySource,
     val btMac: String?,
     val speedLimitPercent: String?,
-    val sendTeleToIp: String?
+    val sendTeleToIp: String?,
+    val soundFeedback: Boolean
 )
 
 enum class TelemetrySource {
@@ -77,6 +80,13 @@ class PreferenceRepository(val dataStore: DataStore<Preferences>) {
             preferences[PreferencesKeys.SEND_TELE_TO_IP] = value ?: ""
         }
     }
+
+    suspend fun saveSoundFeedback(value: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.SOUND_FEEDBACK] = value
+        }
+    }
+
 }
 
 private fun mapUserPreferences(preferences: Preferences): UserPreferences {
@@ -89,5 +99,14 @@ private fun mapUserPreferences(preferences: Preferences): UserPreferences {
     val btMac = preferences[PreferencesKeys.BT_MAC]
     val speedLimitPercent = preferences[PreferencesKeys.SPEED_LIMIT_PERCENT_TEXT]
     val sendTeleToIp = preferences[PreferencesKeys.SEND_TELE_TO_IP]
-    return UserPreferences(timeAllowance, calibration, telemetrySource, btMac, speedLimitPercent, sendTeleToIp?.takeIf { it.isNotEmpty() })
+    val soundFeedback = preferences[PreferencesKeys.SOUND_FEEDBACK] ?: false
+    return UserPreferences(
+        timeAllowance,
+        calibration,
+        telemetrySource,
+        btMac,
+        speedLimitPercent,
+        sendTeleToIp?.takeIf { it.isNotEmpty() },
+        soundFeedback
+    )
 }
