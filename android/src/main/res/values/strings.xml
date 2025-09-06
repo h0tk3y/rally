@@ -160,4 +160,6 @@
     <string name="notificationTitleRally">Rally</string>
     <string name="settingsSoundFeedback">Play sounds on race mode actions</string>
     <string name="settingsRaceModeTitle">Race mode</string>
+    <string name="settingsCalibrateOdometerDistance">Odometer distance: %1$s</string>
+    <string name="noSectionData">No section data</string>
 </resources>
