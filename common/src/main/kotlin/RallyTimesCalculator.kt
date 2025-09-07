@@ -16,6 +16,7 @@ data class RallyTimesResultSuccess(
 ) : RallyTimesResult
 
 interface TimeDistanceLocalizer {
+    val base: PositionLine
     fun getExpectedTimeForDistance(distanceKm: DistanceKm): TimeHr?
 }
 

@@ -2,18 +2,18 @@ package com.h0tk3y.rally
 
 import com.h0tk3y.rally.PositionLineModifier.SetAvg
 
-internal class NoopTimeDistanceLocalizer : TimeDistanceLocalizer {
+internal class NoopTimeDistanceLocalizer(override val base: PositionLine) : TimeDistanceLocalizer {
     override fun getExpectedTimeForDistance(distanceKm: DistanceKm) = null
 }
 
 internal class TimeDistanceLocalizerImpl(
+    override val base: PositionLine,
     private val positions: List<PositionLine>,
-    private val basePositionLine: PositionLine,
     private val fragmentSpeed: Map<PureFragment, SpeedKmh>,
     private val pureFragments: List<PureFragment>
 ) : TimeDistanceLocalizer {
     override fun getExpectedTimeForDistance(distanceKm: DistanceKm): TimeHr {
-        val baseDistance = basePositionLine.atKm
+        val baseDistance = base.atKm
         val (from, to) = listOf(baseDistance, distanceKm).sorted()
 
         val wholeFragments = pureFragments.filter {
@@ -48,14 +48,15 @@ internal class TimeDistanceLocalizerImpl(
             } else {
                 val finishAfterLastFragment = pureFragments.lastOrNull()?.takeIf { it.end.atKm in from..to }
                 finishAfterLastFragment?.let {
-                    val speedAfterLast = positions.lastOrNull(PositionLine::isSetAvg)?.modifier<SetAvg>()?.setavg ?: finishAfterLastFragment.speedAfterIfUnknown()
+                    val speedAfterLast =
+                        positions.lastOrNull(PositionLine::isSetAvg)?.modifier<SetAvg>()?.setavg ?: finishAfterLastFragment.speedAfterIfUnknown()
                     TimeHr.byMovingOrZero(it.end.atKm, to, speedAfterLast)
                 } ?: TimeHr.zero
             }
         }
 
         return (timeInOrBeforeFirst + wholeFragmentsTime + timeInOrAfterLast)
-            .let { if (to == basePositionLine.atKm) it.copy(timeHours = -it.timeHours) else it }
+            .let { if (to == base.atKm) it.copy(timeHours = -it.timeHours) else it }
     }
 
     companion object {
@@ -64,19 +65,19 @@ internal class TimeDistanceLocalizerImpl(
             if (pureFragments.isEmpty()) {
                 val syntheticFragment = PureFragment(rootInterval.start, rootInterval.end)
                 return TimeDistanceLocalizerImpl(
-                    positions,
                     rootInterval.start,
-                    mapOf(syntheticFragment to (rootInterval.start.modifier<SetAvg>()?.setavg ?: return NoopTimeDistanceLocalizer())),
+                    positions,
+                    mapOf(syntheticFragment to (rootInterval.start.modifier<SetAvg>()?.setavg ?: return NoopTimeDistanceLocalizer(rootInterval.start))),
                     listOf(syntheticFragment)
                 )
             }
 
             val basePositionLine = positions.find { it.modifier<PositionLineModifier.AstroTime>() != null }
-                ?: return NoopTimeDistanceLocalizer()
+                ?: rootInterval.start
 
             return TimeDistanceLocalizerImpl(
-                positions,
                 basePositionLine,
+                positions,
                 pureSpeedMap,
                 pureFragments
             )
@@ -86,25 +87,24 @@ internal class TimeDistanceLocalizerImpl(
             val (_, pureFragments) = buildPureFragmentsAndSpeeds(rootInterval)
             if (pureFragments.isEmpty()) {
                 val syntheticFragment = PureFragment(rootInterval.start, rootInterval.end)
-                val speedKmh = rootInterval.start.modifier<SetAvg>()?.setavg ?: return NoopTimeDistanceLocalizer()
+                val speedKmh = rootInterval.start.modifier<SetAvg>()?.setavg ?: return NoopTimeDistanceLocalizer(rootInterval.start)
                 return TimeDistanceLocalizerImpl(
-                    positions.take(1),
                     rootInterval.start,
+                    positions.take(1),
                     mapOf(syntheticFragment to speedKmh),
                     listOf(syntheticFragment)
                 )
             }
 
-
             val basePositionLine = positions.find { it.modifier<PositionLineModifier.AstroTime>() != null }
-                ?: return NoopTimeDistanceLocalizer()
+                ?: rootInterval.start
 
             val singleFragment = PureFragment(rootInterval.start, rootInterval.end)
             val rootFragmentSpeed = mapOf(singleFragment to rootInterval.targetAverageSpeedKmh)
 
             return TimeDistanceLocalizerImpl(
-                positions.take(1),
                 basePositionLine,
+                positions.take(1),
                 rootFragmentSpeed,
                 listOf(singleFragment)
             )
