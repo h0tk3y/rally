@@ -55,10 +55,12 @@ fun PositionsListView(
     subsMatch: SubsMatch,
     allowance: TimeAllowance?,
     raceViewShown: Boolean,
-    raceState: RaceUiState.RaceGoing?
+    raceState: RaceUiState
 ) {
+    val inTimedRace = raceState is RaceUiState.RaceGoing
+    
     val time by produceState(Clock.System.now(), raceState) {
-        if (raceState != null) {
+        if (inTimedRace) {
             while (true) {
                 val time = Clock.System.now()
                 val currentTime = time.toLocalDateTime(TimeZone.currentSystemDefault())
@@ -250,17 +252,17 @@ fun PositionsListView(
                                             }
 
                                             val currentLineTimes =
-                                                (if (!raceViewShown || raceState != null) results.timeVectorsAtRoadmapLine else results.timesForOuterInterval)[line.lineNumber]
+                                                (if (raceViewShown && !inTimedRace) results.timesForOuterInterval else results.timeVectorsAtRoadmapLine)[line.lineNumber]
 
                                             val currentLineAtime =
-                                                (if (!raceViewShown || raceState != null) results.astroTimeAtRoadmapLine else results.astroTimeAtRoadmapLineForOuter)[line.lineNumber]
+                                                (if (raceViewShown && !inTimedRace) results.astroTimeAtRoadmapLineForOuter else results.astroTimeAtRoadmapLine)[line.lineNumber]
 
                                             if (currentLineTimes != null) {
                                                 val outerTime = currentLineTimes.outer
                                                 val timeValues =
                                                     if (currentLineAtime != null) currentLineTimes.values + currentLineAtime else currentLineTimes.values
                                                 Row(Modifier.weight(1.0f), horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End)) {
-                                                    if (isSelectedLine && raceState != null && currentLineAtime != null) {
+                                                    if (isSelectedLine && inTimedRace && currentLineAtime != null) {
                                                         CountdownToPosition(time, currentLineAtime)
                                                     }
 
@@ -274,7 +276,7 @@ fun PositionsListView(
                                                             text = text,
                                                             modifier = Modifier.padding(start = 4.dp, end = 4.dp)
                                                         )
-                                                        if (raceState == null && allowance != null && index == timeValues.lastIndex) {
+                                                        if (!inTimedRace && allowance != null && index == timeValues.lastIndex) {
                                                             if (outerTime.timeHours.isFinite()) {
                                                                 val allowanceTime = allowance(allowance, outerTime)
                                                                 Text(
