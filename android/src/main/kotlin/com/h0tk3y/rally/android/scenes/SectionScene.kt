@@ -438,7 +438,7 @@ fun SectionScene(
                                 subsMatch,
                                 allowance,
                                 !editorState.isEnabled && raceUiVisible,
-                                raceState as? RaceUiState.RaceGoing
+                                raceState
                             )
                         }
 
