@@ -17,6 +17,7 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
@@ -24,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import com.h0tk3y.rally.DefaultModifierValidator
 import com.h0tk3y.rally.DistanceKm
 import com.h0tk3y.rally.InputRoadmapParser
+import com.h0tk3y.rally.R
 import com.h0tk3y.rally.SpeedKmh
 import com.h0tk3y.rally.SpeedKmh.Companion.averageAt
 import com.h0tk3y.rally.TimeDayHrMinSec
@@ -71,10 +73,10 @@ fun CreateOrRenameSectionDialog(
     }
 
     val title = when (kind) {
-        DialogKind.CREATE -> "Create section"
-        DialogKind.DUPLICATE -> "Duplicate section"
-        DialogKind.RENAME -> "Rename section"
-        DialogKind.IMPORT -> "Import section"
+        DialogKind.CREATE -> stringResource(R.string.createSection)
+        DialogKind.DUPLICATE -> stringResource(R.string.duplicateSection)
+        DialogKind.RENAME -> stringResource(R.string.renameSection)
+        DialogKind.IMPORT -> stringResource(R.string.importSection)
     }
 
     DialogOnTop(onDismiss, title = title) {
@@ -96,12 +98,12 @@ fun CreateOrRenameSectionDialog(
                         textFieldValueState = it
                     },
                     isError = itemAlreadyExists || isErrorEmptyName,
-                    label = { Text("New section name") },
+                    label = { Text(stringResource(R.string.newSectionName)) },
                 )
 
                 if (itemAlreadyExists) {
                     Box(Modifier.height(24.dp)) {
-                        Text(text = "There is already a section with this name", color = MaterialTheme.colors.error)
+                        Text(text = stringResource(R.string.sectionNameNotUnique), color = MaterialTheme.colors.error)
                     }
                 }
 
@@ -122,12 +124,12 @@ fun CreateOrRenameSectionDialog(
                             }
                         },
                         isError = importText.isNotEmpty() && !isValidImportText,
-                        label = { Text("Section content") }
+                        label = { Text(stringResource(R.string.sectionContent)) }
                     )
 
                     if (importText.isNotEmpty() && !isValidImportText) {
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text("Invalid input", color = MaterialTheme.colors.error)
+                        Text(stringResource(R.string.invalidSectionContentInput), color = MaterialTheme.colors.error)
                     }
                 }
 
@@ -150,7 +152,7 @@ fun CreateOrRenameSectionDialog(
                     onClick = onDismiss,
                     modifier = Modifier.padding(end = 8.dp)
                 ) {
-                    Text("Cancel")
+                    Text(stringResource(android.R.string.cancel))
                 }
                 Button(
                     onClick = {
@@ -158,7 +160,7 @@ fun CreateOrRenameSectionDialog(
                     },
                     enabled = itemName.isNotBlank() && !itemAlreadyExists && isValidImportText
                 ) {
-                    Text("Save")
+                    Text(stringResource(R.string.saveButton))
                 }
             }
 
@@ -230,7 +232,7 @@ private fun ColumnScope.EditableStageData(
     LeftAlignedRow(
         maxLeftWidth,
         leftContent = {
-            Text("Distance:")
+            Text(stringResource(R.string.distance))
         },
         rightContent = {
             SmallNumberTextField(
@@ -241,7 +243,7 @@ private fun ColumnScope.EditableStageData(
                     updateFromCurrentValues()
                 },
                 placeholderString = defaultDistanceText,
-                "km",
+                stringResource(R.string.kmUnit),
                 addSuffixToPlaceholder = true,
                 isError = { distanceText.value.text.ifEmpty { "0.0" }.toDoubleOrNull() == null }
             )
@@ -251,7 +253,7 @@ private fun ColumnScope.EditableStageData(
     LeftAlignedRow(
         maxLeftWidth,
         leftContent = {
-            Text("Time HH:MM(:SS)", fontWeight = if (preferTimeOverSpeed) FontWeight.Bold else FontWeight.Normal)
+            Text(stringResource(R.string.timeHhMmSs), fontWeight = if (preferTimeOverSpeed) FontWeight.Bold else FontWeight.Normal)
         }, rightContent = {
             SmallNumberTextField(
                 Modifier.weight(1.0f),
@@ -268,7 +270,7 @@ private fun ColumnScope.EditableStageData(
         })
 
     LeftAlignedRow(maxLeftWidth, {
-        Text("Average speed:", fontWeight = if (!preferTimeOverSpeed) FontWeight.Bold else FontWeight.Normal)
+        Text(stringResource(R.string.averageSpeedHint), fontWeight = if (!preferTimeOverSpeed) FontWeight.Bold else FontWeight.Normal)
     }, {
         SmallNumberTextField(
             Modifier.weight(1.0f),
@@ -279,7 +281,7 @@ private fun ColumnScope.EditableStageData(
                 updateFromCurrentValues()
             },
             placeholderString = defaultSpeedText,
-            "/h",
+            stringResource(R.string.perHourSuffix),
             addSuffixToPlaceholder = true,
             isError = { speedText.value.text.ifEmpty { "0.0" }.toDoubleOrNull() == null }
         )
@@ -288,7 +290,7 @@ private fun ColumnScope.EditableStageData(
     Spacer(Modifier.height(16.dp))
 
     LeftAlignedRow(maxLeftWidth, {
-        Text("Start at HH:MM(:SS)", fontWeight = if (!preferTimeOverSpeed) FontWeight.Bold else FontWeight.Normal)
+        Text(stringResource(R.string.startAtHhMmSs))
     }, {
         SmallNumberTextField(
             Modifier.weight(1.0f),

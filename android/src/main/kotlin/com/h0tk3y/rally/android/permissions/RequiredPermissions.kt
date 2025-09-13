@@ -15,15 +15,18 @@ object RequiredPermissions {
                 listOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
             }
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && targetSdkVersion >= Build.VERSION_CODES.Q -> {
-                listOf(Manifest.permission.ACCESS_FINE_LOCATION)
+                listOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
             }
             else -> listOf(Manifest.permission.ACCESS_COARSE_LOCATION)
         }
+
+        val gpsPermissions =
+            listOf(Manifest.permission.ACCESS_FINE_LOCATION)
 
         val notificationPermissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
             listOf(Manifest.permission.POST_NOTIFICATIONS)
         else emptyList()
 
-        (notificationPermissions + bluetoothPermissions).toTypedArray()
+        (notificationPermissions + bluetoothPermissions + gpsPermissions).toTypedArray ()
     }
 }

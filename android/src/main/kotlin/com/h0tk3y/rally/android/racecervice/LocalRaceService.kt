@@ -37,6 +37,7 @@ import com.h0tk3y.rally.DistanceKm
 import com.h0tk3y.rally.LineNumber
 import com.h0tk3y.rally.PositionLine
 import com.h0tk3y.rally.PositionLineModifier
+import com.h0tk3y.rally.R
 import com.h0tk3y.rally.SpeedKmh
 import com.h0tk3y.rally.TimeHr
 import com.h0tk3y.rally.android.MainActivity
@@ -58,6 +59,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
@@ -90,6 +92,7 @@ import java.net.Socket
 import java.util.UUID
 import kotlin.coroutines.CoroutineContext
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 
 interface CommonRaceService {
@@ -105,6 +108,8 @@ interface StreamSourceService {
     fun updateCurrentRaceLine(currentLine: LineNumber)
 }
 
+private const val telemetryPort = 63663
+
 sealed interface TelemetryPublicState {
     data object Simulation : TelemetryPublicState
 
@@ -112,11 +117,24 @@ sealed interface TelemetryPublicState {
     data class ReceivesStream(val isDelayed: Boolean) : TelemetryPublicState
 
     data object NotInitialized : TelemetryPublicState
+    data object IncompatibleStream : TelemetryPublicState
+
     data object BtNoTargetMacAddress : TelemetryPublicState
     data object BtNoPermissions : TelemetryPublicState
     data object BtConnecting : TelemetryPublicState
     data object BtWorking : TelemetryPublicState
     data object BtReconnecting : TelemetryPublicState
+
+    data object GpsNoPermissions : TelemetryPublicState
+
+    sealed interface GpsHasSats {
+        val sats: Int
+    }
+
+    data class GpsGood(override val sats: Int) : TelemetryPublicState, GpsHasSats
+    data class GpsProblematic(override val sats: Int) : TelemetryPublicState, GpsHasSats
+    data class GpsNoPosition(override val sats: Int) : TelemetryPublicState, GpsHasSats
+    data class GpsWaiting(override val sats: Int) : TelemetryPublicState, GpsHasSats
 }
 
 
@@ -135,6 +153,7 @@ interface RaceServiceControls : CommonRaceService {
 }
 
 interface StreamedRaceService : CommonRaceService {
+    val instant: StateFlow<Instant>
     val section: StateFlow<Section?>
     val positions: StateFlow<List<PositionLine>?>
     val currentLine: StateFlow<LineNumber>
@@ -142,6 +161,9 @@ interface StreamedRaceService : CommonRaceService {
 }
 
 class TcpStreamedRaceService : StreamedRaceService, Service() {
+    private val _instant = MutableStateFlow(Clock.System.now())
+    override val instant: StateFlow<Instant> get() = _instant
+    
     private val _raceState = MutableStateFlow<RaceState>(RaceState.NotStarted)
     override val raceState: StateFlow<RaceState> get() = _raceState
 
@@ -162,6 +184,7 @@ class TcpStreamedRaceService : StreamedRaceService, Service() {
 
     private sealed interface TelemetryState {
         data object NotInitialized : TelemetryState
+        data object Incompatible : TelemetryState
         data object Connected : TelemetryState
     }
 
@@ -171,6 +194,7 @@ class TcpStreamedRaceService : StreamedRaceService, Service() {
         get() = _telemetryState.map {
             when (it) {
                 TelemetryState.NotInitialized -> TelemetryPublicState.WaitingForStream
+                TelemetryState.Incompatible -> TelemetryPublicState.IncompatibleStream
                 TelemetryState.Connected -> TelemetryPublicState.ReceivesStream(false)
             }
         }
@@ -181,7 +205,7 @@ class TcpStreamedRaceService : StreamedRaceService, Service() {
 
     override fun onCreate() {
         super.onCreate()
-        RaceNotificationUtils.createNotificationChannel(NotificationManagerCompat.from(this))
+        RaceNotificationUtils.createNotificationChannel(this, NotificationManagerCompat.from(this))
         startForeground(RaceNotificationUtils.RECEIVE_STREAM_NOTIFICATION_ID, RaceNotificationUtils.serviceStartNotification(this))
     }
 
@@ -243,7 +267,7 @@ class TcpStreamedRaceService : StreamedRaceService, Service() {
     private suspend fun CoroutineContext.startNetworkReceiverLoop() {
         while (isActive) {
             try {
-                ServerSocket(9999).apply {
+                ServerSocket(telemetryPort).apply {
                     soTimeout = 2000
                 }.use { serverSocket ->
                     serverSocket.accept().apply {
@@ -253,6 +277,11 @@ class TcpStreamedRaceService : StreamedRaceService, Service() {
                         DataInputStream(socket.getInputStream()).use { input ->
                             while (isActive) {
                                 val size = input.readInt()
+                                val version = input.readLong()
+                                if (version != telemetryStreamingVersion) {
+                                    _telemetryState.value = TelemetryState.Incompatible
+                                    Log.d("raceService", "unsupported telemetry version $version, expected $telemetryStreamingVersion")
+                                }
                                 val buffer = ByteArray(size)
                                 input.readFully(buffer)
                                 handleFrame(buffer)
@@ -274,6 +303,7 @@ class TcpStreamedRaceService : StreamedRaceService, Service() {
         _section.value = Section(-1, raceState.section?.name ?: "", raceState.section?.serializedPositions ?: "")
         _positions.value = raceState.serializedPositions
         _raceState.value = raceState.raceState
+        _instant.value = raceState.instant
         _currentLine.value = raceState.currentLine
         _currentRaceLine.value = raceState.currentRaceLine
         _rememberSpeedLimit.value = raceState.rememberSpeed
@@ -287,6 +317,7 @@ data class SectionData(val name: String, val serializedPositions: String)
 data class TelemetryFrame(
     val section: SectionData?,
     val serializedPositions: List<PositionLine>,
+    val instant: Instant,
     val currentLine: LineNumber,
     val currentRaceLine: LineNumber?,
     val rememberSpeed: SpeedKmh?,
@@ -515,7 +546,7 @@ class LocalRaceService : CommonRaceService, RaceServiceControls, StreamSourceSer
 
     override fun onCreate() {
         super.onCreate()
-        RaceNotificationUtils.createNotificationChannel(NotificationManagerCompat.from(this))
+        RaceNotificationUtils.createNotificationChannel(this, NotificationManagerCompat.from(this))
         startForeground(RACE_NOTIFICATION_ID, RaceNotificationUtils.serviceStartNotification(this))
     }
 
@@ -559,12 +590,20 @@ class LocalRaceService : CommonRaceService, RaceServiceControls, StreamSourceSer
             HasSocket
     }
 
+    private sealed interface GpsReceiverState {
+        data object NoPermissions : GpsReceiverState
+        data object NoSatellite : GpsReceiverState
+        data object NoLocationData : GpsReceiverState
+        data object GoodLocationData : GpsReceiverState
+        data object ProblematicLocationData : GpsReceiverState
+    }
+
     private sealed interface TelemetryState {
         data object NotInitialized : TelemetryState
         data object UsesSimulator : TelemetryState
         data object ReceivesStream : TelemetryState
-        data class BtTelemetry(val connectionState: BtConnectionState) :
-            TelemetryState
+        data class BtTelemetry(val connectionState: BtConnectionState) : TelemetryState
+        data class GpsTelemetry(val gpsState: GpsReceiverState, val sats: Int) : TelemetryState
 
         fun toPublicState(): TelemetryPublicState {
             return when (this) {
@@ -581,6 +620,14 @@ class LocalRaceService : CommonRaceService, RaceServiceControls, StreamSourceSer
                 }
 
                 ReceivesStream -> TelemetryPublicState.ReceivesStream(false)
+
+                is GpsTelemetry -> when (gpsState) {
+                    GpsReceiverState.NoPermissions -> TelemetryPublicState.GpsNoPermissions
+                    GpsReceiverState.NoLocationData -> TelemetryPublicState.GpsNoPosition(sats)
+                    GpsReceiverState.GoodLocationData -> TelemetryPublicState.GpsGood(sats)
+                    GpsReceiverState.NoSatellite -> TelemetryPublicState.GpsWaiting(sats)
+                    GpsReceiverState.ProblematicLocationData -> TelemetryPublicState.GpsProblematic(sats)
+                }
             }
         }
     }
@@ -602,17 +649,23 @@ class LocalRaceService : CommonRaceService, RaceServiceControls, StreamSourceSer
 
         /** Use an explicit job handle instead of [kotlinx.coroutines.flow.Flow.collectLatest]
          * so that cancellation does not block us from updating the state and running another job. */
-        var telemetryJob: Job? = null
+        var raceDataJob: Job? = null
 
         launch {
             prefs.map { it.calibration }.collectLatest { calibration = it }
+        }
+
+        launch { awaitCancellation() }.invokeOnCompletion {
+            raceDataJob?.cancel()
         }
 
         telemetrySource.zip(btMac, ::Pair)
             .map { if (it.first != BT_OBD) it.copy(second = "") else it }
             .distinctUntilChanged()
             .onEach { (telemetrySource, newBtMac) ->
-                telemetryJob?.cancel()
+                raceDataJob?.cancel()
+                debugSpeed = SpeedKmh(0.0)
+                debugSpeedJob?.cancel()
 
                 when (telemetrySource) {
                     BT_OBD -> {
@@ -620,13 +673,9 @@ class LocalRaceService : CommonRaceService, RaceServiceControls, StreamSourceSer
                         debugSpeedJob?.cancel()
 
                         if (newBtMac != null) {
-                            telemetryJob = serviceScope.launch(Dispatchers.IO) {
-                                launch {
-                                    startBtMainLoopJob(newBtMac)
-                                }
-                                launch {
-                                    startSendTeleJob()
-                                }
+                            raceDataJob = serviceScope.launch(Dispatchers.IO) {
+                                launch { startBtMainLoopJob(newBtMac) }
+                                launch { startSendTeleJob() }
                             }
                         } else {
                             btState.value = TelemetryState.BtTelemetry(BtConnectionState.NoTargetMacAddress)
@@ -636,10 +685,66 @@ class LocalRaceService : CommonRaceService, RaceServiceControls, StreamSourceSer
                     TelemetrySource.SIMULATION -> {
                         btState.value = TelemetryState.UsesSimulator
                         setDebugSpeed(SpeedKmh(0.0))
-                        telemetryJob = launch { startSendTeleJob() }
+                        raceDataJob = launch { startSendTeleJob() }
+                    }
+
+                    TelemetrySource.GPS -> {
+                        val gpsMeasurement = GpsDistanceMeasurement(this@LocalRaceService, serviceScope)
+                        raceDataJob = serviceScope.launch gpsJob@{
+                            btState.value = TelemetryState.GpsTelemetry(GpsReceiverState.NoSatellite, 0)
+                            launch {
+                                gpsMeasurement.requestPlatformUpdates()
+                                collectGpsMeasurement(gpsMeasurement, this@gpsJob)
+                            }
+                            launch { startSendTeleJob() }
+                        }
+                        raceDataJob.invokeOnCompletion {
+                            gpsMeasurement.stopPlatformUpdates()
+                        }
                     }
                 }
             }.launchIn(serviceScope)
+    }
+
+    private suspend fun collectGpsMeasurement(measurement: GpsDistanceMeasurement, scope: CoroutineScope) {
+        var lastDistance = measurement.distanceAccumulator.totalDistanceMeters.value
+        
+        measurement.distanceAccumulator.totalDistanceMeters.collectLatest { newDistance ->
+            fun sats() = measurement.distanceAccumulator.satsInUse.value
+            
+            fun updateGpsState(isDelayed: Boolean) {
+                btState.value = when {
+                    isDelayed && measurement.distanceAccumulator.lastFixTime.value
+                        ?.let { Clock.System.now() - it > 2.seconds } == true -> 
+                            TelemetryState.GpsTelemetry(GpsReceiverState.NoLocationData, sats())
+
+                    measurement.distanceAccumulator.lastFixTime.value == null ->
+                        TelemetryState.GpsTelemetry(GpsReceiverState.NoLocationData, sats())
+                    
+                    measurement.distanceAccumulator.isGoodLocation.value ->
+                        TelemetryState.GpsTelemetry(GpsReceiverState.GoodLocationData, sats())
+
+                    else -> TelemetryState.GpsTelemetry(GpsReceiverState.ProblematicLocationData, sats())
+                }
+
+                val speed = SpeedKmh(if (isDelayed) 0.0 else measurement.distanceAccumulator.currentSpeedKmh.value)
+                val distanceDelta = newDistance - lastDistance
+
+                updateRaceStateByMoving(
+                    newDistance = { it + DistanceKm(distanceDelta / 1000.0).times(if (deltaDistanceGoingUp.value) 1.0 else -1.0) },
+                    newInstantSpeed = { speed }
+                )
+            }
+
+            updateGpsState(isDelayed = false)
+
+            lastDistance = newDistance
+
+            while (scope.isActive) { // should normally be cancelled by next update of collectLatest, but if it isn't we report the delay
+                delay(2000L)
+                updateGpsState(true)
+            }
+        }
     }
 
     private fun CoroutineScope.startSendTeleJob() {
@@ -654,18 +759,21 @@ class LocalRaceService : CommonRaceService, RaceServiceControls, StreamSourceSer
                         }
                     }
                 }
-            }.launchIn(this)
+            }.launchIn(this).invokeOnCompletion { 
+                sendJob?.cancel()
+            }
         }
     }
 
     private suspend fun CoroutineScope.sendDataWithSocket(ip: String) {
         try {
-            Socket(ip, 9999).apply {
+            Socket(ip, telemetryPort).apply {
                 soTimeout = 2000
             }.use { socket ->
                 DataOutputStream(socket.getOutputStream()).use { out ->
                     fun sendFrame(data: ByteArray) {
                         out.writeInt(data.size)
+                        out.writeLong(telemetryStreamingVersion)
                         out.write(data)
                         out.flush()
                     }
@@ -674,6 +782,7 @@ class LocalRaceService : CommonRaceService, RaceServiceControls, StreamSourceSer
                         val data = TelemetryFrame(
                             _section.value?.let { SectionData(it.name, it.serializedPositions) },
                             _positions.value,
+                            Clock.System.now(),
                             _currentLine.value,
                             _currentRaceLine.value,
                             _rememberSpeedLimit.value,
@@ -876,10 +985,10 @@ private object RaceNotificationUtils {
         kind: RaceNotificationKind
     ) {
         val titleState = when (state) {
-            is RaceState.Going -> ": Going"
-            is RaceState.InRace -> ": In race"
+            is RaceState.Going -> context.getString(R.string.notificationGoing)
+            is RaceState.InRace -> context.getString(R.string.notificationInRace)
             RaceState.NotStarted -> ""
-            is RaceState.Stopped -> ": Stopped"
+            is RaceState.Stopped -> context.getString(R.string.notificationStopped)
         }
 
         fun deltaTimeText(startAtTime: Instant) =
@@ -891,13 +1000,13 @@ private object RaceNotificationUtils {
             }
 
             is RaceState.InRace -> state.raceModel.currentDistance.valueKm.strRound3() + " / " + deltaTimeText(state.raceModel.startAtTime)
-            RaceState.NotStarted -> "Not started"
+            RaceState.NotStarted -> context.getString(R.string.notificationTextNotStarted)
             else -> null
         }
 
         val intent = Intent(context, MainActivity::class.java)
-        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        intent.setAction(Intent.ACTION_MAIN)
+        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        intent.action = Intent.ACTION_MAIN
         intent.addCategory(Intent.CATEGORY_LAUNCHER)
 
         val pendingIntent = PendingIntent.getActivity(
@@ -909,13 +1018,13 @@ private object RaceNotificationUtils {
 
         val titleMarker = when (kind) {
             RaceNotificationKind.LOCAL -> ""
-            RaceNotificationKind.TELE -> " (driver HUD)"
+            RaceNotificationKind.TELE -> " " + context.getString(R.string.notificationDriverHud)
         }
 
         val notification = NotificationCompat.Builder(context, TIMER_SERVICE_NOTIFICATION_CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_notify_sync_noanim)
             .setCategory(Notification.CATEGORY_SERVICE)
-            .setContentTitle("$NOTIFICATION_TITLE_PREFIX$titleMarker$titleState")
+            .setContentTitle("${titlePrefix(context)}$titleMarker$titleState")
             .let { if (contentText != null) it.setContentText(contentText) else it }
             .setOngoing(true)
             .setOnlyAlertOnce(true)
@@ -936,24 +1045,26 @@ private object RaceNotificationUtils {
         NotificationCompat.Builder(context, TIMER_SERVICE_NOTIFICATION_CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_notify_sync_noanim)
             .setCategory(Notification.CATEGORY_SERVICE)
-            .setContentTitle(NOTIFICATION_TITLE_PREFIX)
-            .setContentText("Starting race service")
+            .setContentTitle(titlePrefix(context))
+            .setContentText(context.getString(R.string.notificationTextStartingRaceService))
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .build()
 
-    fun createNotificationChannel(notificationManager: NotificationManagerCompat) {
+    fun createNotificationChannel(context: Context, notificationManager: NotificationManagerCompat) {
         val serviceChannel = NotificationChannel(
             TIMER_SERVICE_NOTIFICATION_CHANNEL_ID,
-            "Race Service",
+            context.getString(R.string.notificationChannelRaceService),
             NotificationManager.IMPORTANCE_LOW
         )
         notificationManager.createNotificationChannel(serviceChannel)
     }
 
-    private const val NOTIFICATION_TITLE_PREFIX = "Rally"
+    private fun titlePrefix(context: Context) = context.getString(R.string.notificationTitleRally)
 
     const val RACE_NOTIFICATION_ID = 1
     const val RECEIVE_STREAM_NOTIFICATION_ID = 2
     private const val TIMER_SERVICE_NOTIFICATION_CHANNEL_ID = "RaceService"
 }
+
+private const val telemetryStreamingVersion = 1L
