@@ -13,7 +13,7 @@ plugins {
 }
 
 group = "com.h0tk3y.flashcards"
-version = "1.1-SNAPSHOT"
+version = providers.gradleProperty("releaseVersion").getOrElse("0.1.1-SNAPSHOT")
 
 dependencies {
     implementation(project(":common"))
@@ -95,7 +95,7 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = 100
-        versionName = "0.1.0"
+        versionName = project.version.toString()
     }
     buildFeatures {
         compose = true

@@ -60,7 +60,7 @@ jobs:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
           
       - name: Build release (APK + AAB)
-        run: ./gradlew clean assembleRelease bundleRelease
+        run: ./gradlew clean assembleRelease bundleRelease "-PreleaseVersion=${GITHUB_REF_NAME#v}"
         env:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
@@ -81,6 +81,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          name: ${GITHUB_REF_NAME#v}
           files: dist/*
           generate_release_notes: true
         env:
