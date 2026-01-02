@@ -97,14 +97,14 @@ import com.h0tk3y.rally.strRound2Exact
 import com.h0tk3y.rally.strRound3
 import com.h0tk3y.rally.strRound3Exact
 import kotlinx.coroutines.delay
-import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlin.math.absoluteValue
 import kotlin.math.roundToInt
+import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.hours
+import kotlin.time.Instant
 
 @Composable
 fun RaceView(

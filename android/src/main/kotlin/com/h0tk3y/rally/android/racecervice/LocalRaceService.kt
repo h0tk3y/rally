@@ -74,11 +74,9 @@ import kotlinx.coroutines.flow.zip
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
+import kotlinx.serialization.Contextual
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.decodeFromStream
 import kotlinx.serialization.modules.SerializersModule
@@ -91,11 +89,13 @@ import java.net.ServerSocket
 import java.net.Socket
 import java.util.UUID
 import kotlin.coroutines.CoroutineContext
+import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
 
 
-interface CommonRaceService {
+interface CommonRaceService : StoppableService {
     val raceState: StateFlow<RaceState>
     val rememberSpeedLimit: StateFlow<SpeedKmh?>
     val telemetryPublicState: Flow<TelemetryPublicState>
@@ -160,7 +160,7 @@ interface StreamedRaceService : CommonRaceService {
     val currentRaceLine: StateFlow<LineNumber?>
 }
 
-class TcpStreamedRaceService : StreamedRaceService, Service() {
+class TcpStreamedRaceService : StreamedRaceService, StoppableService, Service() {
     private val _instant = MutableStateFlow(Clock.System.now())
     override val instant: StateFlow<Instant> get() = _instant
     
@@ -308,6 +308,11 @@ class TcpStreamedRaceService : StreamedRaceService, Service() {
         _currentRaceLine.value = raceState.currentRaceLine
         _rememberSpeedLimit.value = raceState.rememberSpeed
     }
+
+    override fun forceStop() {
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+    }
 }
 
 @Serializable
@@ -317,14 +322,20 @@ data class SectionData(val name: String, val serializedPositions: String)
 data class TelemetryFrame(
     val section: SectionData?,
     val serializedPositions: List<PositionLine>,
-    val instant: Instant,
+    val instant: @Contextual Instant,
     val currentLine: LineNumber,
     val currentRaceLine: LineNumber?,
     val rememberSpeed: SpeedKmh?,
     val raceState: RaceState
 )
 
-class LocalRaceService : CommonRaceService, RaceServiceControls, StreamSourceService, Service() {
+interface StoppableService {
+    fun forceStop()
+}
+
+interface PrimaryRaceService : CommonRaceService, RaceServiceControls, StreamSourceService
+
+class LocalRaceService : PrimaryRaceService, Service() {
     private val _raceState = MutableStateFlow<RaceState>(RaceState.NotStarted)
     private val _rememberSpeedLimit = MutableStateFlow<SpeedKmh?>(null)
 
@@ -931,6 +942,11 @@ class LocalRaceService : CommonRaceService, RaceServiceControls, StreamSourceSer
                 }
             }
         }
+    }
+
+    override fun forceStop() {
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
     }
 
 

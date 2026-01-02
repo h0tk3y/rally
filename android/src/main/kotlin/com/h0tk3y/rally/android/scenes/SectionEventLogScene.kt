@@ -32,6 +32,7 @@ import androidx.lifecycle.viewModelScope
 import com.h0tk3y.rally.R
 import com.h0tk3y.rally.android.LoadState
 import com.h0tk3y.rally.android.db.Database
+import com.h0tk3y.rally.android.db.DatabaseOperations
 import com.h0tk3y.rally.db.Event
 import com.h0tk3y.rally.db.Section
 import com.h0tk3y.rally.model.RaceEventKind
@@ -126,7 +127,7 @@ private val localTimeFormat = LocalTime.Format {
     second()
 }
 
-class SectionEventLogViewModel(val sectionId: Long, val database: Database) : ViewModel() {
+class SectionEventLogViewModel(val sectionId: Long, val database: DatabaseOperations) : ViewModel() {
     private val _section = MutableStateFlow<LoadState<Section>>(LoadState.LOADING)
     private val _sectionEvents = MutableStateFlow<LoadState<List<Event>>>(LoadState.EMPTY)
 

@@ -14,9 +14,22 @@ import com.h0tk3y.rally.model.RaceEventKind
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 
-class Database(databaseDriverFactory: DatabaseDriverFactory) {
+interface DatabaseOperations {
+    fun selectAllSections(): Flow<LoadState<List<Section>>>
+    fun selectSectionById(id: Long): Flow<LoadState<Section>>
+    fun deleteSectionById(id: Long)
+    fun updateSectionPositions(id: Long, serializedPositions: String)
+    fun createEmptySection(name: String): SectionInsertOrRenameResult
+    fun createSection(name: String, positions: String?): SectionInsertOrRenameResult
+    fun renameSection(id: Long, newName: String): SectionInsertOrRenameResult
+    fun insertEvent(kind: RaceEventKind, sectionId: Long, distanceKm: DistanceKm, timestamp: Instant, sinceTimestamp: Instant?)
+    fun selectEventsForSection(section: Section): Flow<LoadState<List<Event>>>
+    fun deleteEventsForSection(section: Section)
+}
+
+class Database(databaseDriverFactory: DatabaseDriverFactory): DatabaseOperations {
     private val database = AppDatabase(
         databaseDriverFactory.createDriver(),
         EventAdapter = Event.Adapter(
@@ -27,14 +40,14 @@ class Database(databaseDriverFactory: DatabaseDriverFactory) {
     )
     private val dbQuery = database.appDatabaseQueries
 
-    internal fun selectAllSections(): Flow<LoadState<List<Section>>> {
+    override fun selectAllSections(): Flow<LoadState<List<Section>>> {
         return dbQuery.selectAllSections()
             .asFlow()
             .mapToList(Dispatchers.Default)
             .map { LoadState.Loaded(it) }
     }
 
-    internal fun selectSectionById(id: Long): Flow<LoadState<Section>> {
+    override fun selectSectionById(id: Long): Flow<LoadState<Section>> {
         return dbQuery
             .selectSectionById(id)
             .asFlow()
@@ -42,19 +55,19 @@ class Database(databaseDriverFactory: DatabaseDriverFactory) {
             .map { it?.let { LoadState.Loaded(it) } ?: LoadState.EMPTY }
     }
 
-    internal fun deleteSectionById(id: Long) {
+    override fun deleteSectionById(id: Long) {
         dbQuery.deleteSection(id)
     }
 
-    internal fun updateSectionPositions(id: Long, serializedPositions: String): Unit {
+    override fun updateSectionPositions(id: Long, serializedPositions: String) {
         dbQuery.updatePositions(serializedPositions, id)
     }
-    
-    internal fun createEmptySection(name: String): SectionInsertOrRenameResult {
+
+    override fun createEmptySection(name: String): SectionInsertOrRenameResult {
         return createSection(name, null)
     }
 
-    internal fun createSection(name: String, positions: String?): SectionInsertOrRenameResult {
+    override fun createSection(name: String, positions: String?): SectionInsertOrRenameResult {
         return dbQuery.transactionWithResult {
             val exists = dbQuery.selectSectionByExactName(name).executeAsOneOrNull() != null
             if (exists)
@@ -71,7 +84,7 @@ class Database(databaseDriverFactory: DatabaseDriverFactory) {
         }
     }
 
-    internal fun renameSection(id: Long, newName: String): SectionInsertOrRenameResult {
+    override fun renameSection(id: Long, newName: String): SectionInsertOrRenameResult {
         return dbQuery.transactionWithResult {
             val exists = dbQuery.selectSectionByExactName(newName).executeAsOneOrNull() != null
             if (exists)
@@ -82,8 +95,8 @@ class Database(databaseDriverFactory: DatabaseDriverFactory) {
             }
         }
     }
-    
-    internal fun insertEvent(
+
+    override fun insertEvent(
         kind: RaceEventKind,
         sectionId: Long,
         distanceKm: DistanceKm,
@@ -93,13 +106,13 @@ class Database(databaseDriverFactory: DatabaseDriverFactory) {
         dbQuery.createEvent(id = null, sectionId, distanceKm.valueKm, kind, timestamp, sinceTimestamp)
     }
 
-    internal fun selectEventsForSection(section: Section): Flow<LoadState<List<Event>>> {
+    override fun selectEventsForSection(section: Section): Flow<LoadState<List<Event>>> {
         return dbQuery.selectEventsBySectionId(section.id).asFlow()
             .mapToList(Dispatchers.Default)
             .map { LoadState.Loaded(it) }
     }
 
-    internal fun deleteEventsForSection(section: Section) {
+    override fun deleteEventsForSection(section: Section) {
         dbQuery.deleteEventsForSection(section.id)
     }
 }
