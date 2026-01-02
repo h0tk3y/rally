@@ -3,9 +3,10 @@ package com.h0tk3y.rally.model
 import com.h0tk3y.rally.DistanceKm
 import com.h0tk3y.rally.SpeedKmh
 import com.h0tk3y.rally.TimeHr
-import kotlinx.datetime.Instant
+import kotlinx.serialization.Contextual
 import kotlinx.serialization.Serializable
 import kotlin.time.Duration
+import kotlin.time.Instant
 
 sealed interface RaceState {
     sealed interface HasCurrentSection : RaceState {
@@ -23,8 +24,8 @@ sealed interface RaceState {
     data class Stopped(
         val raceSectionIdAtStop: Long,
         val raceModelAtStop: RaceModel,
-        val stoppedAt: Instant,
-        val finishedAt: Instant?,
+        val stoppedAt: @Contextual Instant,
+        val finishedAt: @Contextual Instant?,
         val finishedModel: RaceModel?,
     ) : RaceState
     
@@ -32,7 +33,7 @@ sealed interface RaceState {
     data class InRace(
         override val raceSectionId: Long,
         override val raceModel: RaceModel,
-        val previousFinishAt: Instant?,
+        val previousFinishAt: @Contextual Instant?,
         val previousFinishModel: RaceModel?,
         val goingModel: RaceModel
     ) : RaceState, MovingWithRaceModel
@@ -42,13 +43,13 @@ sealed interface RaceState {
         override val raceSectionId: Long,
         override val raceModel: RaceModel,
         val finishedRaceModel: RaceModel?,
-        val finishedAt: Instant?
+        val finishedAt: @Contextual Instant?
     ) : RaceState, MovingWithRaceModel
 }
 
 @Serializable
 data class RaceModel(
-    val startAtTime: Instant,
+    val startAtTime: @Contextual Instant,
     val startAtDistance: DistanceKm,
 
     val currentDistance: DistanceKm,

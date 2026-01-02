@@ -1,7 +1,5 @@
 package com.h0tk3y.rally.android.scenes
 
-import android.annotation.SuppressLint
-import android.app.Service
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.h0tk3y.rally.CommentLine
@@ -32,10 +30,10 @@ import com.h0tk3y.rally.TimeDayHrMinSec
 import com.h0tk3y.rally.TimeHr
 import com.h0tk3y.rally.android.LoadState
 import com.h0tk3y.rally.android.PreferenceRepository
-import com.h0tk3y.rally.android.db.Database
+import com.h0tk3y.rally.android.db.DatabaseOperations
 import com.h0tk3y.rally.android.racecervice.CommonRaceService
-import com.h0tk3y.rally.android.racecervice.LocalRaceService
-import com.h0tk3y.rally.android.racecervice.TcpStreamedRaceService
+import com.h0tk3y.rally.android.racecervice.PrimaryRaceService
+import com.h0tk3y.rally.android.racecervice.StreamedRaceService
 import com.h0tk3y.rally.android.racecervice.TelemetryPublicState
 import com.h0tk3y.rally.android.views.GridKey
 import com.h0tk3y.rally.android.views.StartOption
@@ -53,6 +51,7 @@ import com.h0tk3y.rally.modifier
 import com.h0tk3y.rally.preprocessRoadmap
 import com.h0tk3y.rally.roundTo3Digits
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -69,8 +68,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.future.await
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atStartOfDayIn
@@ -79,6 +76,8 @@ import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
 import java.util.concurrent.CompletableFuture
 import kotlin.math.sign
+import kotlin.time.Clock
+import kotlin.time.Instant
 
 interface RaceServiceHolder<S : CommonRaceService> {
     fun setRaceServiceConnector(connector: () -> Unit)
@@ -262,11 +261,11 @@ sealed interface RaceUiState {
     ) : RaceUiState, HasRaceModel
 }
 
-class PersistedSectionViewModel(
+class LiveSectionViewModel(
     private val sectionId: Long,
-    private val database: Database,
+    private val database: DatabaseOperations,
     private val prefs: PreferenceRepository,
-) : StatefulSectionViewModel(), EditableSectionViewModel, RaceModelControls, RaceServiceHolder<LocalRaceService> {
+) : StatefulSectionViewModel(), EditableSectionViewModel, RaceModelControls, RaceServiceHolder<PrimaryRaceService> {
     private val parser = InputRoadmapParser(DefaultModifierValidator())
 
     private val _raceCurrentLineNumber: MutableStateFlow<LineNumber> = MutableStateFlow(LineNumber(1, 0))
@@ -298,8 +297,7 @@ class PersistedSectionViewModel(
     override val timeAllowance: Flow<TimeAllowance?> = prefs.userPreferencesFlow.map { it.allowance }
     override val speedLimitPercent: Flow<String?> = prefs.userPreferencesFlow.map { it.speedLimitPercent }
 
-    @SuppressLint("StaticFieldLeak")
-    private var service: LocalRaceService? = null
+    private var service: PrimaryRaceService? = null
 
     private var serviceRelatedJob: Job? = null
     private var serviceConnector: () -> Unit = { error("no connector") }
@@ -380,12 +378,13 @@ class PersistedSectionViewModel(
         emptyList()
     }
 
-    override fun onServiceConnected(raceService: LocalRaceService) {
+    override fun onServiceConnected(raceService: PrimaryRaceService) {
         service = raceService
 
         serviceRelatedJob = viewModelScope.launch {
             launch {
-                raceService.raceState.collectLatest { newState ->
+                val raceStateFlow = raceService.raceState
+                raceStateFlow.collectLatest { newState ->
                     val old = _raceState.value
                     _raceState.value = raceStateToUiState(newState)
                     updateCurrentRaceLine()
@@ -741,8 +740,7 @@ class PersistedSectionViewModel(
 
     override fun leaveRaceMode(forceStop: Boolean) {
         if (forceStop || _raceState.value is RaceUiState.RaceNotStarted) {
-            service?.stopForeground(Service.STOP_FOREGROUND_REMOVE)
-            service?.stopSelf()
+            service?.forceStop()
         }
         serviceDisconnector()
         _raceUiVisible.value = false
@@ -1331,7 +1329,7 @@ class PersistedSectionViewModel(
     }
 }
 
-class StreamedSectionViewModel : StatefulSectionViewModel(), RaceServiceHolder<TcpStreamedRaceService> {
+class StreamedSectionViewModel : StatefulSectionViewModel(), RaceServiceHolder<StreamedRaceService> {
     protected val _instant: MutableStateFlow<Instant> = MutableStateFlow(Clock.System.now())
     override val instant: Instant get() = _instant.value
     
@@ -1354,8 +1352,7 @@ class StreamedSectionViewModel : StatefulSectionViewModel(), RaceServiceHolder<T
     private val _timeAllowance = MutableStateFlow<TimeAllowance?>(null)
     override val timeAllowance: Flow<TimeAllowance?> get() = _timeAllowance
     
-    @SuppressLint("StaticFieldLeak")
-    private var service: TcpStreamedRaceService? = null
+    private var service: StreamedRaceService? = null
 
     private var serviceRelatedJob: Job? = null
     private var serviceConnector: () -> Unit = { error("no connector") }
@@ -1373,7 +1370,7 @@ class StreamedSectionViewModel : StatefulSectionViewModel(), RaceServiceHolder<T
         serviceDisconnector = disconnector
     }
 
-    override fun onServiceConnected(raceService: TcpStreamedRaceService) {
+    override fun onServiceConnected(raceService: StreamedRaceService) {
         service = raceService
         _raceUiVisible.value = true
         serviceRelatedJob?.cancel()
@@ -1461,7 +1458,7 @@ class StreamedSectionViewModel : StatefulSectionViewModel(), RaceServiceHolder<T
     }
 
     fun close() {
-        service?.stopSelf()
+        service?.forceStop()
     }
 
     fun disconnectFromReceiver() {
