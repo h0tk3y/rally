@@ -27,9 +27,7 @@ import com.h0tk3y.rally.android.scenes.DataKind.*
 import com.h0tk3y.rally.android.theme.LocalCustomColorsPalette
 import com.h0tk3y.rally.model.duration
 import kotlinx.coroutines.delay
-import kotlinx.datetime.Clock
 import kotlinx.datetime.DateTimeUnit
-import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atStartOfDayIn
@@ -39,6 +37,8 @@ import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
 import kotlin.math.absoluteValue
 import kotlin.math.ceil
+import kotlin.time.Clock
+import kotlin.time.Instant
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable

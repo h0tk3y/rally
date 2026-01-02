@@ -4,12 +4,12 @@ import android.location.Location
 import androidx.core.location.GnssStatusCompat
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
 import kotlin.math.asin
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
+import kotlin.time.Clock
+import kotlin.time.Instant
 
 class DistanceAccumulator {
     private var lastAcceptedFix: Location? = null
