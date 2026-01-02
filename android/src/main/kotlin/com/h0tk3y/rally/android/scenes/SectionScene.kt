@@ -485,7 +485,7 @@ fun SectionScene(
                 },
                 allowance = allowance,
                 rememberSpeed = rememberSpeed,
-                setDebugSpeed = { (model as? PersistedSectionViewModel)?.setDebugSpeed(SpeedKmh(it.toDouble())) },
+                setDebugSpeed = { (model as? LiveSectionViewModel)?.setDebugSpeed(SpeedKmh(it.toDouble())) },
                 raceControls = model as? RaceModelControls,
             )
         }

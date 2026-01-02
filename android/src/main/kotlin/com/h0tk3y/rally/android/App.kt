@@ -34,7 +34,7 @@ import com.h0tk3y.rally.android.racecervice.CommonRaceService
 import com.h0tk3y.rally.android.racecervice.LocalRaceService
 import com.h0tk3y.rally.android.racecervice.TcpStreamedRaceService
 import com.h0tk3y.rally.android.scenes.AllSectionsScene
-import com.h0tk3y.rally.android.scenes.PersistedSectionViewModel
+import com.h0tk3y.rally.android.scenes.LiveSectionViewModel
 import com.h0tk3y.rally.android.scenes.SectionEventLogScene
 import com.h0tk3y.rally.android.scenes.SectionEventLogViewModel
 import com.h0tk3y.rally.android.scenes.SectionOperations
@@ -143,7 +143,7 @@ fun App(
                             val withRace = it.withRace
 
                             val context = LocalContext.current
-                            val model = viewModel { PersistedSectionViewModel(sectionId, database, userPreferences) }
+                            val model = viewModel { LiveSectionViewModel(sectionId, database, userPreferences) }
                             val connection = remember(context) {
                                 localRaceServiceConnection(context, model::onServiceConnected, model::onServiceDisconnected)
                             }
