@@ -82,12 +82,15 @@ import kotlinx.serialization.json.decodeFromStream
 import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.polymorphic
 import kotlinx.serialization.modules.subclass
+import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.IOException
 import java.net.ServerSocket
 import java.net.Socket
 import java.util.UUID
+import java.util.zip.GZIPInputStream
+import java.util.zip.GZIPOutputStream
 import kotlin.coroutines.CoroutineContext
 import kotlin.time.Clock
 import kotlin.time.Duration
@@ -163,7 +166,7 @@ interface StreamedRaceService : CommonRaceService {
 class TcpStreamedRaceService : StreamedRaceService, StoppableService, Service() {
     private val _instant = MutableStateFlow(Clock.System.now())
     override val instant: StateFlow<Instant> get() = _instant
-    
+
     private val _raceState = MutableStateFlow<RaceState>(RaceState.NotStarted)
     override val raceState: StateFlow<RaceState> get() = _raceState
 
@@ -264,6 +267,9 @@ class TcpStreamedRaceService : StreamedRaceService, StoppableService, Service() 
         launch(Dispatchers.IO) { coroutineContext.startNetworkReceiverLoop() }
     }
 
+    private fun unzipBytesToString(byteArray: ByteArray): String =
+        GZIPInputStream(byteArray.inputStream()).bufferedReader().use { it.readText() }
+
     private suspend fun CoroutineContext.startNetworkReceiverLoop() {
         while (isActive) {
             try {
@@ -284,7 +290,8 @@ class TcpStreamedRaceService : StreamedRaceService, StoppableService, Service() 
                                 }
                                 val buffer = ByteArray(size)
                                 input.readFully(buffer)
-                                handleFrame(buffer)
+
+                                handleFrame(unzipBytesToString(buffer).toByteArray())
                             }
                         }
                     }
@@ -719,19 +726,19 @@ class LocalRaceService : PrimaryRaceService, Service() {
 
     private suspend fun collectGpsMeasurement(measurement: GpsDistanceMeasurement, scope: CoroutineScope) {
         var lastDistance = measurement.distanceAccumulator.totalDistanceMeters.value
-        
+
         measurement.distanceAccumulator.totalDistanceMeters.collectLatest { newDistance ->
             fun sats() = measurement.distanceAccumulator.satsInUse.value
-            
+
             fun updateGpsState(isDelayed: Boolean) {
                 btState.value = when {
                     isDelayed && measurement.distanceAccumulator.lastFixTime.value
-                        ?.let { Clock.System.now() - it > 2.seconds } == true -> 
-                            TelemetryState.GpsTelemetry(GpsReceiverState.NoLocationData, sats())
+                        ?.let { Clock.System.now() - it > 2.seconds } == true ->
+                        TelemetryState.GpsTelemetry(GpsReceiverState.NoLocationData, sats())
 
                     measurement.distanceAccumulator.lastFixTime.value == null ->
                         TelemetryState.GpsTelemetry(GpsReceiverState.NoLocationData, sats())
-                    
+
                     measurement.distanceAccumulator.isGoodLocation.value ->
                         TelemetryState.GpsTelemetry(GpsReceiverState.GoodLocationData, sats())
 
@@ -770,10 +777,18 @@ class LocalRaceService : PrimaryRaceService, Service() {
                         }
                     }
                 }
-            }.launchIn(this).invokeOnCompletion { 
+            }.launchIn(this).invokeOnCompletion {
                 sendJob?.cancel()
             }
         }
+    }
+
+    private fun zipBytes(data: ByteArray): ByteArray {
+        val bytes = ByteArrayOutputStream()
+        GZIPOutputStream(bytes).use { compressedData ->
+            compressedData.write(data)
+        }
+        return bytes.toByteArray()
     }
 
     private suspend fun CoroutineScope.sendDataWithSocket(ip: String) {
@@ -783,9 +798,11 @@ class LocalRaceService : PrimaryRaceService, Service() {
             }.use { socket ->
                 DataOutputStream(socket.getOutputStream()).use { out ->
                     fun sendFrame(data: ByteArray) {
-                        out.writeInt(data.size)
+                        val compressedData = zipBytes(data)
+
+                        out.writeInt(compressedData.size)
                         out.writeLong(telemetryStreamingVersion)
-                        out.write(data)
+                        out.write(compressedData)
                         out.flush()
                     }
 
@@ -802,7 +819,7 @@ class LocalRaceService : PrimaryRaceService, Service() {
                         sendFrame(
                             json.encodeToString<TelemetryFrame>(data).toByteArray()
                         )
-                        delay(50)
+                        delay(100)
                     }
                 }
             }
@@ -839,7 +856,11 @@ class LocalRaceService : PrimaryRaceService, Service() {
 
     private suspend fun CoroutineContext.btMainLoop(device: BluetoothDevice) {
         while (isActive) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && ActivityCompat.checkSelfPermission(this@LocalRaceService, BLUETOOTH_CONNECT) != PERMISSION_GRANTED) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && ActivityCompat.checkSelfPermission(
+                    this@LocalRaceService,
+                    BLUETOOTH_CONNECT
+                ) != PERMISSION_GRANTED
+            ) {
                 btState.value = TelemetryState.BtTelemetry(BtConnectionState.NoPermissions)
                 Log.d("raceService", "missing Bluetooth permissions")
                 delay(5000L)
@@ -1083,4 +1104,4 @@ private object RaceNotificationUtils {
     private const val TIMER_SERVICE_NOTIFICATION_CHANNEL_ID = "RaceService"
 }
 
-private const val telemetryStreamingVersion = 1L
+private const val telemetryStreamingVersion = 2L
