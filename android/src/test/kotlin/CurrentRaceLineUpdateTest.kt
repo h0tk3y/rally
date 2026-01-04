@@ -13,6 +13,7 @@ import defaultPreferencesMock
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runTest
 import org.junit.Rule
@@ -66,6 +67,8 @@ class CurrentRaceLineUpdateTest {
             raceStateFlow.emit(RaceState.InRace(sec.section.id, raceModelOfDistance(1.5), null, null, raceModelAtStart))
             assertEquals(raceModelOfDistance(1.5), assertIs<RaceUiState.RaceGoing>(raceState.awaitItem()).raceModel)
             assertEquals(viewModel.preprocessedPositions.value[1].lineNumber, raceCurrentLineIndex.awaitItem())
+
+            viewModel.viewModelScope.cancel()
         }
     }
 }
