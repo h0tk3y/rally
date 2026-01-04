@@ -484,7 +484,11 @@ class LiveSectionViewModel(
         }
         
         service?.run {
-            val now = Clock.System.now()
+            val nowToSecond = with(TimeZone.currentSystemDefault()) {
+                val nowExact = Clock.System.now().toLocalDateTime()
+                val localToSecond = LocalDateTime(nowExact.date, LocalTime(nowExact.hour, nowExact.minute, nowExact.second))
+                localToSecond.toInstant()
+            }
 
             val currentRaceState = raceState.value
             val startDistance = when (startOption.locationAndTime) {
