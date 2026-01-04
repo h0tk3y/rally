@@ -51,7 +51,6 @@ import com.h0tk3y.rally.modifier
 import com.h0tk3y.rally.preprocessRoadmap
 import com.h0tk3y.rally.roundTo3Digits
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -68,6 +67,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.future.await
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atStartOfDayIn
@@ -77,6 +77,7 @@ import kotlinx.datetime.toLocalDateTime
 import java.util.concurrent.CompletableFuture
 import kotlin.math.sign
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Instant
 
 interface RaceServiceHolder<S : CommonRaceService> {
@@ -87,7 +88,7 @@ interface RaceServiceHolder<S : CommonRaceService> {
 }
 
 interface CommonSectionViewModel {
-    val instant: Instant
+    val instant: StateFlow<Instant>
     
     val viewModelScope: CoroutineScope
 
@@ -114,8 +115,8 @@ interface CommonSectionViewModel {
 }
 
 abstract class StatefulSectionViewModel : ViewModel(), CommonSectionViewModel {
-    override val instant: Instant get() = Clock.System.now()
     
+    protected val _instant: MutableStateFlow<Instant> = MutableStateFlow(Clock.System.now())
     protected val _section: MutableStateFlow<LoadState<Section>> = MutableStateFlow(LoadState.EMPTY)
     protected val _inputPositions: MutableStateFlow<List<RoadmapInputLine>> = MutableStateFlow(emptyList())
     protected val _preprocessedPositions: MutableStateFlow<List<RoadmapInputLine>> = MutableStateFlow(emptyList())
@@ -127,6 +128,7 @@ abstract class StatefulSectionViewModel : ViewModel(), CommonSectionViewModel {
     protected val _telemetryState: MutableStateFlow<TelemetryPublicState> = MutableStateFlow(TelemetryPublicState.NotInitialized)
     protected val _raceUiVisible: MutableStateFlow<Boolean> = MutableStateFlow(false)
 
+    override val instant: StateFlow<Instant> = _instant
     override val section: StateFlow<LoadState<Section>> = _section
     override val inputPositions: StateFlow<List<RoadmapInputLine>> = _inputPositions
     override val preprocessedPositions: StateFlow<List<RoadmapInputLine>> = _preprocessedPositions
@@ -337,6 +339,12 @@ class LiveSectionViewModel(
             }
         }
         viewModelScope.launch {
+            while (isActive) {
+                _instant.value = Clock.System.now()
+                delay(200.milliseconds)
+            }
+        }
+        viewModelScope.launch {
             _inputPositions.collectLatest {
                 _preprocessedPositions.value = maybePreprocess(it)
                 _subsMatching.value = SubsMatcher().matchSubs(it.filterIsInstance<PositionLine>())
@@ -496,7 +504,7 @@ class LiveSectionViewModel(
                 if (startOption.isRace) RACE_START else SECTION_START,
                 sectionId,
                 startDistance,
-                now,
+                nowToSecond,
                 sinceTimestamp = null
             )
 
@@ -508,14 +516,14 @@ class LiveSectionViewModel(
                 StartOption.StartAtSelectedPositionAtTimeKeepOdo,
                 StartOption.StartAtSelectedPositionAtTime -> {
                     currentItem?.modifier<AstroTime>()?.timeOfDay?.let { timeOfDay ->
-                        now.toLocalDateTime(TimeZone.currentSystemDefault()).date.atTime(
+                        nowToSecond.toLocalDateTime(TimeZone.currentSystemDefault()).date.atTime(
                             LocalTime(timeOfDay.hr, timeOfDay.min, timeOfDay.sec)
                         ).toInstant(TimeZone.currentSystemDefault())
-                    } ?: now
+                    } ?: nowToSecond
                 }
 
                 StartOption.StartAtSelectedPositionNow,
-                StartOption.StartNowFromGoingState -> now
+                StartOption.StartNowFromGoingState -> nowToSecond
             }
 
             val startModifiersToAdd = listOfNotNull(
@@ -1330,9 +1338,6 @@ class LiveSectionViewModel(
 }
 
 class StreamedSectionViewModel : StatefulSectionViewModel(), RaceServiceHolder<StreamedRaceService> {
-    protected val _instant: MutableStateFlow<Instant> = MutableStateFlow(Clock.System.now())
-    override val instant: Instant get() = _instant.value
-    
     override val viewModelScope: CoroutineScope
         get() = (this as ViewModel).viewModelScope
 

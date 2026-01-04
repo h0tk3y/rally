@@ -27,13 +27,9 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.flow.toList
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.withContext
 import org.junit.Rule
 import org.junit.Test
-import kotlin.coroutines.CoroutineContext
 import kotlin.test.Ignore
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -138,6 +134,8 @@ class EnterLeaveRaceTest {
                 raceStateFlow.emit(RaceState.InRace(sec.section.id, raceModelOfDistance(3.0, now), null, null, going.raceModel))
 
                 viewModel.finishRace()
+                positionsChanged()
+                positionsChanged()
                 positionsChanged()
             },
             checkPositions = { result ->
