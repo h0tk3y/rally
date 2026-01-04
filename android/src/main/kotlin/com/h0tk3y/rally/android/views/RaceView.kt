@@ -53,10 +53,10 @@ import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -96,19 +96,16 @@ import com.h0tk3y.rally.strRound1
 import com.h0tk3y.rally.strRound2Exact
 import com.h0tk3y.rally.strRound3
 import com.h0tk3y.rally.strRound3Exact
-import kotlinx.coroutines.delay
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toLocalDateTime
+import kotlinx.coroutines.flow.StateFlow
 import kotlin.math.absoluteValue
 import kotlin.math.roundToInt
-import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Instant
 
 @Composable
 fun RaceView(
-    timeProvider: () -> Instant,
+    timeFlow: StateFlow<Instant>,
     race: RaceUiState,
     distanceLocalizer: TimeDistanceLocalizer?,
     sectionDistanceLocalizer: TimeDistanceLocalizer?,
@@ -125,16 +122,7 @@ fun RaceView(
     setDebugSpeed: (Int) -> Unit,
     raceControls: RaceModelControls?
 ) {
-    val time by produceState(Clock.System.now()) {
-        while (true) {
-            val time = timeProvider()
-            val currentTime = time.toLocalDateTime(TimeZone.currentSystemDefault())
-            val millisToNextWholeSecond = 1000 - (currentTime.time.toMillisecondOfDay() - currentTime.time.toSecondOfDay() * 1000)
-            value = time
-            val delayTime = millisToNextWholeSecond.toLong()
-            delay(delayTime)
-        }
-    }
+    val time by timeFlow.collectAsState()
 
     val isTablet = isTablet()
 
@@ -329,8 +317,6 @@ private fun RaceStatus(
     allowance: TimeAllowance?,
     selectedPosition: PositionLine?
 ) {
-    val actualTime = maxOf(time, Clock.System.now())
-
     if (race is RaceUiState.Going || race is RaceUiState.RaceGoing) {
         KeepScreenOn()
     }
@@ -344,9 +330,9 @@ private fun RaceStatus(
                         Text(stringResource(R.string.finishedTimeDistancePrefix) + raceTimeDistanceString(race.lastFinishAt, race.lastFinishModel))
                     }
                     RaceTimeDistance(
-                        actualTime, race, selectedPosition, isSectionTime = false, raceControls, distanceLocalizer, allowance
+                        time, race, selectedPosition, isSectionTime = false, raceControls, distanceLocalizer, allowance
                     )
-                    RaceSpeed(actualTime, race)
+                    RaceSpeed(time, race)
                 }
             }
 
@@ -356,7 +342,7 @@ private fun RaceStatus(
                         Text(stringResource(R.string.finishedTimeDistancePrefix) + raceTimeDistanceString(race.finishedAt, race.raceModelAtFinish))
                     }
                     RaceTimeDistance(
-                        actualTime, race, selectedPosition, isSectionTime = true, raceControls, sectionDistanceLocalizer, allowance
+                        time, race, selectedPosition, isSectionTime = true, raceControls, sectionDistanceLocalizer, allowance
                     )
                     GoingSpeed(race)
                 }
