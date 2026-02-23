@@ -36,7 +36,6 @@ import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
-@Ignore
 @ExperimentalCoroutinesApi
 class EnterLeaveRaceTest {
     @get:Rule
