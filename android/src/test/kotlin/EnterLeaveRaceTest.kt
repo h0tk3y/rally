@@ -26,6 +26,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.yield
 import org.junit.Rule
@@ -72,7 +73,7 @@ class EnterLeaveRaceTest {
 
         runActions()
 
-        viewModel.viewModelScope.cancel()
+        advanceUntilIdle()
         yield()
         
         collector.cancelAndJoin()
