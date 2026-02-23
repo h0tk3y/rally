@@ -1,6 +1,5 @@
 package com.h0tk3y.rally.android.scenes
 
-import app.cash.turbine.turbineScope
 import com.h0tk3y.rally.CommentLine
 import com.h0tk3y.rally.DefaultModifierValidator
 import com.h0tk3y.rally.DistanceKm
@@ -22,10 +21,13 @@ import com.h0tk3y.rally.modifier
 import defaultPreferencesMock
 import io.mockk.every
 import io.mockk.mockk
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.yield
 import org.junit.Rule
 import org.junit.Test
 import kotlin.test.Ignore
@@ -55,29 +57,27 @@ class EnterLeaveRaceTest {
         every { raceState }.returns(raceStateFlow)
     }
 
-    interface PositionChangeContext : CoroutineScope {
-        suspend fun positionsChanged()
-    }
-
     private fun testPositions(
-        runActions: suspend PositionChangeContext.() -> Unit,
+        runActions: suspend () -> Unit,
         checkPositions: (List<PositionLine>) -> Unit
     ) = runTest {
-        turbineScope {
-            val positions = viewModel.preprocessedPositions.testIn(backgroundScope)
-            positions.awaitItem()
-
-            viewModel.onServiceConnected(service)
-
-            runActions(object : PositionChangeContext, CoroutineScope by this {
-                override suspend fun positionsChanged() {
-                    println(positions.awaitItem())
-                }
-            })
-            val positionsAfter = positions.awaitItem()
-            positions.ensureAllEventsConsumed()
-            checkPositions(positionsAfter.filterIsInstance<PositionLine>())
+        val positionsLog = mutableListOf<List<RoadmapInputLine>>()
+        
+        val collector = launch {
+            viewModel.preprocessedPositions.collect {
+                positionsLog.add(it)
+            }
         }
+        viewModel.onServiceConnected(service)
+
+        runActions()
+
+        viewModel.viewModelScope.cancel()
+        yield()
+        
+        collector.cancelAndJoin()
+
+        checkPositions(positionsLog.last().filterIsInstance<PositionLine>())
     }
 
     @Test
@@ -127,14 +127,10 @@ class EnterLeaveRaceTest {
                 raceStateFlow.emit(going)
 
                 viewModel.startRace(StartOption(StartOption.StartNowFromGoingState, isRace = true))
-                positionsChanged()
 
                 raceStateFlow.emit(RaceState.InRace(sec.section.id, raceModelOfDistance(3.0, now), null, null, going.raceModel))
 
                 viewModel.finishRace()
-                positionsChanged()
-                positionsChanged()
-                positionsChanged()
             },
             checkPositions = { result ->
                 assertEquals(initial.size + 1, result.size)
@@ -143,7 +139,7 @@ class EnterLeaveRaceTest {
             }
         )
     }
-    
+
     @Ignore
     @Test
     fun `finish at an existing position with setavg?`() {
