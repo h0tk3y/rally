@@ -44,6 +44,7 @@ import com.h0tk3y.rally.android.scenes.SettingsViewModel
 import com.h0tk3y.rally.android.scenes.StreamedSectionViewModel
 import com.h0tk3y.rally.android.util.StreamingServerEmptyInfo
 import com.h0tk3y.rally.db.Section
+import kotlinx.coroutines.Dispatchers
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -143,7 +144,7 @@ fun App(
                             val withRace = it.withRace
 
                             val context = LocalContext.current
-                            val model = viewModel { LiveSectionViewModel(sectionId, database, userPreferences) }
+                            val model = viewModel { LiveSectionViewModel(sectionId, database, userPreferences, Dispatchers.Default) }
                             val connection = remember(context) {
                                 localRaceServiceConnection(context, model::onServiceConnected, model::onServiceDisconnected)
                             }
@@ -193,7 +194,7 @@ fun App(
 
                         entry<StreamedSectionScene> { key ->
                             val context = LocalContext.current
-                            val model = viewModel { StreamedSectionViewModel() }
+                            val model = viewModel { StreamedSectionViewModel(Dispatchers.Default) }
 
                             val connection = remember(context) {
                                 tcpStreamedRaceServiceConnection(context, model::onServiceConnected, model::onServiceDisconnected)
