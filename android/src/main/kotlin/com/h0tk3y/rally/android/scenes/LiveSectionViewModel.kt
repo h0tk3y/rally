@@ -50,6 +50,7 @@ import com.h0tk3y.rally.model.duration
 import com.h0tk3y.rally.modifier
 import com.h0tk3y.rally.preprocessRoadmap
 import com.h0tk3y.rally.roundTo3Digits
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -89,7 +90,7 @@ interface RaceServiceHolder<S : CommonRaceService> {
 
 interface CommonSectionViewModel {
     val instant: StateFlow<Instant>
-    
+
     val viewModelScope: CoroutineScope
 
     val section: StateFlow<LoadState<Section>>
@@ -114,8 +115,10 @@ interface CommonSectionViewModel {
     val timeAllowance: Flow<TimeAllowance?>
 }
 
-abstract class StatefulSectionViewModel : ViewModel(), CommonSectionViewModel {
-    
+abstract class StatefulSectionViewModel(
+    private val coroutineDispatcher: CoroutineDispatcher
+) : ViewModel(), CommonSectionViewModel {
+
     protected val _instant: MutableStateFlow<Instant> = MutableStateFlow(Clock.System.now())
     protected val _section: MutableStateFlow<LoadState<Section>> = MutableStateFlow(LoadState.EMPTY)
     protected val _inputPositions: MutableStateFlow<List<RoadmapInputLine>> = MutableStateFlow(emptyList())
@@ -154,18 +157,18 @@ abstract class StatefulSectionViewModel : ViewModel(), CommonSectionViewModel {
 
     protected open fun onSectionUpdate(section: LoadState<Section>) = Unit
 
-    suspend fun extracted() {
-        _section.collectLatest { onSectionUpdate(it) }
-    }
+    protected fun launchDispatchable(action: suspend CoroutineScope.() -> Unit) = viewModelScope.launch(coroutineDispatcher, block = action)
 
     init {
-        viewModelScope.launch {
+        launchDispatchable {
             _subInitComplete.await()
 
-            viewModelScope.launch {
-                extracted()
+            launch {
+                _section.collectLatest<LoadState<Section>> { 
+                    onSectionUpdate(it) 
+                }
             }
-            viewModelScope.launch {
+            launch {
                 _inputPositions.collectLatest {
                     _preprocessedPositions.value = maybePreprocess(it)
                     // sanitizeSelection()
@@ -173,12 +176,12 @@ abstract class StatefulSectionViewModel : ViewModel(), CommonSectionViewModel {
                     _subsMatching.value = SubsMatcher().matchSubs(it.filterIsInstance<PositionLine>())
                 }
             }
-            viewModelScope.launch {
+            launch {
                 _selectedLineIndex.collectLatest {
                     onLineNumberChange()
                 }
             }
-            viewModelScope.launch {
+            launch {
                 combineTransform(_preprocessedPositions, calibration) { a, b -> emit(a to b) }.collectLatest { (it, calibrationFactor) ->
                     val lines = it.filterIsInstance<PositionLine>()
                     launch {
@@ -219,7 +222,7 @@ interface EditableSectionViewModel : CommonSectionViewModel, EditorControls {
     val editorFocus: StateFlow<EditorFocus>
     fun deletePosition(line: RoadmapInputLine)
     fun maybeCreateItemAtDistance(distanceKm: DistanceKm, forceCreateIfExists: Boolean, addModifiers: List<PositionLineModifier> = emptyList()): PositionLine
-    
+
     val soundFlow: SharedFlow<SoundEvent>
 }
 
@@ -267,7 +270,8 @@ class LiveSectionViewModel(
     private val sectionId: Long,
     private val database: DatabaseOperations,
     private val prefs: PreferenceRepository,
-) : StatefulSectionViewModel(), EditableSectionViewModel, RaceModelControls, RaceServiceHolder<PrimaryRaceService> {
+    coroutineDispatcher: CoroutineDispatcher
+) : StatefulSectionViewModel(coroutineDispatcher), EditableSectionViewModel, RaceModelControls, RaceServiceHolder<PrimaryRaceService> {
     private val parser = InputRoadmapParser(DefaultModifierValidator())
 
     private val _raceCurrentLineNumber: MutableStateFlow<LineNumber> = MutableStateFlow(LineNumber(1, 0))
@@ -305,8 +309,8 @@ class LiveSectionViewModel(
     private var serviceConnector: () -> Unit = { error("no connector") }
     private var serviceDisconnector: () -> Unit = { error("no disconnector") }
 
-    private var soundFeedback: Boolean = false 
-    
+    private var soundFeedback: Boolean = false
+
     override val calibration: Flow<Double> = prefs.userPreferencesFlow.map { it.calibration }
 
     override fun onSectionUpdate(section: LoadState<Section>) {
@@ -333,31 +337,33 @@ class LiveSectionViewModel(
     init {
         subInitComplete()
 
-        viewModelScope.launch {
-            prefs.userPreferencesFlow.collectLatest {
-                soundFeedback = it.soundFeedback
+        launchDispatchable {
+            launch {
+                prefs.userPreferencesFlow.collectLatest {
+                    soundFeedback = it.soundFeedback
+                }
             }
-        }
-        viewModelScope.launch {
-            while (isActive) {
-                _instant.value = Clock.System.now()
-                delay(200.milliseconds)
+            launch {
+                while (isActive) {
+                    _instant.value = Clock.System.now()
+                    delay(200.milliseconds)
+                }
             }
-        }
-        viewModelScope.launch {
-            _inputPositions.collectLatest {
-                _preprocessedPositions.value = maybePreprocess(it)
-                _subsMatching.value = SubsMatcher().matchSubs(it.filterIsInstance<PositionLine>())
+            launch {
+                _inputPositions.collectLatest {
+                    _preprocessedPositions.value = maybePreprocess(it)
+                    _subsMatching.value = SubsMatcher().matchSubs(it.filterIsInstance<PositionLine>())
+                }
             }
-        }
-        viewModelScope.launch {
-            _editorFocus.collectLatest {
-                updateEditorConstraints()
+            launch {
+                _editorFocus.collectLatest {
+                    updateEditorConstraints()
+                }
             }
-        }
-        viewModelScope.launch {
-            database.selectSectionById(sectionId).collect {
-                _section.value = it
+            launch {
+                database.selectSectionById(sectionId).collect {
+                    _section.value = it
+                }
             }
         }
     }
@@ -369,7 +375,7 @@ class LiveSectionViewModel(
     override fun setRaceServiceDisconnector(disconnector: () -> Unit) {
         serviceDisconnector = disconnector
     }
-    
+
     private fun positionLines(it: LoadState<Section>) = if (it is LoadState.Loaded) {
         val result = parser.parseRoadmap(it.value.serializedPositions.reader()).filterIsInstance<PositionLine>()
         result.ifEmpty {
@@ -389,7 +395,7 @@ class LiveSectionViewModel(
     override fun onServiceConnected(raceService: PrimaryRaceService) {
         service = raceService
 
-        serviceRelatedJob = viewModelScope.launch {
+        serviceRelatedJob = launchDispatchable {
             launch {
                 val raceStateFlow = raceService.raceState
                 raceStateFlow.collectLatest { newState ->
@@ -451,7 +457,7 @@ class LiveSectionViewModel(
     private fun handleRaceStatesDelta(old: RaceUiState, new: RaceUiState) {
         if (old is RaceUiState.RaceGoing && new is RaceUiState.RaceGoing && !old.raceModel.distanceGoingUp && !new.raceModel.distanceGoingUp &&
             new.raceModel.currentDistance >= new.raceModel.startAtDistance
-            ) {
+        ) {
             val range = listOf(old.raceModel.currentDistance, new.raceModel.currentDistance).sorted().let { (from, to) -> from..to }
             val removeThenAvgFrom = currentItems.filterIsInstance<PositionLine>().filter { it.atKm in range && it.modifier<ThenAvgSpeed>() != null }
             removeThenAvgFrom.forEach { item ->
@@ -479,10 +485,10 @@ class LiveSectionViewModel(
     }
 
     override fun startRace(startOption: StartOption) {
-        viewModelScope.launch {
+        launchDispatchable {
             if (soundFeedback) _soundFlow.emit(SoundEvent.BEEP_START)
         }
-        
+
         service?.run {
             val nowToSecond = with(TimeZone.currentSystemDefault()) {
                 val nowExact = Clock.System.now().toLocalDateTime()
@@ -639,10 +645,10 @@ class LiveSectionViewModel(
     }
 
     override fun finishRace() {
-        viewModelScope.launch {
+        launchDispatchable {
             if (soundFeedback) _soundFlow.emit(SoundEvent.BEEP_FINISH)
         }
-        
+
         val currentState = _raceState.value
         if (currentState is RaceUiState.RaceGoing) {
             val addEndAvg = currentItems.filterIsInstance<PositionLine>().fold(0) { acc, it ->
@@ -698,10 +704,10 @@ class LiveSectionViewModel(
     }
 
     override fun stopRace() {
-        viewModelScope.launch {
+        launchDispatchable {
             if (soundFeedback) _soundFlow.emit(SoundEvent.BEEP_FINISH)
         }
-        
+
         service?.stopRace()
         val raceModelAtStop = (service?.raceState?.value as? RaceState.Stopped)?.raceModelAtStop
         database.insertEvent(
@@ -731,9 +737,9 @@ class LiveSectionViewModel(
 
     override fun setGoingForward(isGoingForward: Boolean) {
         service?.setDistanceGoingUp(isGoingForward)
-        
+
         if (!isGoingForward) {
-            viewModelScope.launch { 
+            launchDispatchable {
                 while (service?.raceState?.value?.let { it is RaceState.MovingWithRaceModel && !(it.raceModel.distanceGoingUp) } == true) {
                     if (soundFeedback) _soundFlow.emit(SoundEvent.BEEP_REVERSE)
                     delay(3000L)
@@ -843,15 +849,15 @@ class LiveSectionViewModel(
     }
 
     override fun addItemAbove() {
-        createNewItem(0)?.let { viewModelScope.launch { selectLine(it, DataKind.Distance) } }
+        createNewItem(0)?.let { launchDispatchable { selectLine(it, DataKind.Distance) } }
     }
 
     override fun addItemBelow() {
-        createNewItem(1)?.let { viewModelScope.launch { selectLine(it, DataKind.Distance) } }
+        createNewItem(1)?.let { launchDispatchable { selectLine(it, DataKind.Distance) } }
     }
 
     override fun setSpeedLimitPercent(value: String?) {
-        viewModelScope.launch {
+        launchDispatchable {
             prefs.saveSpeedLimitPercent(value)
         }
     }
@@ -1168,7 +1174,7 @@ class LiveSectionViewModel(
             item.copy(modifiers = addOrReplaceModifiers(item.modifiers, modifiersToAdd))
         )
     }
-    
+
     private fun recalculateLineNumbers(lines: Collection<RoadmapInputLine>) =
         lines.mapIndexed { index, roadmapInputLine ->
             val lineNumber = LineNumber(index + 1, 0)
@@ -1205,7 +1211,7 @@ class LiveSectionViewModel(
 
     override fun maybeCreateItemAtDistance(distanceKm: DistanceKm, forceCreateIfExists: Boolean, addModifiers: List<PositionLineModifier>): PositionLine {
         if (_raceState.value is RaceUiState.HasRaceModel && _raceUiVisible.value) {
-            viewModelScope.launch {
+            launchDispatchable {
                 if (soundFeedback) _soundFlow.emit(SoundEvent.BEEP_UP)
             }
         }
@@ -1341,7 +1347,8 @@ class LiveSectionViewModel(
     }
 }
 
-class StreamedSectionViewModel : StatefulSectionViewModel(), RaceServiceHolder<StreamedRaceService> {
+class StreamedSectionViewModel(coroutineDispatcher: CoroutineDispatcher) : StatefulSectionViewModel(coroutineDispatcher),
+    RaceServiceHolder<StreamedRaceService> {
     override val viewModelScope: CoroutineScope
         get() = (this as ViewModel).viewModelScope
 
@@ -1360,7 +1367,7 @@ class StreamedSectionViewModel : StatefulSectionViewModel(), RaceServiceHolder<S
 
     private val _timeAllowance = MutableStateFlow<TimeAllowance?>(null)
     override val timeAllowance: Flow<TimeAllowance?> get() = _timeAllowance
-    
+
     private var service: StreamedRaceService? = null
 
     private var serviceRelatedJob: Job? = null
@@ -1383,48 +1390,48 @@ class StreamedSectionViewModel : StatefulSectionViewModel(), RaceServiceHolder<S
         service = raceService
         _raceUiVisible.value = true
         serviceRelatedJob?.cancel()
-        serviceRelatedJob = viewModelScope.launch {
-            viewModelScope.launch {
+        serviceRelatedJob = launchDispatchable {
+            launch {
                 service?.telemetryPublicState?.collectLatest { teleState ->
                     _telemetryState.value = teleState
                 }
             }
-            viewModelScope.launch {
+            launch {
                 service?.section?.collectLatest {
                     _section.value = it?.let { LoadState.Loaded(it) } ?: LoadState.EMPTY
                 }
             }
-            viewModelScope.launch {
+            launch {
                 service?.positions?.collectLatest {
                     _inputPositions.value = it.orEmpty()
                     _preprocessedPositions.value = it.orEmpty()
                 }
             }
-            viewModelScope.launch {
+            launch {
                 service?.instant?.collectLatest {
                     _instant.value = it
                 }
             }
-            viewModelScope.launch {
+            launch {
                 service?.currentLine?.collectLatest {
                     _selectedLineIndex.value = it
                 }
             }
-            viewModelScope.launch {
+            launch {
                 service?.currentRaceLine?.collectLatest {
                     _raceCurrentLineIndex.value = it
                 }
             }
-            viewModelScope.launch {
+            launch {
                 service?.raceState?.collectLatest {
                     _raceState.value = raceStateToUiState(it)
-                }
-                delay(1000L)
-                if (isActive) {
-                    _telemetryState.value = TelemetryPublicState.ReceivesStream(isDelayed = true)
+                    delay(1000L)
+                    if (isActive) {
+                        _telemetryState.value = TelemetryPublicState.ReceivesStream(isDelayed = true)
+                    }
                 }
             }
-            viewModelScope.launch {
+            launch {
                 service?.rememberSpeedLimit?.collectLatest {
                     _rememberSpeed.value = it
                 }
