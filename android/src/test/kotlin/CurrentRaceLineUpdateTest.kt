@@ -12,6 +12,7 @@ import com.h0tk3y.rally.model.RaceState
 import defaultPreferencesMock
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -33,7 +34,7 @@ class CurrentRaceLineUpdateTest {
         val db = InMemoryDatabaseOperations()
         val sec = db.createSection("test", simplePositions(0.0, 100.0, 100)) as SectionInsertOrRenameResult.Success
 
-        val viewModel = LiveSectionViewModel(sec.section.id, db, defaultPreferencesMock())
+        val viewModel = LiveSectionViewModel(sec.section.id, db, defaultPreferencesMock(), Dispatchers.Main)
         val raceModelAtStart = raceModelOfDistance(0.0)
         val raceStateFlow = MutableStateFlow(RaceState.InRace(sec.section.id, raceModelAtStart, null, null, raceModelAtStart))
         
