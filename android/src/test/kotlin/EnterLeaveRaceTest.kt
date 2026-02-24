@@ -1,6 +1,5 @@
 package com.h0tk3y.rally.android.scenes
 
-import app.cash.turbine.turbineScope
 import com.h0tk3y.rally.CommentLine
 import com.h0tk3y.rally.DefaultModifierValidator
 import com.h0tk3y.rally.DistanceKm
@@ -22,10 +21,12 @@ import com.h0tk3y.rally.modifier
 import defaultPreferencesMock
 import io.mockk.every
 import io.mockk.mockk
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import org.junit.Rule
 import org.junit.Test
 import kotlin.test.Ignore
@@ -36,7 +37,6 @@ import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
-@Ignore
 @ExperimentalCoroutinesApi
 class EnterLeaveRaceTest {
     @get:Rule
@@ -46,7 +46,7 @@ class EnterLeaveRaceTest {
     val sec = db.createSection("test", simplePositions(0.0, 3.0, 3)) as SectionInsertOrRenameResult.Success
     val initial = InputRoadmapParser(DefaultModifierValidator()).parseRoadmap(sec.section.serializedPositions.reader()).filterIsInstance<PositionLine>()
 
-    val viewModel = LiveSectionViewModel(sec.section.id, db, defaultPreferencesMock())
+
     val raceModelAtStart = raceModelOfDistance(0.0)
     val raceStateFlow = MutableStateFlow<RaceState>(RaceState.Going(sec.section.id, raceModelAtStart, null, null))
 
@@ -56,35 +56,44 @@ class EnterLeaveRaceTest {
         every { raceState }.returns(raceStateFlow)
     }
 
-    interface PositionChangeContext : CoroutineScope {
-        suspend fun positionsChanged()
+    interface ModelActionScope {
+        suspend fun modelAction(action: suspend LiveSectionViewModel.() -> Unit)
     }
 
     private fun testPositions(
-        runActions: suspend PositionChangeContext.() -> Unit,
+        runActions: suspend ModelActionScope.() -> Unit,
         checkPositions: (List<PositionLine>) -> Unit
-    ) = runTest {
-        turbineScope {
-            val positions = viewModel.preprocessedPositions.testIn(backgroundScope)
-            positions.awaitItem()
+    ) = runTest(withMain.dispatcher) {
+        val viewModel = LiveSectionViewModel(sec.section.id, db, defaultPreferencesMock(), withMain.dispatcher)
+        val modelActionScope = object : ModelActionScope {
+            override suspend fun modelAction(action: suspend LiveSectionViewModel.() -> Unit) {
+                action(viewModel)
+                repeat(10) { runCurrent() }
+            }
+        }
+
+        try {
+            repeat(10) { runCurrent() }
 
             viewModel.onServiceConnected(service)
+            repeat(10) { runCurrent() }
 
-            runActions(object : PositionChangeContext, CoroutineScope by this {
-                override suspend fun positionsChanged() {
-                    println(positions.awaitItem())
-                }
-            })
-            val positionsAfter = positions.awaitItem()
-            positions.ensureAllEventsConsumed()
-            checkPositions(positionsAfter.filterIsInstance<PositionLine>())
+            runActions(modelActionScope)
+            val result = withTimeout(2_000) {
+                viewModel.preprocessedPositions.value
+            }
+
+            checkPositions(result.filterIsInstance<PositionLine>())
+        } finally {
+            viewModel.viewModelScope.cancel()
+            repeat(10) { runCurrent() }
         }
     }
 
     @Test
     fun `start timed race at zero from current state`() = testPositions(
         runActions = {
-            viewModel.startRace(StartOption(StartOption.StartNowFromGoingState, isRace = true))
+            modelAction { startRace(StartOption(StartOption.StartNowFromGoingState, isRace = true)) }
         },
         checkPositions = { result ->
             assertEquals(initial.withoutLineNumbers(), result.toList().filterIndexed { index, _ -> index != 1 }.withoutLineNumbers())
@@ -99,9 +108,9 @@ class EnterLeaveRaceTest {
     @Test
     fun `start timed race by position that has no setavg`() = testPositions(
         runActions = {
-            raceStateFlow.emit(RaceState.Going(sec.section.id, raceModelOfDistance(1.0), null, null))
-            viewModel.selectLine(LineNumber(2, 0), null)
-            viewModel.startRace(StartOption(StartOption.StartNowFromGoingState, isRace = true))
+            modelAction { raceStateFlow.emit(RaceState.Going(sec.section.id, raceModelOfDistance(1.0), null, null)) }
+            modelAction { selectLine(LineNumber(2, 0), null) }
+            modelAction { startRace(StartOption(StartOption.StartNowFromGoingState, isRace = true)) }
         },
         checkPositions = { result ->
             assertEquals(initial.withoutIndices(1).withoutLineNumbers(), result.withoutIndices(1).withoutLineNumbers())
@@ -125,17 +134,10 @@ class EnterLeaveRaceTest {
                 val now = before + 1.seconds
 
                 val going = RaceState.Going(sec.section.id, raceModelOfDistance(2.0, before), null, null)
-                raceStateFlow.emit(going)
-
-                viewModel.startRace(StartOption(StartOption.StartNowFromGoingState, isRace = true))
-                positionsChanged()
-
-                raceStateFlow.emit(RaceState.InRace(sec.section.id, raceModelOfDistance(3.0, now), null, null, going.raceModel))
-
-                viewModel.finishRace()
-                positionsChanged()
-                positionsChanged()
-                positionsChanged()
+                modelAction { raceStateFlow.emit(going) }
+                modelAction { startRace(StartOption(StartOption.StartNowFromGoingState, isRace = true)) }
+                modelAction { raceStateFlow.emit(RaceState.InRace(sec.section.id, raceModelOfDistance(3.0, now), null, null, going.raceModel)) }
+                modelAction { finishRace() }
             },
             checkPositions = { result ->
                 assertEquals(initial.size + 1, result.size)
@@ -144,7 +146,7 @@ class EnterLeaveRaceTest {
             }
         )
     }
-    
+
     @Ignore
     @Test
     fun `finish at an existing position with setavg?`() {
