@@ -151,8 +151,7 @@
     <string name="keyThen">THEN</string>
     <string name="keyEndavg">END</string>
     <string name="keyAtime">ATIME</string>
-    <string name="keyAddBelow">ADD▼</string>
-    <string name="keyAddAbove">ADD▲</string>
+    <string name="keyAdd">ADD</string>
     <string name="keyRemove">DEL ╳</string>
     <string name="notificationGoing">: Going</string>
     <string name="notificationInRace">: In race</string>
