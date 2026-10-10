@@ -349,13 +349,21 @@ private fun DataField(
     subsMatch: SubsMatch,
     elementsModifier: Modifier
 ) {
-    LabelForField(field, line, subsMatch.subNumbers[line], elementsModifier)
+    if (field != SpeedPercentage) {
+        LabelForField(field, line, subsMatch.subNumbers[line], elementsModifier)
+    }
     val text = itemText(line, field) ?: ""
+
+    val fieldModifier = if (field == SpeedPercentage) {
+        elementsModifier.padding(start = 2.dp)
+    } else {
+        elementsModifier
+    }
 
     FocusedTextFieldWithoutKeyboard(
         text,
         field,
-        modifier = if (line.modifier<IsSynthetic>() != null) elementsModifier.alpha(0.5f) else elementsModifier,
+        modifier = if (line.modifier<IsSynthetic>() != null) fieldModifier.alpha(0.5f) else fieldModifier,
         selectionPosition = cursorIndex,
         focused = isEditorEnabled && isSelectedLine && field == editorFocus.kind,
         onTextChange = { },
@@ -365,19 +373,22 @@ private fun DataField(
         onPositionChange = { editorControls?.moveCursor(it - cursorIndex) },
         enabled = editorState.isEnabled
     )
+
+    if (field == SpeedPercentage) {
+        LabelForField(field, line, subsMatch.subNumbers[line], elementsModifier)
+    }
 }
 
 fun showFailureInEditor(reason: FailureReason) = reason is FailureReason.DistanceIsNotIncreasing
 
 fun shouldBeDisplayed(field: DataKind, editorState: EditorState): Boolean =
-    editorState.isEnabled || field in listOf(Distance, OdoDistance, AverageSpeed, AstroTime)
+    editorState.isEnabled || field in listOf(Distance, AverageSpeed, SpeedPercentage, AstroTime)
 
 @Composable
 fun LabelForField(kind: DataKind, line: PositionLine, matchId: Int?, modifier: Modifier) {
     val padding = modifier.padding(end = 2.dp)
     when (kind) {
         Distance -> Unit
-        OdoDistance -> Text(stringResource(R.string.labelOdo), padding)
         AverageSpeed -> {
             val matchStr = matchId?.toString().orEmpty()
             val setavg = line.modifier<PositionLineModifier.SetAvg>()
@@ -391,6 +402,7 @@ fun LabelForField(kind: DataKind, line: PositionLine, matchId: Int?, modifier: M
             } else Unit
         }
 
+        SpeedPercentage -> Text("%", padding)
         AstroTime -> Text(stringResource(R.string.labelAtime), modifier)
     }
 }

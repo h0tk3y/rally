@@ -129,7 +129,6 @@
     <string name="labelSetavg">старт%1$s</string>
     <string name="labelThenAvg">смена%1$s</string>
     <string name="labelAtime">а.время</string>
-    <string name="labelOdo">одо</string>
     <string name="labelEndavg">финиш</string>
     <string name="errOutsideIntervals">вне интервалов</string>
     <string name="errNoSetavg">нет старта для этой позиции</string>
@@ -141,7 +140,6 @@
     <string name="keyThen">смена</string>
     <string name="keyEndavg">финиш</string>
     <string name="keyAtime">а.время</string>
-    <string name="keyOdo">одо</string>
     <string name="keyAddBelow">доб▼</string>
     <string name="keyAddAbove">доб▲</string>
     <string name="keyRemove">удалить ╳</string>

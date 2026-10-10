@@ -195,7 +195,7 @@ private fun ColumnScope.EditableStageData(
         parseTimeInput(timeText.value.text.ifEmpty { defaultTimeText }) ?: parseTimeInput(defaultTimeText)!!
 
     fun speedValue(): SpeedKmh =
-        speedText.value.text.ifEmpty { defaultSpeedText }.toDoubleOrNull()?.let(::SpeedKmh) ?: SpeedKmh(defaultSpeedText.toDouble())
+        speedText.value.text.ifEmpty { defaultSpeedText }.toDoubleOrNull()?.let { SpeedKmh(it) } ?: SpeedKmh(defaultSpeedText.toDouble())
 
     fun startTimeValue(): TimeDayHrMinSec? =
         parseTimeInput(startTimeText.value.text) 
@@ -204,8 +204,8 @@ private fun ColumnScope.EditableStageData(
         val distanceToUse = distance ?: DistanceKm(defaultDistanceText.toDouble())
         if (preferTimeOverSpeed && time != null) {
             if ((distanceToUse.valueKm / time.toHr().timeHours).isFinite()) {
-                val averageAt = averageAt(distanceToUse, time.toHr()).run {
-                    copy(valueKmh = valueKmh.strRound3().toDouble()) // avoid redundant precision
+                val averageAt = averageAt(distanceToUse, time.toHr()).let {
+                    SpeedKmh(it.valueKmh.strRound3().toDouble()) // avoid redundant precision
                 }
                 speedText.value = TextFieldValue(averageAt.valueKmh.strRound3())
                 updateData(distanceToUse, averageAt, startTimeValue())

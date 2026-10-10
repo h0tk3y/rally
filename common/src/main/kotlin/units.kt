@@ -6,17 +6,23 @@ import kotlinx.serialization.Serializable
 import kotlin.math.roundToInt
 
 @Serializable
-data class SpeedKmh(val valueKmh: Double) {
+sealed interface SpeedKmh {
+    val valueKmh: Double
+    val percentage: Double? get() = null
+    val baseSpeedKmh: Double get() = valueKmh
+
     companion object {
+        operator fun invoke(valueKmh: Double): SpeedKmh = PlainSpeedKmh(valueKmh)
+
         fun averageAt(distance: DistanceKm, timeHr: TimeHr): SpeedKmh =
-            SpeedKmh(distance.valueKm / timeHr.timeHours)
+            PlainSpeedKmh(distance.valueKm / timeHr.timeHours)
 
         fun parse(fromString: String): SpeedKmh? {
             return when {
                 fromString.endsWith(KMH_SUFFIX) -> {
                     val valueKmh = fromString.substringBeforeLast(KMH_SUFFIX).toDoubleOrNull()
                         ?: return null
-                    SpeedKmh(valueKmh)
+                    PlainSpeedKmh(valueKmh)
                 }
 
                 else -> null
@@ -25,8 +31,25 @@ data class SpeedKmh(val valueKmh: Double) {
 
         const val KMH_SUFFIX = "kmh"
     }
+}
 
-    override fun toString(): String = if (valueKmh.isInfinite()) "∞" else "${(valueKmh * 100).roundToInt() / 100.0}$KMH_SUFFIX"
+@Serializable
+data class PlainSpeedKmh(override val valueKmh: Double) : SpeedKmh {
+    override fun toString(): String = if (valueKmh.isInfinite()) "∞" else "${(valueKmh * 100).roundToInt() / 100.0}${SpeedKmh.KMH_SUFFIX}"
+}
+
+@Serializable
+data class SpeedWithPercentage(
+    val baseSpeed: SpeedKmh,
+    override val percentage: Double
+) : SpeedKmh {
+    override val valueKmh: Double
+        get() = baseSpeed.valueKmh * (percentage / 100.0)
+    override val baseSpeedKmh: Double
+        get() = baseSpeed.valueKmh
+
+    override fun toString(): String =
+        if (valueKmh.isInfinite()) "∞" else "${(baseSpeed.valueKmh * 100).roundToInt() / 100.0};${percentage.formatPercentage()}%${SpeedKmh.KMH_SUFFIX}"
 }
 
 @Serializable
