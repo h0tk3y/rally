@@ -128,8 +128,6 @@
     <string name="noNetworkFoundPleaseConnectToWiFi">Нет подходящей сети. Пожалуйста, подключитесь к Wi-Fi.</string>
     <string name="labelSetavg">старт%1$s</string>
     <string name="labelThenAvg">смена%1$s</string>
-    <string name="labelSynth">синт.</string>
-    <string name="labelEach">через</string>
     <string name="labelAtime">а.время</string>
     <string name="labelOdo">одо</string>
     <string name="labelEndavg">финиш</string>
@@ -142,7 +140,6 @@
     <string name="keySetavg">старт</string>
     <string name="keyThen">смена</string>
     <string name="keyEndavg">финиш</string>
-    <string name="keySynth">синт.</string>
     <string name="keyAtime">а.время</string>
     <string name="keyOdo">одо</string>
     <string name="keyAddBelow">доб▼</string>

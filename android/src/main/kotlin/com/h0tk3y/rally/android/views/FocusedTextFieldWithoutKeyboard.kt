@@ -1,18 +1,11 @@
 package com.h0tk3y.rally.android.views
 
-import android.util.Log
-import android.view.inputmethod.EditorInfo
-import android.view.inputmethod.InputConnection
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.*
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -25,16 +18,11 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.InterceptPlatformTextInput
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalTextInputService
-import androidx.compose.ui.platform.PlatformTextInputInterceptor
-import androidx.compose.ui.platform.PlatformTextInputMethodRequest
-import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Constraints
-import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
@@ -42,7 +30,6 @@ import com.h0tk3y.rally.android.scenes.DataKind
 import com.h0tk3y.rally.android.theme.LocalCustomTypography
 import kotlinx.coroutines.awaitCancellation
 
-@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun FocusedTextFieldWithoutKeyboard(
     text: String,
@@ -56,7 +43,7 @@ fun FocusedTextFieldWithoutKeyboard(
     onFocused: () -> Unit = {},
     onPositionChange: (Int) -> Unit = {},
 ) {
-    InterceptPlatformTextInput(interceptor = { request, nextHandler ->
+    InterceptPlatformTextInput(interceptor = { _, _ ->
         awaitCancellation()
     }) {
         val focusRequester = remember { FocusRequester() }
@@ -100,21 +87,6 @@ fun FocusedTextFieldWithoutKeyboard(
             )
         }
     }
-}
-
-private fun measure(
-    density: Density,
-    measurer: TextMeasurer,
-    style: TextStyle,
-    text: String
-) = with(density) {
-    measurer.measure(text, style = style, constraints = Constraints(), density = density).size.width.toDp() * 2
-}.also { Log.i("measurer", "measured: $it") }
-
-private fun DataKind.width() = when (this) {
-    DataKind.SyntheticCount -> 20.dp
-    DataKind.AstroTime -> 70.dp
-    else -> 40.dp
 }
 
 
