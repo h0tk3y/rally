@@ -93,6 +93,43 @@ class RallyTimesIntervalsCalculatorTest {
             result.astroTimeAtRoadmapLineForOuter.values.toList()
         )
     }
+
+    @Test
+    fun `speed with percentage correctly calculates effective speed and interval times`() {
+        val roadmap = parsePositions(
+            """
+            0.0 setavg 90;50%
+            45.0
+            """.trimIndent()
+        )
+
+        val setAvg = roadmap[0].modifier<PositionLineModifier.SetAvg>()!!.setavg
+        assertIs<SpeedWithPercentage>(setAvg)
+        assertEquals(90.0, setAvg.baseSpeedKmh)
+        assertEquals(50.0, setAvg.percentage)
+        assertEquals(45.0, setAvg.valueKmh)
+
+        val result = assertIs<RallyTimesResultSuccess>(RallyTimesIntervalsCalculator().rallyTimes(roadmap))
+
+        assertEquals(
+            listOf(TimeHr.zero, TimeHr(1.0)),
+            result.timesForOuterInterval.values.map { it.outer }
+        )
+    }
+
+    @Test
+    fun `roadmap parsing and serialization roundtrip for speed with percentage`() {
+        val input = """
+            0.0 setavg 90.0;50%
+            10.0 thenavg 60.0;80%
+            20.0 endavg 60.0;80%
+        """.trimIndent()
+
+        val parsed = InputRoadmapParser(DefaultModifierValidator()).parseRoadmap(input.reader())
+        val serialized = InputToTextSerializer.serializeToText(parsed)
+
+        assertEquals(input, serialized)
+    }
 }
 
 private fun parsePositions(roadmap: String): List<PositionLine> =

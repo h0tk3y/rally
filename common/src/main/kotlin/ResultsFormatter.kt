@@ -127,3 +127,12 @@ fun Double.strRound1(): String = when (this) {
     Double.NEGATIVE_INFINITY -> "-∞"
     else -> ((this * 10).roundToInt() / 10.0).toString() 
 }
+
+fun Double.formatPercentage(): String = when (this) {
+    Double.POSITIVE_INFINITY -> "∞"
+    Double.NEGATIVE_INFINITY -> "-∞"
+    else -> {
+        val rounded = (this * 1000).roundToInt() / 1000.0
+        if (rounded.toLong().toDouble() == rounded) rounded.toLong().toString() else rounded.toString()
+    }
+}

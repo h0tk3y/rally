@@ -16,6 +16,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.Rule
 import org.junit.Test
@@ -27,14 +28,14 @@ import kotlin.time.Instant
 @ExperimentalCoroutinesApi
 class CurrentRaceLineUpdateTest {
     @get:Rule
-    val withMain = MainDispatcherRule()
+    val withMain = MainDispatcherRule(UnconfinedTestDispatcher())
 
     @Test
-    fun `current race line is updated on distance updates from the service`() = runTest {
+    fun `current race line is updated on distance updates from the service`() = runTest(withMain.dispatcher) {
         val db = InMemoryDatabaseOperations()
         val sec = db.createSection("test", simplePositions(0.0, 100.0, 100)) as SectionInsertOrRenameResult.Success
 
-        val viewModel = LiveSectionViewModel(sec.section.id, db, defaultPreferencesMock(), Dispatchers.Main)
+        val viewModel = LiveSectionViewModel(sec.section.id, db, defaultPreferencesMock(), withMain.dispatcher)
         val raceModelAtStart = raceModelOfDistance(0.0)
         val raceStateFlow = MutableStateFlow(RaceState.InRace(sec.section.id, raceModelAtStart, null, null, raceModelAtStart))
         
@@ -42,6 +43,9 @@ class CurrentRaceLineUpdateTest {
             relaxed = true // chain-mock the other flows; no-op for service state updates from the view model
         ) {
             every { raceState }.returns(raceStateFlow)
+            every { rememberSpeedLimit }.returns(MutableStateFlow(null))
+            every { speedLimitPercent }.returns(MutableStateFlow(null))
+            every { telemetryPublicState }.returns(MutableStateFlow(com.h0tk3y.rally.android.racecervice.TelemetryPublicState.GpsWaiting(0)))
         }
 
         turbineScope {
@@ -69,6 +73,8 @@ class CurrentRaceLineUpdateTest {
             assertEquals(raceModelOfDistance(1.5), assertIs<RaceUiState.RaceGoing>(raceState.awaitItem()).raceModel)
             assertEquals(viewModel.preprocessedPositions.value[1].lineNumber, raceCurrentLineIndex.awaitItem())
 
+            raceState.cancelAndIgnoreRemainingEvents()
+            raceCurrentLineIndex.cancelAndIgnoreRemainingEvents()
             viewModel.viewModelScope.cancel()
         }
     }

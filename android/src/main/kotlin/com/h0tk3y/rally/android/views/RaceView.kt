@@ -74,10 +74,12 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.h0tk3y.rally.DistanceKm
+import com.h0tk3y.rally.PlainSpeedKmh
 import com.h0tk3y.rally.PositionLine
 import com.h0tk3y.rally.PositionLineModifier
 import com.h0tk3y.rally.R
 import com.h0tk3y.rally.SpeedKmh
+import com.h0tk3y.rally.SpeedWithPercentage
 import com.h0tk3y.rally.TimeDistanceLocalizer
 import com.h0tk3y.rally.TimeHr
 import com.h0tk3y.rally.TimeMinSec
@@ -90,6 +92,7 @@ import com.h0tk3y.rally.android.theme.LocalCustomColorsPalette
 import com.h0tk3y.rally.android.theme.LocalCustomTypography
 import com.h0tk3y.rally.android.util.KeepScreenOn
 import com.h0tk3y.rally.android.util.VolumeKeyHandler
+import com.h0tk3y.rally.formatPercentage
 import com.h0tk3y.rally.model.RaceModel
 import com.h0tk3y.rally.modifier
 import com.h0tk3y.rally.strRound1
@@ -215,13 +218,23 @@ private fun MoreRaceControls(
         }
         TelemetryStatus(telemetryState, onGoToSettings ?: { })
         Spacer(Modifier.weight(1f))
-        SpeedLimitLikeButton(
-            label = rememberSpeed?.valueKmh?.roundToInt()?.toString() ?: stringResource(R.string.vSpeedButton),
-            isEnabled = canRememberSpeed && raceModelControls != null,
-            typography = if (isBigUi) LocalCustomTypography.current.raceControlButton else MaterialTheme.typography.caption,
-            size = if (isBigUi) 48.dp else 24.dp,
-        ) {
-            switchRememberedSpeedControls()
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            SpeedLimitLikeButton(
+                label = rememberSpeed?.baseSpeedKmh?.roundToInt()?.toString() ?: stringResource(R.string.vSpeedButton),
+                isEnabled = canRememberSpeed && raceModelControls != null,
+                typography = if (isBigUi) LocalCustomTypography.current.raceControlButton else MaterialTheme.typography.caption,
+                size = if (isBigUi) 48.dp else 24.dp,
+            ) {
+                switchRememberedSpeedControls()
+            }
+            val percent = rememberSpeed?.percentage
+            if (percent != null && percent != 100.0) {
+                Text(
+                    text = "${percent.formatPercentage()}%",
+                    style = if (isBigUi) LocalCustomTypography.current.raceControlButton else MaterialTheme.typography.caption,
+                    color = LocalCustomColorsPalette.current.speedLimit
+                )
+            }
         }
         if (raceModelControls != null) {
             val hapticFeedback = LocalHapticFeedback.current
@@ -890,7 +903,8 @@ private fun NewSpeedLimits(
                             onPercentChange(it.text)
                         },
                         placeholderString = "100%",
-                        suffix = "%"
+                        suffix = "%",
+                        selectAllOnFocus = true
                     )
                     Spacer(Modifier.size(2.dp))
                     Text("×")
@@ -901,11 +915,26 @@ private fun NewSpeedLimits(
 
         item {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                val multiplier = percent?.toDoubleOrNull()?.div(100.0)
-                CustomSpeedLimitInput("${stringResource(R.string.perHourSuffix)} →", { it * (multiplier ?: 1.0) }, applyLimit)
+                fun currentPercent(): Double? =
+                    textFieldValue.value.text.toDoubleOrNull() ?: percent?.toDoubleOrNull()
+
+                fun makeSpeed(baseSpeedKmh: Double): SpeedKmh {
+                    val p = currentPercent()
+                    return if (p != null && p != 100.0) {
+                        SpeedWithPercentage(PlainSpeedKmh(baseSpeedKmh), p)
+                    } else {
+                        PlainSpeedKmh(baseSpeedKmh)
+                    }
+                }
+
+                CustomSpeedLimitInput("${stringResource(R.string.perHourSuffix)} →", { it }, { speedKmh ->
+                    applyLimit(speedKmh?.valueKmh?.let(::makeSpeed))
+                })
 
                 speedLimitValues.forEach { limit ->
-                    SpeedLimitButton("$limit", limit * (multiplier ?: 1.0), applyLimit)
+                    SpeedLimitButton("$limit", limit.toDouble()) { speedKmh ->
+                        applyLimit(speedKmh?.valueKmh?.let(::makeSpeed))
+                    }
                 }
             }
         }
@@ -932,7 +961,7 @@ private fun SpeedLimitButton(label: String, limit: Double?, applyLimit: (SpeedKm
         speedLimitButtonSize,
         LocalCustomTypography.current.raceControlButton
     ) {
-        applyLimit(limit?.let(::SpeedKmh))
+        applyLimit(limit?.let(::PlainSpeedKmh))
     }
 }
 

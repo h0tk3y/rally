@@ -9,12 +9,12 @@ import com.h0tk3y.rally.InputRoadmapParser
 import com.h0tk3y.rally.InputToTextSerializer
 import com.h0tk3y.rally.LineNumber
 import com.h0tk3y.rally.OdoDistanceCalculator
+import com.h0tk3y.rally.PlainSpeedKmh
 import com.h0tk3y.rally.PositionLine
 import com.h0tk3y.rally.PositionLineModifier
 import com.h0tk3y.rally.PositionLineModifier.AstroTime
 import com.h0tk3y.rally.PositionLineModifier.EndAvg
 import com.h0tk3y.rally.PositionLineModifier.EndAvgSpeed
-import com.h0tk3y.rally.PositionLineModifier.OdoDistance
 import com.h0tk3y.rally.PositionLineModifier.SetAvg
 import com.h0tk3y.rally.PositionLineModifier.SetAvgSpeed
 import com.h0tk3y.rally.PositionLineModifier.ThenAvgSpeed
@@ -23,10 +23,13 @@ import com.h0tk3y.rally.RallyTimesResult
 import com.h0tk3y.rally.RallyTimesResultFailure
 import com.h0tk3y.rally.RoadmapInputLine
 import com.h0tk3y.rally.SpeedKmh
+import com.h0tk3y.rally.SpeedWithPercentage
 import com.h0tk3y.rally.SubsMatch
 import com.h0tk3y.rally.SubsMatcher
 import com.h0tk3y.rally.TimeDayHrMinSec
 import com.h0tk3y.rally.TimeHr
+import com.h0tk3y.rally.formatPercentage
+import com.h0tk3y.rally.strRound3
 import com.h0tk3y.rally.android.LoadState
 import com.h0tk3y.rally.android.PreferenceRepository
 import com.h0tk3y.rally.android.db.DatabaseOperations
@@ -300,7 +303,8 @@ class LiveSectionViewModel(
     override val raceUiVisible: StateFlow<Boolean> = _raceUiVisible.asStateFlow()
     override val telemetryState: StateFlow<TelemetryPublicState> = _telemetryState.asStateFlow()
     override val timeAllowance: Flow<TimeAllowance?> = prefs.userPreferencesFlow.map { it.allowance }
-    override val speedLimitPercent: Flow<String?> = prefs.userPreferencesFlow.map { it.speedLimitPercent }
+    private val _speedLimitPercent = MutableStateFlow<String?>(null)
+    override val speedLimitPercent: StateFlow<String?> = _speedLimitPercent.asStateFlow()
 
     private var service: PrimaryRaceService? = null
 
@@ -407,6 +411,14 @@ class LiveSectionViewModel(
             launch {
                 raceService.rememberSpeedLimit.collectLatest {
                     _rememberSpeed.value = it
+                }
+            }
+            launch {
+                raceService.speedLimitPercent.collectLatest {
+                    if (_speedLimitPercent.value != it) {
+                        _speedLimitPercent.value = it
+                        updateEditorConstraints()
+                    }
                 }
             }
             launch {
@@ -797,7 +809,8 @@ class LiveSectionViewModel(
 
     override fun keyPress(key: GridKey) {
         when (key) {
-            GridKey.SETAVG, GridKey.THENAVG, GridKey.ENDAVG, GridKey.ATIME, GridKey.ODO -> focusOrSwitchModifier(key)
+            GridKey.SETAVG, GridKey.THENAVG, GridKey.ENDAVG, GridKey.ATIME, GridKey.PERCENT -> focusOrSwitchModifier(key)
+            GridKey.APPLY_LAST_PERCENT -> applyLastPercent()
             GridKey.N_1, GridKey.N_2, GridKey.N_3, GridKey.N_4, GridKey.N_5, GridKey.N_6, GridKey.N_7, GridKey.N_8, GridKey.N_9, GridKey.N_0 -> enterCharacter(
                 key.name.last()
             )
@@ -856,9 +869,20 @@ class LiveSectionViewModel(
     }
 
     override fun setSpeedLimitPercent(value: String?) {
-        launchDispatchable {
-            prefs.saveSpeedLimitPercent(value)
+        _speedLimitPercent.value = value
+        if (_raceState.value !is RaceUiState.RaceGoing) {
+            val currentRemember = _rememberSpeed.value
+            if (currentRemember != null) {
+                val percentDouble = value?.toDoubleOrNull()
+                _rememberSpeed.value = if (percentDouble != null && percentDouble != 100.0) {
+                    SpeedWithPercentage(PlainSpeedKmh(currentRemember.baseSpeedKmh), percentDouble)
+                } else {
+                    PlainSpeedKmh(currentRemember.baseSpeedKmh)
+                }
+            }
         }
+        service?.setSpeedLimitPercent(value)
+        updateEditorConstraints()
     }
 
     override fun deleteCharacter() {
@@ -1071,9 +1095,11 @@ class LiveSectionViewModel(
 
             canEnterDot =
                 focus.kind == DataKind.Distance ||
-                        focus.kind == DataKind.OdoDistance ||
-                        focus.kind == DataKind.AverageSpeed
+                        focus.kind == DataKind.AverageSpeed ||
+                        focus.kind == DataKind.SpeedPercentage
         }
+
+        val canSetPercent = currentItem?.modifier<SetAvg>() != null
 
         _editorState.value =
             current.copy(
@@ -1084,7 +1110,9 @@ class LiveSectionViewModel(
                 canMoveLeft = canMoveLeft,
                 canMoveRight = canMoveRight,
                 canEnterDigits = canEnterDigits,
-                maxDigit = maxDigit
+                maxDigit = maxDigit,
+                canSetPercent = canSetPercent,
+                lastEnteredPercent = _speedLimitPercent.value
             )
     }
 
@@ -1102,18 +1130,18 @@ class LiveSectionViewModel(
                 GridKey.THENAVG -> item.modifier<ThenAvgSpeed>()
                 GridKey.ENDAVG -> item.modifier<EndAvgSpeed>()
                 GridKey.ATIME -> item.modifier<AstroTime>()
-                GridKey.ODO -> item.modifier<OdoDistance>()
+                GridKey.PERCENT -> item.modifier<SetAvg>()
                 else -> return
             }
 
             fun moveFocusToModifier(line: RoadmapInputLine) {
                 val focusTarget = when (key) {
                     GridKey.SETAVG, GridKey.THENAVG -> DataKind.AverageSpeed
+                    GridKey.PERCENT -> DataKind.SpeedPercentage
                     GridKey.ATIME -> DataKind.AstroTime
-                    GridKey.ODO -> DataKind.OdoDistance
                     else -> null
                 }
-                if (focusTarget != null) {
+                if (focusTarget != null && itemText(line, focusTarget) != null) {
                     val itemText = itemText(line, focusTarget)!!
                     updateFocus(EditorFocus(reasonableEditorStartPosition(itemText), focusTarget))
                 } else {
@@ -1122,31 +1150,57 @@ class LiveSectionViewModel(
             }
 
             if (modifier != null) {
-                val dataToRemove = when (key) {
-                    GridKey.SETAVG -> DataKind.AverageSpeed.takeIf(focus.kind::equals)?.let(::listOf)
-                    GridKey.THENAVG -> DataKind.AverageSpeed.takeIf(focus.kind::equals)?.let(::listOf)
-                    GridKey.ENDAVG -> listOf()
-                    GridKey.ATIME -> DataKind.AstroTime.takeIf(focus.kind::equals)?.let(::listOf)
-                    GridKey.ODO -> DataKind.OdoDistance.takeIf(focus.kind::equals)?.let(::listOf)
-                    else -> null
-                }
-                if (dataToRemove != null) {
-                    val newItem = item.copy(modifiers = item.modifiers.filterNot { it == modifier })
-                    updateInputPositions(currentItems.toMutableList().apply { set(indexOf(item), newItem) })
-                    if (focus.kind in dataToRemove) {
-                        updateFocus(sanitizeFocus(focus.copy(kind = presentFields(item).takeWhile { it !in dataToRemove }.last())))
+                if (key == GridKey.PERCENT) {
+                    val setAvg = modifier as SetAvg
+                    if (setAvg.setavg is SpeedWithPercentage) {
+                        if (focus.kind == DataKind.SpeedPercentage) {
+                            val plainSpeed = PlainSpeedKmh(setAvg.setavg.baseSpeedKmh)
+                            val newModifier = when (setAvg) {
+                                is SetAvgSpeed -> setAvg.copy(setavg = plainSpeed)
+                                is ThenAvgSpeed -> setAvg.copy(setavg = plainSpeed)
+                                else -> setAvg
+                            }
+                            val newItem = addModifiersToItem(item, listOf(newModifier))
+                            val speedText = itemText(newItem, DataKind.AverageSpeed) ?: ""
+                            updateFocus(EditorFocus(reasonableEditorStartPosition(speedText), DataKind.AverageSpeed))
+                        } else {
+                            moveFocusToModifier(item)
+                        }
+                    } else {
+                        val percent = _speedLimitPercent.value?.toDoubleOrNull() ?: 100.0
+                        val speedWithPercent = SpeedWithPercentage(setAvg.setavg, percent)
+                        val newModifier = when (setAvg) {
+                            is SetAvgSpeed -> setAvg.copy(setavg = speedWithPercent)
+                            is ThenAvgSpeed -> setAvg.copy(setavg = speedWithPercent)
+                            else -> setAvg
+                        }
+                        val newItem = addModifiersToItem(item, listOf(newModifier))
+                        moveFocusToModifier(newItem)
                     }
                 } else {
-                    moveFocusToModifier(item)
+                    val dataToRemove = when (key) {
+                        GridKey.SETAVG -> listOfNotNull(DataKind.AverageSpeed, DataKind.SpeedPercentage.takeIf { it in presentFields(item) }).takeIf { focus.kind in it }
+                        GridKey.THENAVG -> listOfNotNull(DataKind.AverageSpeed, DataKind.SpeedPercentage.takeIf { it in presentFields(item) }).takeIf { focus.kind in it }
+                        GridKey.ENDAVG -> listOf()
+                        GridKey.ATIME -> DataKind.AstroTime.takeIf(focus.kind::equals)?.let(::listOf)
+                        else -> null
+                    }
+                    if (dataToRemove != null) {
+                        val newItem = item.copy(modifiers = item.modifiers.filterNot { it == modifier })
+                        updateInputPositions(currentItems.toMutableList().apply { set(indexOf(item), newItem) })
+                        if (focus.kind in dataToRemove) {
+                            updateFocus(sanitizeFocus(focus.copy(kind = presentFields(item).takeWhile { it !in dataToRemove }.last())))
+                        }
+                    } else {
+                        moveFocusToModifier(item)
+                    }
                 }
             } else {
                 val existingAvg = item.modifier<SetAvg>()?.setavg
                 val modifierToAdd = when (key) {
-                    GridKey.ODO -> OdoDistance(item.atKm)
                     GridKey.SETAVG -> SetAvgSpeed(existingAvg ?: SpeedKmh(0.0))
                     GridKey.THENAVG -> ThenAvgSpeed(existingAvg ?: SpeedKmh(0.0))
                     GridKey.ATIME -> AstroTime(TimeDayHrMinSec(0, 0, 0, 0))
-
                     GridKey.ENDAVG -> EndAvgSpeed(null)
                     else -> null
                 }
@@ -1158,11 +1212,31 @@ class LiveSectionViewModel(
         }
     }
 
+    private fun applyLastPercent() {
+        val item = currentItem ?: return
+        val existingAvg = item.modifier<SetAvg>() ?: return
+        val percent = _speedLimitPercent.value?.toDoubleOrNull() ?: 100.0
+        val baseSpeed = when (val s = existingAvg.setavg) {
+            is SpeedWithPercentage -> s.baseSpeed
+            else -> s
+        }
+        val newSpeed = SpeedWithPercentage(baseSpeed, percent)
+        val newModifier = when (existingAvg) {
+            is ThenAvgSpeed -> existingAvg.copy(setavg = newSpeed)
+            is SetAvgSpeed -> existingAvg.copy(setavg = newSpeed)
+            else -> existingAvg
+        }
+        val newItem = addModifiersToItem(item, listOf(newModifier))
+        val itemText = itemText(newItem, DataKind.SpeedPercentage) ?: ""
+        updateFocus(EditorFocus(reasonableEditorStartPosition(itemText), DataKind.SpeedPercentage))
+    }
+
     private fun addModifiersToItem(
         item: PositionLine,
         modifiersToAdd: List<PositionLineModifier>
     ): PositionLine {
-        val indexOfItem = _inputPositions.value.indexOf(item)
+        val indexOfItem = _inputPositions.value.indexOfFirst { (it as? PositionLine)?.lineNumber == item.lineNumber }
+        if (indexOfItem == -1) return item
         return updateInputPositionAt(
             _inputPositions.value[indexOfItem].lineNumber,
             item.copy(modifiers = addOrReplaceModifiers(item.modifiers, modifiersToAdd))
@@ -1278,7 +1352,9 @@ class LiveSectionViewModel(
     }
 
     private fun sanitizeText(original: String, dataKind: DataKind) = when (dataKind) {
-        DataKind.Distance, DataKind.OdoDistance, DataKind.AverageSpeed -> original.toDouble3Digits().toString()
+        DataKind.Distance -> original.ifEmpty { "0" }.toDouble3Digits().toString()
+        DataKind.AverageSpeed -> original.ifEmpty { "0" }.toDouble3Digits().toString()
+        DataKind.SpeedPercentage -> original.ifEmpty { "100" }.toDouble3Digits().formatPercentage()
         DataKind.AstroTime -> original
     }
 
@@ -1288,17 +1364,40 @@ class LiveSectionViewModel(
         val sanitizedText = sanitizeText(newText, editorFocus.kind)
         val newItem = when (editorFocus.kind) {
             DataKind.Distance -> item.copy(atKm = DistanceKm(sanitizedText.toDouble()))
-            DataKind.OdoDistance -> item.copy(modifiers = modifiers.map {
-                if (it is OdoDistance) it.copy(distanceKm = DistanceKm(sanitizedText.toDouble3Digits())) else it
+            DataKind.AverageSpeed -> item.copy(modifiers = modifiers.map {
+                if (it is SetAvg) {
+                    val newSpeedVal = sanitizedText.toDouble3Digits()
+                    val newSpeed = when (val current = it.setavg) {
+                        is SpeedWithPercentage -> current.copy(baseSpeed = PlainSpeedKmh(newSpeedVal))
+                        else -> PlainSpeedKmh(newSpeedVal)
+                    }
+                    when (it) {
+                        is SetAvgSpeed -> it.copy(setavg = newSpeed)
+                        is ThenAvgSpeed -> it.copy(setavg = newSpeed)
+                        else -> it
+                    }
+                } else it
             })
 
-            DataKind.AverageSpeed -> item.copy(modifiers = modifiers.map {
-                when (it) {
-                    is SetAvgSpeed -> it.copy(SpeedKmh(sanitizedText.toDouble()))
-                    is ThenAvgSpeed -> it.copy(SpeedKmh(sanitizedText.toDouble()))
-                    else -> it
-                }
-            })
+            DataKind.SpeedPercentage -> {
+                val newPercentVal = sanitizedText.toDouble3Digits()
+                _speedLimitPercent.value = newPercentVal.formatPercentage()
+                service?.setSpeedLimitPercent(newPercentVal.formatPercentage())
+                item.copy(modifiers = modifiers.map {
+                    if (it is SetAvg) {
+                        val baseSpeed = when (val current = it.setavg) {
+                            is SpeedWithPercentage -> current.baseSpeed
+                            else -> current
+                        }
+                        val newSpeed = SpeedWithPercentage(baseSpeed, newPercentVal)
+                        when (it) {
+                            is SetAvgSpeed -> it.copy(setavg = newSpeed)
+                            is ThenAvgSpeed -> it.copy(setavg = newSpeed)
+                            else -> it
+                        }
+                    } else it
+                })
+            }
 
             DataKind.AstroTime -> item.copy(modifiers = modifiers.map {
                 run {
@@ -1418,6 +1517,11 @@ class StreamedSectionViewModel(coroutineDispatcher: CoroutineDispatcher) : State
             launch {
                 service?.rememberSpeedLimit?.collectLatest {
                     _rememberSpeed.value = it
+                }
+            }
+            launch {
+                service?.speedLimitPercent?.collectLatest {
+                    _speedLimitPercent.value = it
                 }
             }
         }
