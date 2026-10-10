@@ -73,8 +73,7 @@ class LocalIpWatcher(
     fun start() {
         // Matches Wi-Fi, Ethernet, Cellular, VPN… anything that provides INTERNET.
         val req = NetworkRequest.Builder()
-            .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
-            .addTransportType(NetworkCapabilities.TRANSPORT_VPN)
+            .removeCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
             .build()
         cm.registerNetworkCallback(req, cb)
         // onAvailable will be invoked for currently-satisfying networks shortly after registration.
@@ -83,10 +82,10 @@ class LocalIpWatcher(
     private fun publish() {
         val list = nets.values.flatMap { (caps, lp) ->
             val transport = when {
+                caps?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true -> "VPN"
                 caps?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true -> "Wi-Fi"
                 caps?.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) == true -> "Ethernet"
                 caps?.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) == true -> "Cellular"
-                caps?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true -> "VPN"
                 caps?.hasTransport(NetworkCapabilities.TRANSPORT_BLUETOOTH) == true -> "Bluetooth"
                 else -> "Other"
             }
@@ -113,12 +112,12 @@ fun StreamingServerEmptyInfo() {
     ) {
         Text(stringResource(R.string.otherDeviceNetworkHint), textAlign = TextAlign.Center)
         Text(stringResource(R.string.settingsOnOtherDeviceIpHint), textAlign = TextAlign.Center)
-        IpAddressDisplay()
+        IpAddressDisplay(alignment = Alignment.CenterHorizontally)
     }
 }
 
 @Composable
-fun IpAddressDisplay() {
+fun IpAddressDisplay(alignment: Alignment.Horizontal = Alignment.CenterHorizontally) {
     val context = LocalContext.current
     var ips by remember { mutableStateOf<List<LocalIp>?>(null) }
 
@@ -131,10 +130,16 @@ fun IpAddressDisplay() {
         onDispose { watcher.close() }
     }
 
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    val textAlign = when (alignment) {
+        Alignment.Start -> TextAlign.Start
+        Alignment.End -> TextAlign.End
+        else -> TextAlign.Center
+    }
+
+    Column(horizontalAlignment = alignment) {
         when (val currentIps = ips) {
-            null -> Text(stringResource(R.string.detectingIpAddress), textAlign = TextAlign.Center)
-            emptyList<LocalIp>() -> Text(stringResource(R.string.noNetworkFoundPleaseConnectToWiFi), textAlign = TextAlign.Center)
+            null -> Text(stringResource(R.string.detectingIpAddress), textAlign = textAlign)
+            emptyList<LocalIp>() -> Text(stringResource(R.string.noNetworkFoundPleaseConnectToWiFi), textAlign = textAlign)
             else -> {
                 val clipboardManager = LocalClipboard.current
                 val scope = rememberCoroutineScope()
@@ -153,7 +158,7 @@ fun IpAddressDisplay() {
                             }
                         },
                         text = "• ${ip.address} (${ip.transport})",
-                        textAlign = TextAlign.Center
+                        textAlign = textAlign
                     )
                 }
             }

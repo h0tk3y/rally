@@ -215,7 +215,7 @@ private fun LazyItemScope.TelemetrySource(
                     text = stringResource(R.string.settingsOutgaugeInstruction),
                     style = MaterialTheme.typography.caption
                 )
-                IpAddressDisplay()
+                IpAddressDisplay(alignment = Alignment.Start)
             }
         }
     }
