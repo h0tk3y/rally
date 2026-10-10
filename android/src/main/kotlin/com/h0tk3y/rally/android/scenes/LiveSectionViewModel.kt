@@ -11,7 +11,6 @@ import com.h0tk3y.rally.LineNumber
 import com.h0tk3y.rally.OdoDistanceCalculator
 import com.h0tk3y.rally.PositionLine
 import com.h0tk3y.rally.PositionLineModifier
-import com.h0tk3y.rally.PositionLineModifier.AddSynthetic
 import com.h0tk3y.rally.PositionLineModifier.AstroTime
 import com.h0tk3y.rally.PositionLineModifier.EndAvg
 import com.h0tk3y.rally.PositionLineModifier.EndAvgSpeed
@@ -798,7 +797,7 @@ class LiveSectionViewModel(
 
     override fun keyPress(key: GridKey) {
         when (key) {
-            GridKey.SETAVG, GridKey.THENAVG, GridKey.ENDAVG, GridKey.SYNTH, GridKey.ATIME, GridKey.ODO -> focusOrSwitchModifier(key)
+            GridKey.SETAVG, GridKey.THENAVG, GridKey.ENDAVG, GridKey.ATIME, GridKey.ODO -> focusOrSwitchModifier(key)
             GridKey.N_1, GridKey.N_2, GridKey.N_3, GridKey.N_4, GridKey.N_5, GridKey.N_6, GridKey.N_7, GridKey.N_8, GridKey.N_9, GridKey.N_0 -> enterCharacter(
                 key.name.last()
             )
@@ -1073,8 +1072,7 @@ class LiveSectionViewModel(
             canEnterDot =
                 focus.kind == DataKind.Distance ||
                         focus.kind == DataKind.OdoDistance ||
-                        focus.kind == DataKind.AverageSpeed ||
-                        focus.kind == DataKind.SyntheticInterval
+                        focus.kind == DataKind.AverageSpeed
         }
 
         _editorState.value =
@@ -1103,7 +1101,6 @@ class LiveSectionViewModel(
                 GridKey.SETAVG -> item.modifier<SetAvgSpeed>()
                 GridKey.THENAVG -> item.modifier<ThenAvgSpeed>()
                 GridKey.ENDAVG -> item.modifier<EndAvgSpeed>()
-                GridKey.SYNTH -> item.modifier<AddSynthetic>()
                 GridKey.ATIME -> item.modifier<AstroTime>()
                 GridKey.ODO -> item.modifier<OdoDistance>()
                 else -> return
@@ -1112,7 +1109,6 @@ class LiveSectionViewModel(
             fun moveFocusToModifier(line: RoadmapInputLine) {
                 val focusTarget = when (key) {
                     GridKey.SETAVG, GridKey.THENAVG -> DataKind.AverageSpeed
-                    GridKey.SYNTH -> DataKind.SyntheticCount
                     GridKey.ATIME -> DataKind.AstroTime
                     GridKey.ODO -> DataKind.OdoDistance
                     else -> null
@@ -1130,7 +1126,6 @@ class LiveSectionViewModel(
                     GridKey.SETAVG -> DataKind.AverageSpeed.takeIf(focus.kind::equals)?.let(::listOf)
                     GridKey.THENAVG -> DataKind.AverageSpeed.takeIf(focus.kind::equals)?.let(::listOf)
                     GridKey.ENDAVG -> listOf()
-                    GridKey.SYNTH -> listOf(DataKind.SyntheticInterval, DataKind.SyntheticCount).takeIf { focus.kind in it }
                     GridKey.ATIME -> DataKind.AstroTime.takeIf(focus.kind::equals)?.let(::listOf)
                     GridKey.ODO -> DataKind.OdoDistance.takeIf(focus.kind::equals)?.let(::listOf)
                     else -> null
@@ -1153,7 +1148,6 @@ class LiveSectionViewModel(
                     GridKey.ATIME -> AstroTime(TimeDayHrMinSec(0, 0, 0, 0))
 
                     GridKey.ENDAVG -> EndAvgSpeed(null)
-                    GridKey.SYNTH -> AddSynthetic(DistanceKm(0.1), 10)
                     else -> null
                 }
                 if (modifierToAdd != null) {
@@ -1284,9 +1278,7 @@ class LiveSectionViewModel(
     }
 
     private fun sanitizeText(original: String, dataKind: DataKind) = when (dataKind) {
-        DataKind.Distance, DataKind.OdoDistance, DataKind.AverageSpeed, DataKind.SyntheticInterval -> original.toDouble3Digits().toString()
-
-        DataKind.SyntheticCount -> (original.toIntOrNull()?.coerceAtMost(1000) ?: "0").toString()
+        DataKind.Distance, DataKind.OdoDistance, DataKind.AverageSpeed -> original.toDouble3Digits().toString()
         DataKind.AstroTime -> original
     }
 
@@ -1306,14 +1298,6 @@ class LiveSectionViewModel(
                     is ThenAvgSpeed -> it.copy(SpeedKmh(sanitizedText.toDouble()))
                     else -> it
                 }
-            })
-
-            DataKind.SyntheticInterval -> item.copy(modifiers = modifiers.map {
-                if (it is AddSynthetic) it.copy(interval = DistanceKm(sanitizedText.toDouble3Digits())) else it
-            })
-
-            DataKind.SyntheticCount -> item.copy(modifiers = modifiers.map {
-                if (it is AddSynthetic) it.copy(count = sanitizedText.toInt()) else it
             })
 
             DataKind.AstroTime -> item.copy(modifiers = modifiers.map {

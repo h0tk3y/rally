@@ -63,7 +63,6 @@ import com.h0tk3y.rally.InputToTextSerializer
 import com.h0tk3y.rally.LineNumber
 import com.h0tk3y.rally.PositionLine
 import com.h0tk3y.rally.PositionLineModifier
-import com.h0tk3y.rally.PositionLineModifier.AddSynthetic
 import com.h0tk3y.rally.PositionLineModifier.IsSynthetic
 import com.h0tk3y.rally.PositionLineModifier.SetAvg
 import com.h0tk3y.rally.R
@@ -80,8 +79,6 @@ import com.h0tk3y.rally.android.scenes.DataKind.AstroTime
 import com.h0tk3y.rally.android.scenes.DataKind.AverageSpeed
 import com.h0tk3y.rally.android.scenes.DataKind.Distance
 import com.h0tk3y.rally.android.scenes.DataKind.OdoDistance
-import com.h0tk3y.rally.android.scenes.DataKind.SyntheticCount
-import com.h0tk3y.rally.android.scenes.DataKind.SyntheticInterval
 import com.h0tk3y.rally.android.valueOrNull
 import com.h0tk3y.rally.android.views.GridKey
 import com.h0tk3y.rally.android.views.Keyboard
@@ -546,7 +543,7 @@ data class EditorFocus(
 )
 
 enum class DataKind {
-    Distance, OdoDistance, AverageSpeed, SyntheticCount, SyntheticInterval, AstroTime
+    Distance, OdoDistance, AverageSpeed, AstroTime
 }
 
 fun itemText(line: RoadmapInputLine, dataKind: DataKind): String? =
@@ -556,8 +553,6 @@ fun itemText(line: RoadmapInputLine, dataKind: DataKind): String? =
         Distance -> line.atKm.valueKm.strRound3()
         OdoDistance -> line.modifier<PositionLineModifier.OdoDistance>()?.distanceKm?.valueKm?.strRound3()
         AverageSpeed -> line.modifier<SetAvg>()?.setavg?.valueKmh?.strRound3()
-        SyntheticCount -> line.modifier<AddSynthetic>()?.count.toString()
-        SyntheticInterval -> line.modifier<AddSynthetic>()?.interval?.valueKm?.strRound3()
         AstroTime -> line.modifier<PositionLineModifier.AstroTime>()?.timeOfDay?.timeStrNoDayOverflow()
     }
 
@@ -565,10 +560,6 @@ fun presentFields(item: PositionLine) = buildList {
     add(Distance)
     if (item.modifier<SetAvg>() != null) {
         add(AverageSpeed)
-    }
-    if (item.modifier<AddSynthetic>() != null) {
-        add(SyntheticCount)
-        add(SyntheticInterval)
     }
     if (item.modifier<PositionLineModifier.OdoDistance>() != null) {
         add(OdoDistance)

@@ -391,8 +391,6 @@ fun LabelForField(kind: DataKind, line: PositionLine, matchId: Int?, modifier: M
             } else Unit
         }
 
-        SyntheticCount -> Text(stringResource(R.string.labelSynth), padding)
-        SyntheticInterval -> Text(stringResource(R.string.labelEach), padding)
         AstroTime -> Text(stringResource(R.string.labelAtime), modifier)
     }
 }
