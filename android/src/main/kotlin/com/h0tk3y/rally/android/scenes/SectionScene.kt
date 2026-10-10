@@ -517,8 +517,7 @@ interface EditorControls {
     fun deletePositionViaEditor(line: RoadmapInputLine)
     fun selectNextItem()
     fun selectPreviousItem()
-    fun addItemAbove()
-    fun addItemBelow()
+    fun addItem()
     fun deleteCharacter()
 }
 

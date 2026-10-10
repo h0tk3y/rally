@@ -822,8 +822,7 @@ class LiveSectionViewModel(
             GridKey.DEL -> deleteCharacter()
             GridKey.LEFT -> moveCursorOrSwitchField(-1)
             GridKey.RIGHT -> moveCursorOrSwitchField(1)
-            GridKey.ADD_BELOW -> addItemBelow()
-            GridKey.ADD_ABOVE -> addItemAbove()
+            GridKey.ADD -> addItem()
             GridKey.REMOVE -> currentItem?.let(::deletePositionViaEditor)
         }
     }
@@ -860,11 +859,7 @@ class LiveSectionViewModel(
         }
     }
 
-    override fun addItemAbove() {
-        createNewItem(0)?.let { launchDispatchable { selectLine(it, DataKind.Distance) } }
-    }
-
-    override fun addItemBelow() {
+    override fun addItem() {
         createNewItem(1)?.let { launchDispatchable { selectLine(it, DataKind.Distance) } }
     }
 
@@ -1358,7 +1353,7 @@ class LiveSectionViewModel(
         DataKind.AstroTime -> original
     }
 
-    private fun updateCurrentText(item: PositionLine, editorFocus: EditorFocus, newText: String): String {
+    internal fun updateCurrentText(item: PositionLine, editorFocus: EditorFocus, newText: String): String {
         val indexOfCurrentItem = currentItems.indexOf(item)
         val modifiers = item.modifiers
         val sanitizedText = sanitizeText(newText, editorFocus.kind)
@@ -1406,7 +1401,31 @@ class LiveSectionViewModel(
             })
 
         }
-        updateInputPositions(currentItems.toMutableList().apply { set(indexOfCurrentItem, newItem) })
+        if (editorFocus.kind == DataKind.Distance) {
+            val allPositions = _inputPositions.value
+            val currentPosIndex = allPositions.indexOfFirst { it.lineNumber == item.lineNumber }
+            if (currentPosIndex != -1) {
+                val remaining = allPositions.filterIndexed { index, _ -> index != currentPosIndex }
+                val targetDistance = newItem.atKm
+                val indexToInsert = remaining.indices.firstOrNull { i ->
+                    val it = remaining[i]
+                    it is PositionLine && (it.atKm > targetDistance || (it.atKm == targetDistance && i >= currentPosIndex))
+                } ?: remaining.size
+                val newPositions = recalculateLineNumbers(
+                    remaining.take(indexToInsert) + newItem + remaining.drop(indexToInsert)
+                )
+                val resultingItem = newPositions[indexToInsert] as PositionLine
+                updateInputPositions(newPositions)
+                _selectedLineIndex.value = resultingItem.lineNumber
+                updateEditorConstraints()
+            }
+        } else {
+            val allPositions = _inputPositions.value
+            val currentPosIndex = allPositions.indexOfFirst { it.lineNumber == item.lineNumber }
+            if (currentPosIndex != -1) {
+                updateInputPositions(allPositions.toMutableList().apply { set(currentPosIndex, newItem) })
+            }
+        }
         return sanitizedText
     }
 

@@ -81,8 +81,7 @@ fun GridKey.localizedText(editorState: EditorState): String {
         THENAVG -> stringResource(R.string.keyThen)
         ENDAVG -> stringResource(R.string.keyEndavg)
         ATIME -> stringResource(R.string.keyAtime)
-        ADD_BELOW -> stringResource(R.string.keyAddBelow)
-        ADD_ABOVE -> stringResource(R.string.keyAddAbove)
+        ADD -> stringResource(R.string.keyAdd)
         REMOVE -> stringResource(R.string.keyRemove)
         APPLY_LAST_PERCENT -> editorState.lastEnteredPercent?.toDoubleOrNull()?.let { "${it.formatPercentage()}%" }
             ?: editorState.lastEnteredPercent?.let { "${it}%" }
@@ -92,7 +91,7 @@ fun GridKey.localizedText(editorState: EditorState): String {
 }
 
 private val keyboardButtonsOrder = listOf(
-    listOf(REMOVE, ADD_ABOVE, ADD_BELOW),
+    listOf(REMOVE, ADD),
     null,
     listOf(ATIME, SETAVG, THENAVG, ENDAVG, PERCENT, APPLY_LAST_PERCENT),
     null,
@@ -115,6 +114,6 @@ enum class GridKey(val text: String, val isStub: Boolean = false) {
     DOT("."), N_0("0"), NOP("", isStub = true),
     UP("▲"), DOWN("▼"), DEL("⌫"),
     LEFT("◀"), RIGHT("▶"),
-    ADD_BELOW("ADD▼"), ADD_ABOVE("ADD▲"),
+    ADD("ADD"),
     REMOVE("DEL ╳")
 }
