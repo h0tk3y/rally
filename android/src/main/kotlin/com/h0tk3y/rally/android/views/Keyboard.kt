@@ -77,7 +77,6 @@ fun GridKey.localizedText(): String {
         SETAVG -> stringResource(R.string.keySetavg)
         THENAVG -> stringResource(R.string.keyThen)
         ENDAVG -> stringResource(R.string.keyEndavg)
-        SYNTH -> stringResource(R.string.keySynth)
         ATIME -> stringResource(R.string.keyAtime)
         ODO -> stringResource(R.string.keyOdo)
         ADD_BELOW -> stringResource(R.string.keyAddBelow)
@@ -88,7 +87,7 @@ fun GridKey.localizedText(): String {
 }
 
 private val keyboardButtonsOrder = listOf(
-    listOf(REMOVE, SYNTH, ADD_ABOVE, ADD_BELOW),
+    listOf(REMOVE, ADD_ABOVE, ADD_BELOW),
     null,
     listOf(ATIME, ODO, SETAVG, THENAVG, ENDAVG),
     null,
@@ -103,7 +102,7 @@ private val keyboardButtonsOrder = listOf(
 fun isDangerous(gridKey: GridKey): Boolean = gridKey === REMOVE || gridKey === DEL
 
 enum class GridKey(val text: String, val isStub: Boolean = false) {
-    SETAVG("SET"), THENAVG("THEN"), ENDAVG("END"), SYNTH("SYNTH"), ATIME("ATIME"), ODO("ODO"),
+    SETAVG("SET"), THENAVG("THEN"), ENDAVG("END"), ATIME("ATIME"), ODO("ODO"),
     N_1("1"), N_2("2"), N_3("3"),
     N_4("4"), N_5("5"), N_6("6"),
     N_7("7"), N_8("8"), N_9("9"),
