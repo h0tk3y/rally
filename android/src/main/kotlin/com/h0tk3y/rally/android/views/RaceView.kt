@@ -263,6 +263,10 @@ private fun TelemetryStatus(
             TelemetryPublicState.BtNoTargetMacAddress -> stringResource(R.string.telemetryObdNoMac)
 
             TelemetryPublicState.BtWorking -> stringResource(R.string.telemetryObdOk)
+            TelemetryPublicState.OutGaugeWorking -> stringResource(R.string.telemetryOutgaugeOk)
+            TelemetryPublicState.OutGaugeWaiting -> stringResource(R.string.telemetryOutgaugeWaiting)
+            TelemetryPublicState.OutGaugeDelayed -> stringResource(R.string.telemetryOutgaugeDelayed)
+            is TelemetryPublicState.OutGaugeError -> stringResource(R.string.telemetryOutgaugeError)
             TelemetryPublicState.Simulation -> stringResource(R.string.telemetrySimulationOk)
             is TelemetryPublicState.ReceivesStream ->
                 stringResource(R.string.telemetryData) + (if (telemetryPublicState.isDelayed) stringResource(R.string.telemetryDataDelay) else stringResource(R.string.telemetryOk))
@@ -283,9 +287,13 @@ private fun TelemetryStatus(
             }
 
             TelemetryPublicState.Simulation,
+            TelemetryPublicState.OutGaugeWorking,
             is TelemetryPublicState.GpsGood,
             TelemetryPublicState.BtWorking -> Color.Unspecified
 
+            TelemetryPublicState.OutGaugeWaiting,
+            TelemetryPublicState.OutGaugeDelayed,
+            is TelemetryPublicState.OutGaugeError,
             TelemetryPublicState.BtConnecting,
             TelemetryPublicState.BtNoPermissions,
             TelemetryPublicState.BtNoTargetMacAddress,

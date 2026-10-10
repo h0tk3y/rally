@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.h0tk3y.rally.android.scenes.TimeAllowance
@@ -24,6 +25,7 @@ private object PreferencesKeys {
     val SPEED_LIMIT_PERCENT_TEXT = stringPreferencesKey("speedLimitPercentText")
     val SEND_TELE_TO_IP = stringPreferencesKey("sendTeleToIp")
     val SOUND_FEEDBACK = booleanPreferencesKey("soundFeedback")
+    val OUTGAUGE_PORT = intPreferencesKey("outgaugePort")
 }
 
 data class UserPreferences(
@@ -33,11 +35,12 @@ data class UserPreferences(
     val btMac: String?,
     val speedLimitPercent: String?,
     val sendTeleToIp: String?,
-    val soundFeedback: Boolean
+    val soundFeedback: Boolean,
+    val outgaugePort: Int = 4444
 )
 
 enum class TelemetrySource {
-    BT_OBD, GPS, SIMULATION
+    BT_OBD, GPS, SIMULATION, OUTGAUGE
 }
 
 class PreferenceRepository(val dataStore: DataStore<Preferences>) {
@@ -87,6 +90,12 @@ class PreferenceRepository(val dataStore: DataStore<Preferences>) {
         }
     }
 
+    suspend fun saveOutgaugePort(port: Int) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.OUTGAUGE_PORT] = port
+        }
+    }
+
 }
 
 private fun mapUserPreferences(preferences: Preferences): UserPreferences {
@@ -100,6 +109,7 @@ private fun mapUserPreferences(preferences: Preferences): UserPreferences {
     val speedLimitPercent = preferences[PreferencesKeys.SPEED_LIMIT_PERCENT_TEXT]
     val sendTeleToIp = preferences[PreferencesKeys.SEND_TELE_TO_IP]
     val soundFeedback = preferences[PreferencesKeys.SOUND_FEEDBACK] ?: false
+    val outgaugePort = preferences[PreferencesKeys.OUTGAUGE_PORT] ?: 4444
     return UserPreferences(
         timeAllowance,
         calibration,
@@ -107,6 +117,7 @@ private fun mapUserPreferences(preferences: Preferences): UserPreferences {
         btMac,
         speedLimitPercent,
         sendTeleToIp?.takeIf { it.isNotEmpty() },
-        soundFeedback
+        soundFeedback,
+        outgaugePort
     )
 }

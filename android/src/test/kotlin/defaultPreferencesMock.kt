@@ -16,7 +16,8 @@ fun defaultPreferencesMock(): PreferenceRepository {
                     btMac = null,
                     speedLimitPercent = null,
                     sendTeleToIp = null,
-                    soundFeedback = false
+                    soundFeedback = false,
+                    outgaugePort = 4444
                 )
             )
         )

@@ -52,6 +52,11 @@
     <string name="telemetrySourceSimulationHint">Скорость задаётся \"ползунком\" на экране режима гонки</string>
     <string name="telemetrySourceObd">OBD через Bluetooth</string>
     <string name="telemetrySourceObdHint">Подключение к модулю ELM327 в машине по OBD через Bluetooth</string>
+    <string name="telemetrySourceOutgauge">OutGauge</string>
+    <string name="telemetrySourceOutgaugeHint">Получение телеметрии по UDP из автосимуляторов</string>
+    <string name="settingsOutgaugePort">UDP-порт</string>
+    <string name="invalidPortShouldBeBetween1024And65535">Неверный порт, должен быть в пределах от 1024 до 65535</string>
+    <string name="settingsOutgaugeInstruction">Укажите IP-адрес этого устройства и номер порта выше в настройках симулятора (например, в BeamNG: Настройки > Другое > OutGauge).</string>
     <string name="settingsBtMac">MAC-адрес Bluetooth-устройства</string>
     <string name="settingsSendDataToAnotherDevice">Отправка данных на устройство пилота</string>
     <string name="settingsSendDataToAnotherDeviceHint">Введите IP-адрес второго устройства. Оба устройства должны быть в одной Wi-Fi-сети. На другом устройстве откройте "Экран пилота" в меню списка секций.</string>
@@ -82,6 +87,9 @@
     <string name="telemetrySourceGpsHint">Измерение дистанции и скорости по GPS</string>
     <string name="satStatusPattern">" (%1$d спут.)"</string>
     <string name="telemetrySimulationOk">Симуляция ✔</string>
+    <string name="telemetryOutgaugeWaiting">OutGauge: ожидание…</string>
+    <string name="telemetryOutgaugeDelayed">OutGauge: задержка</string>
+    <string name="telemetryOutgaugeError">OutGauge: ошибка</string>
     <string name="telemetryData">Данные</string>
     <string name="telemetryDataWaiting">Данные: ожидание</string>
     <string name="notConnectedToRaceService">Гоночный режим не работает</string>
