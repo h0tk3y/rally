@@ -18,6 +18,7 @@ import com.h0tk3y.rally.model.RaceEventKind
 import com.h0tk3y.rally.model.RaceModel
 import com.h0tk3y.rally.model.RaceState
 import com.h0tk3y.rally.modifier
+import com.h0tk3y.rally.android.racecervice.TelemetryPublicState
 import defaultPreferencesMock
 import io.mockk.every
 import io.mockk.mockk
@@ -54,6 +55,9 @@ class EnterLeaveRaceTest {
         relaxed = true // chain-mock the other flows; no-op for service state updates from the view model
     ) {
         every { raceState }.returns(raceStateFlow)
+        every { rememberSpeedLimit }.returns(MutableStateFlow(null))
+        every { speedLimitPercent }.returns(MutableStateFlow(null))
+        every { telemetryPublicState }.returns(MutableStateFlow(TelemetryPublicState.GpsWaiting(0)))
     }
 
     interface ModelActionScope {

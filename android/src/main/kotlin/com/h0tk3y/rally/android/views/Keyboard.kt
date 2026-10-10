@@ -18,6 +18,7 @@ import com.h0tk3y.rally.R
 import com.h0tk3y.rally.android.scenes.EditorControls
 import com.h0tk3y.rally.android.scenes.EditorState
 import com.h0tk3y.rally.android.theme.LocalCustomColorsPalette
+import com.h0tk3y.rally.formatPercentage
 
 @Composable
 fun Keyboard(
@@ -33,6 +34,8 @@ fun Keyboard(
             LEFT to canMoveLeft,
             RIGHT to canMoveRight,
             REMOVE to canDelete,
+            PERCENT to canSetPercent,
+            APPLY_LAST_PERCENT to canSetPercent,
             NOP to false,
         ) + GridKey.entries.filter { it.name.startsWith("N_") }.map {
             val n = it.name.substringAfter("N_").toInt()
@@ -57,7 +60,7 @@ fun Keyboard(
                             modifier = Modifier.weight(1f),
                         ) {
                             Text(
-                                it.localizedText(),
+                                it.localizedText(editorState),
                                 modifier = Modifier.padding(4.dp),
                                 fontSize = if (it == DOT || it == DEL || it.name.startsWith("N_")) 24.sp else 14.sp,
                                 style = TextStyle(
@@ -72,16 +75,18 @@ fun Keyboard(
 }
 
 @Composable
-fun GridKey.localizedText(): String {
+fun GridKey.localizedText(editorState: EditorState): String {
     return when (this) {
         SETAVG -> stringResource(R.string.keySetavg)
         THENAVG -> stringResource(R.string.keyThen)
         ENDAVG -> stringResource(R.string.keyEndavg)
         ATIME -> stringResource(R.string.keyAtime)
-        ODO -> stringResource(R.string.keyOdo)
         ADD_BELOW -> stringResource(R.string.keyAddBelow)
         ADD_ABOVE -> stringResource(R.string.keyAddAbove)
         REMOVE -> stringResource(R.string.keyRemove)
+        APPLY_LAST_PERCENT -> editorState.lastEnteredPercent?.toDoubleOrNull()?.let { "${it.formatPercentage()}%" }
+            ?: editorState.lastEnteredPercent?.let { "${it}%" }
+            ?: "_%"
         else -> text
     }
 }
@@ -89,7 +94,7 @@ fun GridKey.localizedText(): String {
 private val keyboardButtonsOrder = listOf(
     listOf(REMOVE, ADD_ABOVE, ADD_BELOW),
     null,
-    listOf(ATIME, ODO, SETAVG, THENAVG, ENDAVG),
+    listOf(ATIME, SETAVG, THENAVG, ENDAVG, PERCENT, APPLY_LAST_PERCENT),
     null,
     listOf(UP, DOWN, LEFT, RIGHT),
     null,
@@ -102,7 +107,8 @@ private val keyboardButtonsOrder = listOf(
 fun isDangerous(gridKey: GridKey): Boolean = gridKey === REMOVE || gridKey === DEL
 
 enum class GridKey(val text: String, val isStub: Boolean = false) {
-    SETAVG("SET"), THENAVG("THEN"), ENDAVG("END"), ATIME("ATIME"), ODO("ODO"),
+    SETAVG("SET"), THENAVG("THEN"), ENDAVG("END"), ATIME("ATIME"),
+    PERCENT("%"), APPLY_LAST_PERCENT("_%"),
     N_1("1"), N_2("2"), N_3("3"),
     N_4("4"), N_5("5"), N_6("6"),
     N_7("7"), N_8("8"), N_9("9"),

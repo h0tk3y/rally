@@ -78,7 +78,12 @@ fun FocusedTextFieldWithoutKeyboard(
                     .focusRequester(focusRequester)
                     .onFocusChanged { if (it.isFocused) onFocused() }
                     .widthIn(if (kind == DataKind.Distance) 45.dp else Dp.Unspecified)
-                    .width(with(density) { measurer.measure(text, textStyle, density = density, constraints = Constraints()).size.width.toDp() + 4.dp })
+                    .width(
+                        with(density) {
+                            val extraWidth = if (kind == DataKind.SpeedPercentage && text.isNotEmpty()) 2.dp else 4.dp
+                            measurer.measure(text, textStyle, density = density, constraints = Constraints()).size.width.toDp() + extraWidth
+                        }
+                    )
                     .disabledHorizontalPointerInputScroll(),
                 singleLine = true,
                 decorationBox = { fn ->
