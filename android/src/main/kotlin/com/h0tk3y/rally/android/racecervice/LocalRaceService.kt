@@ -37,8 +37,10 @@ import com.h0tk3y.rally.DistanceKm
 import com.h0tk3y.rally.LineNumber
 import com.h0tk3y.rally.PositionLine
 import com.h0tk3y.rally.PositionLineModifier
+import com.h0tk3y.rally.PlainSpeedKmh
 import com.h0tk3y.rally.R
 import com.h0tk3y.rally.SpeedKmh
+import com.h0tk3y.rally.SpeedWithPercentage
 import com.h0tk3y.rally.TimeHr
 import com.h0tk3y.rally.android.MainActivity
 import com.h0tk3y.rally.android.PreferenceRepository
@@ -102,6 +104,7 @@ import kotlin.time.Instant
 interface CommonRaceService : StoppableService {
     val raceState: StateFlow<RaceState>
     val rememberSpeedLimit: StateFlow<SpeedKmh?>
+    val speedLimitPercent: StateFlow<String?>
     val telemetryPublicState: Flow<TelemetryPublicState>
 }
 
@@ -152,6 +155,7 @@ interface RaceServiceControls : CommonRaceService {
     fun distanceCorrection(distanceKm: DistanceKm)
     fun setDebugSpeed(speedKmh: SpeedKmh)
     fun setRememberSpeedLimit(speedKmh: SpeedKmh?)
+    fun setSpeedLimitPercent(percent: String?)
     fun startRace(raceSectionId: Long, startAtDistanceKm: DistanceKm, setDistance: DistanceKm, startAtTime: Instant)
     fun go(raceSectionId: Long, startAtDistanceKm: DistanceKm, setDistance: DistanceKm, startAtTime: Instant)
     fun finishRace(withRaceModel: RaceModel)
@@ -178,6 +182,9 @@ class TcpStreamedRaceService : StreamedRaceService, StoppableService, Service() 
 
     private val _rememberSpeedLimit = MutableStateFlow<SpeedKmh?>(null)
     override val rememberSpeedLimit: StateFlow<SpeedKmh?> get() = _rememberSpeedLimit
+
+    private val _speedLimitPercent = MutableStateFlow<String?>(null)
+    override val speedLimitPercent: StateFlow<String?> get() = _speedLimitPercent
 
     private val _section = MutableStateFlow<Section?>(null)
     override val section: StateFlow<Section?> get() = _section
@@ -290,12 +297,13 @@ class TcpStreamedRaceService : StreamedRaceService, StoppableService, Service() 
                             while (isActive) {
                                 val size = input.readInt()
                                 val version = input.readLong()
+                                val buffer = ByteArray(size)
+                                input.readFully(buffer)
                                 if (version != telemetryStreamingVersion) {
                                     _telemetryState.value = TelemetryState.Incompatible
                                     Log.d("raceService", "unsupported telemetry version $version, expected $telemetryStreamingVersion")
+                                    continue
                                 }
-                                val buffer = ByteArray(size)
-                                input.readFully(buffer)
 
                                 handleFrame(unzipBytesToString(buffer).toByteArray())
                             }
@@ -320,6 +328,7 @@ class TcpStreamedRaceService : StreamedRaceService, StoppableService, Service() 
         _currentLine.value = raceState.currentLine
         _currentRaceLine.value = raceState.currentRaceLine
         _rememberSpeedLimit.value = raceState.rememberSpeed
+        _speedLimitPercent.value = raceState.speedLimitPercent
     }
 
     override fun forceStop() {
@@ -339,7 +348,8 @@ data class TelemetryFrame(
     val currentLine: LineNumber,
     val currentRaceLine: LineNumber?,
     val rememberSpeed: SpeedKmh?,
-    val raceState: RaceState
+    val raceState: RaceState,
+    val speedLimitPercent: String? = null
 )
 
 interface StoppableService {
@@ -351,6 +361,7 @@ interface PrimaryRaceService : CommonRaceService, RaceServiceControls, StreamSou
 class LocalRaceService : PrimaryRaceService, Service() {
     private val _raceState = MutableStateFlow<RaceState>(RaceState.NotStarted)
     private val _rememberSpeedLimit = MutableStateFlow<SpeedKmh?>(null)
+    private val _speedLimitPercent = MutableStateFlow<String?>(null)
 
     private val _section = MutableStateFlow<Section?>(null)
     private val _positions = MutableStateFlow<List<PositionLine>>(emptyList())
@@ -359,6 +370,7 @@ class LocalRaceService : PrimaryRaceService, Service() {
 
     override val raceState: StateFlow<RaceState> get() = _raceState
     override val rememberSpeedLimit: StateFlow<SpeedKmh?> = _rememberSpeedLimit
+    override val speedLimitPercent: StateFlow<String?> = _speedLimitPercent
 
     private val prefs by lazy { PreferenceRepository(dataStore).userPreferencesFlow }
     private val btMac by lazy { prefs.map { it.btMac } }
@@ -426,6 +438,21 @@ class LocalRaceService : PrimaryRaceService, Service() {
 
     override fun setRememberSpeedLimit(speedKmh: SpeedKmh?) {
         _rememberSpeedLimit.value = speedKmh
+    }
+
+    override fun setSpeedLimitPercent(percent: String?) {
+        _speedLimitPercent.value = percent
+        if (_raceState.value !is RaceState.InRace) {
+            val currentRemember = _rememberSpeedLimit.value
+            if (currentRemember != null) {
+                val percentDouble = percent?.toDoubleOrNull()
+                _rememberSpeedLimit.value = if (percentDouble != null && percentDouble != 100.0) {
+                    SpeedWithPercentage(PlainSpeedKmh(currentRemember.baseSpeedKmh), percentDouble)
+                } else {
+                    PlainSpeedKmh(currentRemember.baseSpeedKmh)
+                }
+            }
+        }
     }
 
     override fun startRace(raceSectionId: Long, startAtDistanceKm: DistanceKm, setDistance: DistanceKm, startAtTime: Instant) {
@@ -531,6 +558,8 @@ class LocalRaceService : PrimaryRaceService, Service() {
 
     override fun resetRace() {
         _raceState.value = RaceState.NotStarted
+        _rememberSpeedLimit.value = null
+        _speedLimitPercent.value = null
     }
 
     private fun updateRaceStateByMoving(
@@ -871,7 +900,8 @@ class LocalRaceService : PrimaryRaceService, Service() {
                             _currentLine.value,
                             _currentRaceLine.value,
                             _rememberSpeedLimit.value,
-                            _raceState.value
+                            _raceState.value,
+                            _speedLimitPercent.value
                         )
                         sendFrame(
                             json.encodeToString<TelemetryFrame>(data).toByteArray()
@@ -1062,7 +1092,7 @@ class LocalRaceService : PrimaryRaceService, Service() {
 
 private const val tag = "raceService"
 
-private object SerializationUtils {
+internal object SerializationUtils {
     val json = Json {
         classDiscriminator = "type"
         serializersModule = SerializersModule {
@@ -1071,6 +1101,10 @@ private object SerializationUtils {
                 subclass(RaceState.Stopped::class)
                 subclass(RaceState.InRace::class)
                 subclass(RaceState.Going::class)
+            }
+            polymorphic(SpeedKmh::class) {
+                subclass(PlainSpeedKmh::class)
+                subclass(SpeedWithPercentage::class)
             }
             polymorphic(PositionLineModifier::class) {
                 subclass(PositionLineModifier.SetAvgSpeed::class)
@@ -1184,4 +1218,4 @@ private object RaceNotificationUtils {
     private const val TIMER_SERVICE_NOTIFICATION_CHANNEL_ID = "RaceService"
 }
 
-private const val telemetryStreamingVersion = 2L
+private const val telemetryStreamingVersion = 3L

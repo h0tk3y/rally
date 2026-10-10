@@ -140,7 +140,6 @@
     <string name="labelSetavg">setavg%1$s</string>
     <string name="labelThenAvg">thenavg%1$s</string>
     <string name="labelAtime">atime</string>
-    <string name="labelOdo">odo</string>
     <string name="labelEndavg">endavg</string>
     <string name="errOutsideIntervals">outside intervals</string>
     <string name="errNoSetavg">no setavg for this position</string>
@@ -152,7 +151,6 @@
     <string name="keyThen">THEN</string>
     <string name="keyEndavg">END</string>
     <string name="keyAtime">ATIME</string>
-    <string name="keyOdo">ODO</string>
     <string name="keyAddBelow">ADD▼</string>
     <string name="keyAddAbove">ADD▲</string>
     <string name="keyRemove">DEL ╳</string>

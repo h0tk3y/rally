@@ -78,12 +78,13 @@ import com.h0tk3y.rally.android.racecervice.TelemetryPublicState
 import com.h0tk3y.rally.android.scenes.DataKind.AstroTime
 import com.h0tk3y.rally.android.scenes.DataKind.AverageSpeed
 import com.h0tk3y.rally.android.scenes.DataKind.Distance
-import com.h0tk3y.rally.android.scenes.DataKind.OdoDistance
+import com.h0tk3y.rally.android.scenes.DataKind.SpeedPercentage
 import com.h0tk3y.rally.android.valueOrNull
 import com.h0tk3y.rally.android.views.GridKey
 import com.h0tk3y.rally.android.views.Keyboard
 import com.h0tk3y.rally.android.views.PositionsListView
 import com.h0tk3y.rally.android.views.RaceView
+import com.h0tk3y.rally.formatPercentage
 import com.h0tk3y.rally.modifier
 import com.h0tk3y.rally.strRound3
 import kotlinx.coroutines.launch
@@ -531,6 +532,8 @@ data class EditorState(
     val canMoveLeft: Boolean = true,
     val canMoveRight: Boolean = true,
     val canDelete: Boolean = true,
+    val canSetPercent: Boolean = true,
+    val lastEnteredPercent: String? = null
 ) {
     companion object {
         val disabled = EditorState(false)
@@ -543,7 +546,7 @@ data class EditorFocus(
 )
 
 enum class DataKind {
-    Distance, OdoDistance, AverageSpeed, AstroTime
+    Distance, AverageSpeed, SpeedPercentage, AstroTime
 }
 
 fun itemText(line: RoadmapInputLine, dataKind: DataKind): String? =
@@ -551,18 +554,19 @@ fun itemText(line: RoadmapInputLine, dataKind: DataKind): String? =
         null
     else when (dataKind) {
         Distance -> line.atKm.valueKm.strRound3()
-        OdoDistance -> line.modifier<PositionLineModifier.OdoDistance>()?.distanceKm?.valueKm?.strRound3()
-        AverageSpeed -> line.modifier<SetAvg>()?.setavg?.valueKmh?.strRound3()
+        AverageSpeed -> line.modifier<SetAvg>()?.setavg?.baseSpeedKmh?.strRound3()
+        SpeedPercentage -> line.modifier<SetAvg>()?.setavg?.percentage?.formatPercentage()
         AstroTime -> line.modifier<PositionLineModifier.AstroTime>()?.timeOfDay?.timeStrNoDayOverflow()
     }
 
 fun presentFields(item: PositionLine) = buildList {
     add(Distance)
-    if (item.modifier<SetAvg>() != null) {
+    val setAvg = item.modifier<SetAvg>()
+    if (setAvg != null) {
         add(AverageSpeed)
-    }
-    if (item.modifier<PositionLineModifier.OdoDistance>() != null) {
-        add(OdoDistance)
+        if (setAvg.setavg.percentage != null) {
+            add(SpeedPercentage)
+        }
     }
     if (item.modifier<PositionLineModifier.AstroTime>() != null) {
         add(AstroTime)

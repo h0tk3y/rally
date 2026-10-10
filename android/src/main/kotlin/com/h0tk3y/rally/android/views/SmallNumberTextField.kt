@@ -14,13 +14,20 @@ import androidx.compose.material.TextFieldDefaults.indicatorLine
 import androidx.compose.material.TextFieldDefaults.textFieldColors
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.KeyboardType
@@ -30,6 +37,7 @@ import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.h0tk3y.rally.android.theme.LocalCustomTypography
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
@@ -43,17 +51,39 @@ internal fun SmallNumberTextField(
     focusRequester: FocusRequester = FocusRequester(),
     isAllowMinus: Boolean = false,
     isAllowColon: Boolean = false,
+    selectAllOnFocus: Boolean = false,
     isError: (String) -> Boolean = { it.toDoubleOrNull() == null }
 ) {
     val source = remember { MutableInteractionSource() }
+    val coroutineScope = rememberCoroutineScope()
+    var wasFocused by remember { mutableStateOf(false) }
+
+    val visualTransformation = if (text.value.text.isEmpty())
+        VisualTransformation.None
+    else if (suffix != null) SuffixTransformation(suffix) else VisualTransformation.None
 
     BasicTextField(
         value = text.value,
         onValueChange = { it: TextFieldValue ->
-            text.value = it.copy(text = it.text.filter { char ->
+            val filteredText = it.text.filter { char ->
                 char.isDigit() || char == '.' || isAllowMinus && char == '-' || isAllowColon && char == ':'
-            })
-            onChange(it)
+            }
+            if (selectAllOnFocus && filteredText == text.value.text) {
+                val fullSelection = TextRange(0, filteredText.length)
+                if (text.value.selection == fullSelection && it.selection != fullSelection) {
+                    text.value = it.copy(text = filteredText)
+                    coroutineScope.launch {
+                        text.value = it.copy(text = filteredText, selection = fullSelection)
+                        onChange(text.value)
+                    }
+                } else {
+                    text.value = it.copy(text = filteredText, selection = fullSelection)
+                    onChange(text.value)
+                }
+            } else {
+                text.value = it.copy(text = filteredText)
+                onChange(text.value)
+            }
         },
         textStyle = androidx.compose.ui.text.TextStyle(brush = SolidColor(MaterialTheme.colors.onSurface))
             .plus(LocalCustomTypography.current.raceEditableValue),
@@ -68,13 +98,41 @@ internal fun SmallNumberTextField(
                 unfocusedIndicatorLineThickness = 2.dp
             )
             .focusRequester(focusRequester)
-            .onFocusChanged { if (it.isFocused) text.value = TextFieldValue(text.value.text, TextRange(0, text.value.text.length)) }
+            .pointerInput(selectAllOnFocus) {
+                if (!selectAllOnFocus) return@pointerInput
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        if (event.type == PointerEventType.Press) {
+                            focusRequester.requestFocus()
+                            val currentText = text.value.text
+                            val fullSelection = TextRange(0, currentText.length)
+                            if (text.value.selection == fullSelection) {
+                                text.value = text.value.copy(selection = TextRange.Zero)
+                            }
+                            coroutineScope.launch {
+                                text.value = text.value.copy(selection = fullSelection)
+                                onChange(text.value)
+                            }
+                        }
+                    }
+                }
+            }
+            .onFocusChanged {
+                if (it.isFocused && !wasFocused) {
+                    wasFocused = true
+                    if (selectAllOnFocus) {
+                        val currentText = text.value.text
+                        text.value = text.value.copy(selection = TextRange(0, currentText.length))
+                    }
+                } else if (!it.isFocused) {
+                    wasFocused = false
+                }
+            }
             .height(45.dp)
             .width(70.dp),
         interactionSource = source,
-        visualTransformation = if (text.value.text.isEmpty())
-            VisualTransformation.None
-        else if (suffix != null) SuffixTransformation(suffix) else VisualTransformation.None,
+        visualTransformation = visualTransformation,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         enabled = true,
         singleLine = true,
@@ -85,7 +143,7 @@ internal fun SmallNumberTextField(
                 innerTextField = it,
                 singleLine = true,
                 enabled = true,
-                visualTransformation = VisualTransformation.None,
+                visualTransformation = visualTransformation,
                 placeholder = {
                     if (placeholderString != null) {
                         Text(
