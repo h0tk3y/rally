@@ -21,12 +21,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.NavBackStack
 import androidx.navigation3.runtime.NavKey
-import androidx.navigation3.runtime.entry
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
-import androidx.navigation3.runtime.rememberSavedStateNavEntryDecorator
+import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
-import androidx.navigation3.ui.rememberSceneSetupNavEntryDecorator
 import com.h0tk3y.rally.R
 import com.h0tk3y.rally.android.db.Database
 import com.h0tk3y.rally.android.db.SectionInsertOrRenameResult
@@ -68,7 +66,7 @@ data class SectionEventLogScene(val sectionId: Long) : NavKey
 @Serializable
 data class SettingsScene(val currentDistance: Double?) : NavKey
 
-private class NavigationModel(private val backStack: NavBackStack) {
+private class NavigationModel(private val backStack: NavBackStack<NavKey>) {
     fun navigateTo(key: NavKey) {
         backStack.add(key)
     }
@@ -123,8 +121,7 @@ fun App(
                     backStack,
                     onBack = navigation::popBack,
                     entryDecorators = listOf(
-                        rememberSceneSetupNavEntryDecorator(),
-                        rememberSavedStateNavEntryDecorator(),
+                        rememberSaveableStateHolderNavEntryDecorator(),
                         rememberViewModelStoreNavEntryDecorator()
                     ),
                     entryProvider = entryProvider {

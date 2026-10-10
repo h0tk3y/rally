@@ -52,6 +52,11 @@
     <string name="telemetrySourceSimulationHint">Set the speed by using the slider in the race view</string>
     <string name="telemetrySourceObd">OBD over Bluetooth</string>
     <string name="telemetrySourceObdHint">Connect to an OBD (ELM327) unit over Bluetooth</string>
+    <string name="telemetrySourceOutgauge">OutGauge</string>
+    <string name="telemetrySourceOutgaugeHint">Receive telemetry over UDP from simulators</string>
+    <string name="settingsOutgaugePort">UDP port</string>
+    <string name="invalidPortShouldBeBetween1024And65535">Invalid port, should be between 1024 and 65535</string>
+    <string name="settingsOutgaugeInstruction">Configure your simulator (e.g. BeamNG Options > Other > OutGauge support) with this device\'s IP address and the port above.</string>
     <string name="settingsBtMac">Bluetooth MAC address</string>
     <string name="settingsSendDataToAnotherDevice">Send data to the driver\'s device</string>
     <string name="settingsSendDataToAnotherDeviceHint">Enter the other device\'s IP to send data to it. The other device must be on the same Wi-Fi network.\nOn the other device, open \'Driver HUD\' from the menu on the section list.</string>
@@ -79,6 +84,10 @@
     <string name="telemetryObdNoMac">OBD: no MAC!</string>
     <string name="telemetryObdOk" translatable="false">OBD ✔</string>
     <string name="telemetrySimulationOk">Simulation ✔</string>
+    <string name="telemetryOutgaugeOk" translatable="false">OutGauge ✔</string>
+    <string name="telemetryOutgaugeWaiting">OutGauge: waiting…</string>
+    <string name="telemetryOutgaugeDelayed">OutGauge: delayed</string>
+    <string name="telemetryOutgaugeError">OutGauge: error</string>
     <string name="telemetryData">"Data "</string>
     <string name="telemetryDataDelay" translatable="false">\???</string>
     <string name="telemetryDataIncompatible">Data: incompatible version</string>

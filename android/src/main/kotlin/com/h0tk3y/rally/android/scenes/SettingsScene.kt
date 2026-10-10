@@ -52,6 +52,7 @@ import androidx.lifecycle.viewModelScope
 import com.h0tk3y.rally.R
 import com.h0tk3y.rally.android.PreferenceRepository
 import com.h0tk3y.rally.android.TelemetrySource
+import com.h0tk3y.rally.android.util.IpAddressDisplay
 import com.h0tk3y.rally.strRound3
 import com.h0tk3y.rally.strRound5
 import kotlinx.coroutines.flow.map
@@ -165,6 +166,57 @@ private fun LazyItemScope.TelemetrySource(
         Spacer(Modifier.height(24.dp))
         Row {
             Spacer(Modifier.width(48.dp))
+        }
+    }
+
+    val isOutgauge = telemetrySource == TelemetrySource.OUTGAUGE
+
+    SettingsRow(
+        Modifier
+            .fillMaxWidth()
+            .clickable { model.setTelemetrySource(TelemetrySource.OUTGAUGE) }
+    ) {
+        RadioButton(colors = rbColors, selected = isOutgauge, onClick = null)
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(stringResource(R.string.telemetrySourceOutgauge))
+            Text(style = MaterialTheme.typography.caption, text = stringResource(R.string.telemetrySourceOutgaugeHint))
+        }
+    }
+    if (isOutgauge) {
+        val outgaugePort by model.outgaugePort.collectAsState(4444)
+        var portText by rememberSaveable(outgaugePort) { mutableStateOf(outgaugePort.toString()) }
+        val parsedPort = portText.toIntOrNull()
+        val isValidPort = parsedPort != null && parsedPort in 1024..65535
+        Row {
+            Spacer(Modifier.width(48.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    modifier = Modifier.fillMaxWidth(),
+                    value = portText,
+                    onValueChange = {
+                        portText = it
+                        val p = it.toIntOrNull()
+                        if (p != null && p in 1024..65535) {
+                            model.setOutgaugePort(p)
+                        }
+                    },
+                    isError = !isValidPort,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    label = { Text(stringResource(R.string.settingsOutgaugePort)) }
+                )
+                if (!isValidPort) {
+                    Text(
+                        stringResource(R.string.invalidPortShouldBeBetween1024And65535),
+                        color = MaterialTheme.colors.error,
+                        style = MaterialTheme.typography.caption
+                    )
+                }
+                Text(
+                    text = stringResource(R.string.settingsOutgaugeInstruction),
+                    style = MaterialTheme.typography.caption
+                )
+                IpAddressDisplay()
+            }
         }
     }
 
@@ -386,6 +438,7 @@ class SettingsViewModel(
     val currentMacSelection = prefs.userPreferencesFlow.map { it.btMac }
     val currentAllowance = prefs.userPreferencesFlow.map { it.allowance }
     val currentCalibration = prefs.userPreferencesFlow.map { it.calibration }
+    val outgaugePort = prefs.userPreferencesFlow.map { it.outgaugePort }
 
     fun setTelemetrySource(newTelemetrySource: TelemetrySource) {
         viewModelScope.launch {
@@ -420,6 +473,12 @@ class SettingsViewModel(
     fun setSoundFeedback(soundFeedback: Boolean) {
         viewModelScope.launch {
             prefs.saveSoundFeedback(soundFeedback)
+        }
+    }
+
+    fun setOutgaugePort(port: Int) {
+        viewModelScope.launch {
+            prefs.saveOutgaugePort(port)
         }
     }
 
