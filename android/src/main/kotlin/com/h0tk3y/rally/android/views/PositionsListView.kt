@@ -352,7 +352,13 @@ private fun DataField(
     if (field != SpeedPercentage) {
         LabelForField(field, line, subsMatch.subNumbers[line], elementsModifier)
     }
-    val text = itemText(line, field) ?: ""
+    val isFocused = isEditorEnabled && isSelectedLine && field == editorFocus.kind
+    val text = if (isFocused && editorFocus.rawText != null) editorFocus.rawText else (itemText(line, field) ?: "")
+    val placeholder = when {
+        field == SpeedPercentage && isFocused && text.isEmpty() -> "100"
+        field == AverageSpeed && isFocused && text.isEmpty() -> "0.0"
+        else -> null
+    }
 
     val fieldModifier = if (field == SpeedPercentage) {
         elementsModifier.padding(start = 2.dp)
@@ -361,14 +367,17 @@ private fun DataField(
     }
 
     FocusedTextFieldWithoutKeyboard(
-        text,
-        field,
+        text = text,
+        kind = field,
         modifier = if (line.modifier<IsSynthetic>() != null) fieldModifier.alpha(0.5f) else fieldModifier,
         selectionPosition = cursorIndex,
-        focused = isEditorEnabled && isSelectedLine && field == editorFocus.kind,
+        placeholder = placeholder,
+        focused = isFocused,
         onTextChange = { },
         onFocused = {
-            editorControls?.selectLine(line.lineNumber, field)
+            if (!isSelectedLine || field != editorFocus.kind) {
+                editorControls?.selectLine(line.lineNumber, field)
+            }
         },
         onPositionChange = { editorControls?.moveCursor(it - cursorIndex) },
         enabled = editorState.isEnabled

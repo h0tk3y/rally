@@ -593,6 +593,18 @@ class LiveSectionViewModel(
         val currentEditorState = _editorState.value
         val isEnabled = !currentEditorState.isEnabled
         _editorState.value = currentEditorState.copy(isEnabled = isEnabled)
+        if (!isEnabled) {
+            _editorFocus.value = _editorFocus.value.copy(rawText = null)
+        } else {
+            val item = currentItem
+            val currentFocus = _editorFocus.value
+            val text = item?.let { itemText(it, currentFocus.kind) }.orEmpty()
+            val newFocus = currentFocus.copy(
+                cursor = reasonableEditorStartPosition(text),
+                rawText = null
+            )
+            updateFocus(sanitizeFocus(newFocus))
+        }
         sanitizeSelection()
     }
 
@@ -724,11 +736,21 @@ class LiveSectionViewModel(
         _raceState.value = RaceUiState.NoRaceServiceConnection
     }
 
+    private fun fieldText(item: PositionLine, kind: DataKind): String? {
+        val focus = _editorFocus.value
+        return if (focus.kind == kind && focus.rawText != null) {
+            focus.rawText
+        } else {
+            itemText(item, kind)
+        }
+    }
+
     override fun selectLine(index: LineNumber, field: DataKind?) {
         val items = currentItems
 
         val item = items.find { it.lineNumber == index } ?: items.find { it.lineNumber.number == index.subNumber }
         val lineNumber = item?.lineNumber ?: LineNumber(1, 0)
+        val oldLineNumber = _selectedLineIndex.value
         _selectedLineIndex.value = lineNumber
 
         updateEditorConstraints()
@@ -740,13 +762,17 @@ class LiveSectionViewModel(
                     currentFocus.kind
                 ) != null
             ) currentFocus.kind else DataKind.Distance
-            val newFocus = currentFocus.copy(
-                cursor = reasonableEditorStartPosition(itemText(item, newKind).orEmpty()),
-                kind = newKind
-            )
-            updateFocus(sanitizeFocus(newFocus))
-        }
 
+            val isSameLineAndField = oldLineNumber == lineNumber && currentFocus.kind == newKind
+            if (!isSameLineAndField) {
+                val newFocus = currentFocus.copy(
+                    cursor = reasonableEditorStartPosition(itemText(item, newKind).orEmpty()),
+                    kind = newKind,
+                    rawText = null
+                )
+                updateFocus(sanitizeFocus(newFocus))
+            }
+        }
     }
 
     override fun moveCursor(indexDelta: Int) {
@@ -831,7 +857,7 @@ class LiveSectionViewModel(
     override fun deleteCharacter() {
         currentItem?.let { item ->
             val editorFocus = _editorFocus.value
-            val currentText = itemText(item, editorFocus.kind)
+            val currentText = fieldText(item, editorFocus.kind)
 
             if (currentText != null) {
                 val cursor = editorFocus.cursor
@@ -844,15 +870,20 @@ class LiveSectionViewModel(
                             updateCurrentText(
                                 item,
                                 editorFocus,
-                                currentText.take(takeChars) + '0' + (if (isAfterColon) ":" else "") + currentText.drop(dropChars)
+                                currentText.take(takeChars) + '0' + (if (isAfterColon) ":" else "") + currentText.drop(dropChars),
+                                if (isAfterColon) cursor - 2 else cursor - 1
                             )
                         }
-                        moveCursor(if (currentText.getOrNull(cursor - 1) == ':') -2 else -1)
                     }
 
                     currentText.indexOf('.') == 1 && cursor == 1 -> {
-                        val newText = "0" + currentText.drop(1)
-                        updateCurrentText(item, editorFocus, newText)
+                        val newText = if (editorFocus.kind == DataKind.AverageSpeed || editorFocus.kind == DataKind.SpeedPercentage) "" else "0" + currentText.drop(1)
+                        updateCurrentText(item, editorFocus, newText, if (newText.isEmpty()) 0 else cursor)
+                    }
+
+                    // Keep single trailing zero after dot: e.g. "1.0|" when deleting ends up as "1.|0"
+                    currentText.indexOf('.') != -1 && currentText.substring(currentText.indexOf('.') + 1) == "0" && cursor == currentText.indexOf('.') + 2 -> {
+                        updateCurrentText(item, editorFocus, currentText, cursor - 1)
                     }
 
                     // TODO: this is non-intuitive
@@ -861,14 +892,14 @@ class LiveSectionViewModel(
                     }
 
                     else -> {
-                        val newText = if (editorFocus.cursor > 0) {
-                            currentText.take(cursor - 1) + currentText.drop(cursor)
-                        } else currentText
-                        if (newText != currentText) {
-                            val realText = updateCurrentText(item, editorFocus, newText)
-                            if (realText != "0") {
-                                moveCursor(-1)
+                        if (cursor > 0) {
+                            val textWithoutChar = currentText.take(cursor - 1) + currentText.drop(cursor)
+                            val (newText, newCursor) = if (textWithoutChar.endsWith('.')) {
+                                (textWithoutChar + "0") to (cursor - 1)
+                            } else {
+                                textWithoutChar to (cursor - 1)
                             }
+                            updateCurrentText(item, editorFocus, newText, newCursor)
                         }
                     }
                 }
@@ -879,41 +910,67 @@ class LiveSectionViewModel(
     private fun enterCharacter(char: Char) {
         currentItem?.let { item ->
             val editorFocus = _editorFocus.value
-            val currentText = itemText(item, editorFocus.kind)
-            if (currentText != null) {
-                val cursor = editorFocus.cursor
-                val newText = when {
-                    // ATIME:
-                    editorFocus.kind == DataKind.AstroTime -> fixTimeAfterEntered(currentText.take(cursor) + char + currentText.drop(cursor + 1))
+            val currentText = fieldText(item, editorFocus.kind) ?: return@let
+            val cursor = editorFocus.cursor
 
-                    // Others:
-                    char.isDigit() -> currentText.take(cursor) + char + currentText.drop(cursor)
-                    char == '.' -> currentText.take(cursor).replace(".", "") + char + currentText.drop(cursor)
-                        .replace(".", "")
+            if (editorFocus.kind == DataKind.AstroTime) {
+                val newText = fixTimeAfterEntered(currentText.take(cursor) + char + currentText.drop(cursor + 1))
+                val newCursor = if (char.isDigit() && currentText.getOrNull(cursor + 1) == ':') cursor + 2 else cursor + 1
+                updateCurrentText(item, editorFocus, newText, newCursor)
+                return
+            }
 
-                    else -> currentText
-                }
-                val newCursor = when {
-                    // ATIME:
-                    char.isDigit() && currentText.getOrNull(cursor + 1) == ':' -> cursor + 2
-                    editorFocus.kind == DataKind.AstroTime -> cursor + 1
+            val dotIndex = currentText.indexOf('.')
 
-                    // Others:
-                    char.isDigit() && cursor == 1 && currentText.startsWith("0.") -> cursor
-                    char.isDigit() && currentText.indexOf('.')
-                        .let { it != -1 && cursor < it } && currentText.startsWith("0") ->
-                        cursor
-
-                    char == '.' && currentText.getOrNull(cursor) == '.' -> cursor + 1
-                    char == '.' && currentText.indexOf('.').let { it != -1 && cursor < it } -> cursor + 1
-                    char == '.' && currentText.indexOf('.').let { it != -1 && cursor > it } -> cursor
-                    else -> if (sanitizeText(newText, editorFocus.kind) != currentText) cursor + 1 else cursor
-                }
-                updateCurrentText(item, editorFocus, newText)
-                if (newCursor != cursor) {
-                    moveCursor(newCursor - cursor)
+            // Exception 1: do not introduce a leading zero in the integral part
+            if (char == '0') {
+                val inIntegralPart = dotIndex == -1 || cursor <= dotIndex
+                if (inIntegralPart && (cursor == 0 && currentText.isNotEmpty() || currentText.startsWith("0"))) {
+                    return
                 }
             }
+
+            // Exception 2: entering '0' between dot and existing single trailing zero
+            if (char == '0' && dotIndex != -1 && currentText.substring(dotIndex + 1) == "0" && cursor == dotIndex + 1) {
+                updateCurrentText(item, editorFocus, currentText, cursor + 1)
+                return
+            }
+
+            if (char.isDigit() && cursor == currentText.length && dotIndex != -1 && currentText.substringAfter('.').length >= 3) {
+                return
+            }
+
+            val candidateText = when {
+                char.isDigit() -> when {
+                    currentText == "0" -> "$char"
+                    currentText.startsWith("0.") && cursor == 1 -> "$char" + currentText.drop(1)
+                    dotIndex != -1 && currentText.substring(dotIndex + 1) == "0" && cursor == dotIndex + 1 ->
+                        currentText.take(cursor) + char + currentText.drop(cursor + 1)
+                    else -> currentText.take(cursor) + char + currentText.drop(cursor)
+                }
+                char == '.' -> {
+                    val candidate = currentText.take(cursor).replace(".", "") + char + currentText.drop(cursor).replace(".", "")
+                    if (candidate.contains('.') && candidate.substringAfter('.', "").length > 3) {
+                        candidate.substringBefore('.') + "." + candidate.substringAfter('.').take(3)
+                    } else candidate
+                }
+                else -> currentText
+            }
+
+            val newText = if (char.isDigit() && candidateText.contains('.') && candidateText.substringAfter('.', "").length > 3) {
+                candidateText.substringBefore('.') + "." + candidateText.substringAfter('.').take(3)
+            } else {
+                candidateText
+            }
+
+            val newCursor = when {
+                char.isDigit() && currentText == "0" -> 1
+                char.isDigit() && currentText.startsWith("0.") && cursor == 1 -> 1
+                char == '.' && dotIndex != -1 && cursor > dotIndex -> cursor
+                else -> cursor + 1
+            }
+
+            updateCurrentText(item, editorFocus, newText, newCursor)
         }
     }
 
@@ -928,9 +985,11 @@ class LiveSectionViewModel(
         get() = currentItems.find { it.lineNumber == _selectedLineIndex.value } as? PositionLine
 
     private fun updateFocus(editorFocus: EditorFocus) {
+        val maxCursor = (editorFocus.rawText ?: currentItem?.let { itemText(it, editorFocus.kind) })?.length ?: editorFocus.cursor
+        val clampedCursor = editorFocus.cursor.coerceIn(0, maxCursor)
         val focusWithSanitizedCursor = if (editorFocus.kind == DataKind.AstroTime) {
-            if (editorFocus.cursor == 2 || editorFocus.cursor == 5) editorFocus.copy(cursor = editorFocus.cursor + 1) else editorFocus
-        } else editorFocus
+            if (clampedCursor == 2 || clampedCursor == 5) editorFocus.copy(cursor = clampedCursor + 1) else editorFocus.copy(cursor = clampedCursor)
+        } else editorFocus.copy(cursor = clampedCursor)
         _editorFocus.value = focusWithSanitizedCursor
     }
 
@@ -941,19 +1000,19 @@ class LiveSectionViewModel(
         val current = _editorFocus.value
 
         currentItem?.let { item ->
-            val currentText = itemText(item, current.kind)
+            val currentText = fieldText(item, current.kind)
             val fields = presentFields(item)
             val currentFieldIndex = fields.indexOf(current.kind)
             if (currentFieldIndex != -1) {
                 when {
                     indexDelta < 0 && current.cursor == 0 && currentFieldIndex > 0 -> {
                         val newField = fields[currentFieldIndex - 1]
-                        updateFocus(current.copy(reasonableEditorStartPosition(itemText(item, newField)!!), newField))
+                        updateFocus(current.copy(cursor = reasonableEditorStartPosition(itemText(item, newField)!!), kind = newField, rawText = null))
                     }
 
-                    indexDelta > 0 && current.cursor == currentText?.length && currentFieldIndex < fields.size -> {
+                    indexDelta > 0 && current.cursor == currentText?.length && currentFieldIndex < fields.size - 1 -> {
                         val newField = fields[currentFieldIndex + 1]
-                        updateFocus(current.copy(reasonableEditorStartPosition(itemText(item, newField)!!), newField))
+                        updateFocus(current.copy(cursor = reasonableEditorStartPosition(itemText(item, newField)!!), kind = newField, rawText = null))
                     }
 
                     current.kind == DataKind.AstroTime -> {
@@ -980,17 +1039,18 @@ class LiveSectionViewModel(
     private fun sanitizeFocus(editorFocus: EditorFocus): EditorFocus =
         when (val item = currentItem) {
             null -> {
-                EditorFocus(0, DataKind.Distance)
+                EditorFocus(0, DataKind.Distance, null)
             }
 
             else -> {
                 val newKind = if (itemText(item, editorFocus.kind) == null) DataKind.Distance else editorFocus.kind
-                val text = checkNotNull(itemText(item, newKind))
+                val text = if (editorFocus.kind == newKind && editorFocus.rawText != null) editorFocus.rawText else checkNotNull(itemText(item, newKind))
                 val position =
                     if (editorFocus.kind == newKind)
                         editorFocus.cursor.coerceIn(0, text.length)
                     else reasonableEditorStartPosition(text)
-                EditorFocus(position, newKind)
+                val rawText = if (editorFocus.kind == newKind) editorFocus.rawText else null
+                EditorFocus(position, newKind, rawText)
             }
         }
 
@@ -1017,12 +1077,10 @@ class LiveSectionViewModel(
         var canEnterDot = current.canEnterDot
 
         currentItem?.let { item ->
+            val curText = fieldText(item, focus.kind)
             canMoveLeft = focus.cursor != 0 || hasPreviousField(item, focus)
-            canMoveRight = focus.cursor != itemText(item, focus.kind)?.length || hasNextField(item, focus)
-            canEnterDigits = itemText(
-                item,
-                focus.kind
-            )?.let { focus.cursor != it.length || it.indexOf('.') == -1 || it.substringAfterLast(".").length < 3 }
+            canMoveRight = focus.cursor != curText?.length || hasNextField(item, focus)
+            canEnterDigits = curText?.let { focus.cursor != it.length || it.indexOf('.') == -1 || it.substringAfterLast(".").length < 3 }
                 ?: canEnterDigits
 
             if (focus.kind == DataKind.AstroTime) {
@@ -1086,9 +1144,9 @@ class LiveSectionViewModel(
                 }
                 if (focusTarget != null && itemText(line, focusTarget) != null) {
                     val itemText = itemText(line, focusTarget)!!
-                    updateFocus(EditorFocus(reasonableEditorStartPosition(itemText), focusTarget))
+                    updateFocus(EditorFocus(reasonableEditorStartPosition(itemText), focusTarget, null))
                 } else {
-                    updateFocus(sanitizeFocus(focus))
+                    updateFocus(sanitizeFocus(focus.copy(rawText = null)))
                 }
             }
 
@@ -1098,25 +1156,16 @@ class LiveSectionViewModel(
                     if (setAvg.setavg is SpeedWithPercentage) {
                         if (focus.kind == DataKind.SpeedPercentage) {
                             val plainSpeed = PlainSpeedKmh(setAvg.setavg.baseSpeedKmh)
-                            val newModifier = when (setAvg) {
-                                is SetAvgSpeed -> setAvg.copy(setavg = plainSpeed)
-                                is ThenAvgSpeed -> setAvg.copy(setavg = plainSpeed)
-                            }
-                            val newItem = addModifiersToItem(item, listOf(newModifier))
+                            val newItem = addModifiersToItem(item, listOf(setAvg.copyWithSpeed(plainSpeed)))
                             val speedText = itemText(newItem, DataKind.AverageSpeed) ?: ""
-                            updateFocus(EditorFocus(reasonableEditorStartPosition(speedText), DataKind.AverageSpeed))
+                            updateFocus(EditorFocus(reasonableEditorStartPosition(speedText), DataKind.AverageSpeed, null))
                         } else {
                             moveFocusToModifier(item)
                         }
                     } else {
-                        val percent = _speedLimitPercent.value?.toDoubleOrNull() ?: 100.0
-                        val speedWithPercent = SpeedWithPercentage(setAvg.setavg, percent)
-                        val newModifier = when (setAvg) {
-                            is SetAvgSpeed -> setAvg.copy(setavg = speedWithPercent)
-                            is ThenAvgSpeed -> setAvg.copy(setavg = speedWithPercent)
-                        }
-                        val newItem = addModifiersToItem(item, listOf(newModifier))
-                        moveFocusToModifier(newItem)
+                        val speedWithPercent = SpeedWithPercentage(setAvg.setavg, 100.0)
+                        val newItem = addModifiersToItem(item, listOf(setAvg.copyWithSpeed(speedWithPercent)))
+                        updateFocus(EditorFocus(0, DataKind.SpeedPercentage, ""))
                     }
                 } else {
                     val dataToRemove = when (key) {
@@ -1130,7 +1179,7 @@ class LiveSectionViewModel(
                         val newItem = item.copy(modifiers = item.modifiers.filterNot { it == modifier })
                         updateInputPositions(currentItems.toMutableList().apply { set(indexOf(item), newItem) })
                         if (focus.kind in dataToRemove) {
-                            updateFocus(sanitizeFocus(focus.copy(kind = presentFields(item).takeWhile { it !in dataToRemove }.last())))
+                            updateFocus(sanitizeFocus(focus.copy(kind = presentFields(item).takeWhile { it !in dataToRemove }.last(), rawText = null)))
                         }
                     } else {
                         moveFocusToModifier(item)
@@ -1147,7 +1196,11 @@ class LiveSectionViewModel(
                 }
                 if (modifierToAdd != null) {
                     val newItem = addModifiersToItem(item, listOf(modifierToAdd))
-                    moveFocusToModifier(newItem)
+                    if (existingAvg == null && (key == GridKey.SETAVG || key == GridKey.THENAVG)) {
+                        updateFocus(EditorFocus(0, DataKind.AverageSpeed, ""))
+                    } else {
+                        moveFocusToModifier(newItem)
+                    }
                 }
             }
         }
@@ -1156,19 +1209,11 @@ class LiveSectionViewModel(
     private fun applyLastPercent() {
         val item = currentItem ?: return
         val existingAvg = item.modifier<SetAvg>() ?: return
-        val percent = _speedLimitPercent.value?.toDoubleOrNull() ?: 100.0
-        val baseSpeed = when (val s = existingAvg.setavg) {
-            is SpeedWithPercentage -> s.baseSpeed
-            else -> s
-        }
-        val newSpeed = SpeedWithPercentage(baseSpeed, percent)
-        val newModifier = when (existingAvg) {
-            is ThenAvgSpeed -> existingAvg.copy(setavg = newSpeed)
-            is SetAvgSpeed -> existingAvg.copy(setavg = newSpeed)
-        }
-        val newItem = addModifiersToItem(item, listOf(newModifier))
+        val percent = _speedLimitPercent.value?.toDoubleOrNull() ?: return
+        val newSpeed = SpeedWithPercentage(existingAvg.setavg.baseSpeed, percent)
+        val newItem = addModifiersToItem(item, listOf(existingAvg.copyWithSpeed(newSpeed)))
         val itemText = itemText(newItem, DataKind.SpeedPercentage) ?: ""
-        updateFocus(EditorFocus(reasonableEditorStartPosition(itemText), DataKind.SpeedPercentage))
+        updateFocus(EditorFocus(reasonableEditorStartPosition(itemText), DataKind.SpeedPercentage, null))
     }
 
     private fun addModifiersToItem(
@@ -1294,48 +1339,56 @@ class LiveSectionViewModel(
         return result
     }
 
-    private fun sanitizeText(original: String, dataKind: DataKind) = when (dataKind) {
-        DataKind.Distance -> original.ifEmpty { "0" }.toDouble3Digits().toString()
-        DataKind.AverageSpeed -> original.ifEmpty { "0" }.toDouble3Digits().toString()
-        DataKind.SpeedPercentage -> original.ifEmpty { "100" }.toDouble3Digits().formatPercentage()
-        DataKind.AstroTime -> original
+    private fun SetAvg.copyWithSpeed(newSpeed: SpeedKmh): SetAvg = when (this) {
+        is SetAvgSpeed -> copy(setavg = newSpeed)
+        is ThenAvgSpeed -> copy(setavg = newSpeed)
     }
 
-    internal fun updateCurrentText(item: PositionLine, editorFocus: EditorFocus, newText: String): String {
+    private val SpeedKmh.baseSpeed: SpeedKmh
+        get() = when (this) {
+            is SpeedWithPercentage -> baseSpeed
+            else -> this
+        }
+
+    private fun computeRawText(kind: DataKind, newText: String, canonicalText: String?): String? = when {
+        (kind == DataKind.SpeedPercentage || kind == DataKind.AverageSpeed) && newText.isEmpty() -> ""
+        newText != canonicalText && (newText.endsWith('.') || (newText.contains('.') && newText.endsWith('0'))) -> {
+            if (newText.contains('.') && newText.substringAfter('.').length > 3) null else newText
+        }
+        else -> null
+    }
+
+    internal fun updateCurrentText(item: PositionLine, editorFocus: EditorFocus, newText: String, newCursor: Int = editorFocus.cursor): String {
         val modifiers = item.modifiers
-        val sanitizedText = sanitizeText(newText, editorFocus.kind)
         val newItem = when (editorFocus.kind) {
-            DataKind.Distance -> item.copy(atKm = DistanceKm(sanitizedText.toDouble()))
-            DataKind.AverageSpeed -> item.copy(modifiers = modifiers.map {
-                if (it is SetAvg) {
-                    val newSpeedVal = sanitizedText.toDouble3Digits()
-                    val newSpeed = when (val current = it.setavg) {
-                        is SpeedWithPercentage -> current.copy(baseSpeed = PlainSpeedKmh(newSpeedVal))
-                        else -> PlainSpeedKmh(newSpeedVal)
-                    }
-                    when (it) {
-                        is SetAvgSpeed -> it.copy(setavg = newSpeed)
-                        is ThenAvgSpeed -> it.copy(setavg = newSpeed)
-                    }
-                } else it
-            })
+            DataKind.Distance -> {
+                val dist = newText.toDouble3DigitsOrDefault(0.0)
+                item.copy(atKm = DistanceKm(dist))
+            }
+
+            DataKind.AverageSpeed -> {
+                val speed = newText.toDouble3DigitsOrDefault(0.0)
+                item.copy(modifiers = modifiers.map { modifier ->
+                    if (modifier is SetAvg) {
+                        val newSpeed = when (val current = modifier.setavg) {
+                            is SpeedWithPercentage -> current.copy(baseSpeed = PlainSpeedKmh(speed))
+                            else -> PlainSpeedKmh(speed)
+                        }
+                        modifier.copyWithSpeed(newSpeed)
+                    } else modifier
+                })
+            }
 
             DataKind.SpeedPercentage -> {
-                val newPercentVal = sanitizedText.toDouble3Digits()
-                _speedLimitPercent.value = newPercentVal.formatPercentage()
-                service?.setSpeedLimitPercent(newPercentVal.formatPercentage())
-                item.copy(modifiers = modifiers.map {
-                    if (it is SetAvg) {
-                        val baseSpeed = when (val current = it.setavg) {
-                            is SpeedWithPercentage -> current.baseSpeed
-                            else -> current
-                        }
-                        val newSpeed = SpeedWithPercentage(baseSpeed, newPercentVal)
-                        when (it) {
-                            is SetAvgSpeed -> it.copy(setavg = newSpeed)
-                            is ThenAvgSpeed -> it.copy(setavg = newSpeed)
-                        }
-                    } else it
+                val newPercentVal = newText.toDouble3DigitsOrDefault(100.0)
+                val formattedPercent = if (newText.isEmpty() || newText == ".") null else newPercentVal.formatPercentage()
+                _speedLimitPercent.value = formattedPercent
+                service?.setSpeedLimitPercent(formattedPercent)
+                item.copy(modifiers = modifiers.map { modifier ->
+                    if (modifier is SetAvg) {
+                        val newSpeed = SpeedWithPercentage(modifier.setavg.baseSpeed, newPercentVal)
+                        modifier.copyWithSpeed(newSpeed)
+                    } else modifier
                 })
             }
 
@@ -1346,6 +1399,9 @@ class LiveSectionViewModel(
             })
 
         }
+
+        val canonicalText = itemText(newItem, editorFocus.kind)
+        val rawText = computeRawText(editorFocus.kind, newText, canonicalText)
 
         val allPositions = _inputPositions.value
         val currentPosIndex = allPositions.indexOfFirst { it.lineNumber == item.lineNumber }
@@ -1370,12 +1426,14 @@ class LiveSectionViewModel(
                 val allPositions = _inputPositions.value
                 allPositions.toMutableList().apply { set(currentPosIndex, newItem) } to item.lineNumber
             }
-            updateInputPositions(newPositions)
-            updateEditorConstraints()
             _selectedLineIndex.value = newLineSelection
+            updateInputPositions(newPositions)
         }
 
-        return sanitizedText
+        updateFocus(editorFocus.copy(cursor = newCursor, rawText = rawText))
+        updateEditorConstraints()
+
+        return newText
     }
 
     private fun sanitizeSelection() {
