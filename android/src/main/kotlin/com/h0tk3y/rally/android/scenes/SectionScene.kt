@@ -584,6 +584,7 @@ data class EditorState(
 data class EditorFocus(
     val cursor: Int,
     val kind: DataKind,
+    val rawText: String? = null
 )
 
 enum class DataKind {
@@ -620,3 +621,6 @@ fun String.toDouble3Digits() =
             substringBeforeLast(".") + "." + substringAfterLast(".").take(3)
         else this
     }.toDouble()
+
+fun String.toDouble3DigitsOrDefault(default: Double = 0.0): Double =
+    if (isEmpty() || this == ".") default else toDouble3Digits()

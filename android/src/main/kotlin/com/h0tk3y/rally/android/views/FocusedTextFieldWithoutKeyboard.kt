@@ -37,6 +37,7 @@ fun FocusedTextFieldWithoutKeyboard(
     modifier: Modifier = Modifier,
     textStyle: TextStyle = LocalCustomTypography.current.dataTextStyle,
     selectionPosition: Int = text.length,
+    placeholder: String? = null,
     enabled: Boolean = true,
     focused: Boolean = false,
     onTextChange: (String) -> Unit = {},
@@ -48,8 +49,10 @@ fun FocusedTextFieldWithoutKeyboard(
     }) {
         val focusRequester = remember { FocusRequester() }
 
-        if (focused) {
-            LaunchedEffect(key1 = Unit) { focusRequester.requestFocus() }
+        LaunchedEffect(focused) {
+            if (focused) {
+                focusRequester.requestFocus()
+            }
         }
 
         val textFieldValue = TextFieldValue(
@@ -80,14 +83,23 @@ fun FocusedTextFieldWithoutKeyboard(
                     .widthIn(if (kind == DataKind.Distance) 45.dp else Dp.Unspecified)
                     .width(
                         with(density) {
-                            val extraWidth = if (kind == DataKind.SpeedPercentage && text.isNotEmpty()) 2.dp else 4.dp
-                            measurer.measure(text, textStyle, density = density, constraints = Constraints()).size.width.toDp() + extraWidth
+                            val measuredText = text.ifEmpty { placeholder.orEmpty() }
+                            val extraWidth = if (kind == DataKind.SpeedPercentage && measuredText.isNotEmpty()) 2.dp else 4.dp
+                            measurer.measure(measuredText, textStyle, density = density, constraints = Constraints()).size.width.toDp() + extraWidth
                         }
                     )
                     .disabledHorizontalPointerInputScroll(),
                 singleLine = true,
-                decorationBox = { fn ->
-                    Box(propagateMinConstraints = true) { fn() }
+                decorationBox = { innerTextField ->
+                    Box(propagateMinConstraints = true) {
+                        if (text.isEmpty() && placeholder != null) {
+                            Text(
+                                text = placeholder,
+                                style = textStyle.copy(color = MaterialTheme.colors.onBackground.copy(alpha = 0.38f))
+                            )
+                        }
+                        innerTextField()
+                    }
                 }
             )
         }

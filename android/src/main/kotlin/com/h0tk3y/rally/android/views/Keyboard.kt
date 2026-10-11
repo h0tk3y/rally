@@ -35,7 +35,7 @@ fun Keyboard(
             RIGHT to canMoveRight,
             REMOVE to canDelete,
             PERCENT to canSetPercent,
-            APPLY_LAST_PERCENT to canSetPercent,
+            APPLY_LAST_PERCENT to (canSetPercent && lastEnteredPercent != null),
             NOP to false,
         ) + GridKey.entries.filter { it.name.startsWith("N_") }.map {
             val n = it.name.substringAfter("N_").toInt()
