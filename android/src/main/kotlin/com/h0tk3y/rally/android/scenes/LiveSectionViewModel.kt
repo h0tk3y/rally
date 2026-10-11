@@ -2,34 +2,8 @@ package com.h0tk3y.rally.android.scenes
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.h0tk3y.rally.CommentLine
-import com.h0tk3y.rally.DefaultModifierValidator
-import com.h0tk3y.rally.DistanceKm
-import com.h0tk3y.rally.InputRoadmapParser
-import com.h0tk3y.rally.InputToTextSerializer
-import com.h0tk3y.rally.LineNumber
-import com.h0tk3y.rally.OdoDistanceCalculator
-import com.h0tk3y.rally.PlainSpeedKmh
-import com.h0tk3y.rally.PositionLine
-import com.h0tk3y.rally.PositionLineModifier
-import com.h0tk3y.rally.PositionLineModifier.AstroTime
-import com.h0tk3y.rally.PositionLineModifier.EndAvg
-import com.h0tk3y.rally.PositionLineModifier.EndAvgSpeed
-import com.h0tk3y.rally.PositionLineModifier.SetAvg
-import com.h0tk3y.rally.PositionLineModifier.SetAvgSpeed
-import com.h0tk3y.rally.PositionLineModifier.ThenAvgSpeed
-import com.h0tk3y.rally.RallyTimesIntervalsCalculator
-import com.h0tk3y.rally.RallyTimesResult
-import com.h0tk3y.rally.RallyTimesResultFailure
-import com.h0tk3y.rally.RoadmapInputLine
-import com.h0tk3y.rally.SpeedKmh
-import com.h0tk3y.rally.SpeedWithPercentage
-import com.h0tk3y.rally.SubsMatch
-import com.h0tk3y.rally.SubsMatcher
-import com.h0tk3y.rally.TimeDayHrMinSec
-import com.h0tk3y.rally.TimeHr
-import com.h0tk3y.rally.formatPercentage
-import com.h0tk3y.rally.strRound3
+import com.h0tk3y.rally.*
+import com.h0tk3y.rally.PositionLineModifier.*
 import com.h0tk3y.rally.android.LoadState
 import com.h0tk3y.rally.android.PreferenceRepository
 import com.h0tk3y.rally.android.db.DatabaseOperations
@@ -40,43 +14,16 @@ import com.h0tk3y.rally.android.racecervice.TelemetryPublicState
 import com.h0tk3y.rally.android.views.GridKey
 import com.h0tk3y.rally.android.views.StartOption
 import com.h0tk3y.rally.db.Section
-import com.h0tk3y.rally.isEndAvg
-import com.h0tk3y.rally.isSetAvg
-import com.h0tk3y.rally.isThenAvg
 import com.h0tk3y.rally.model.RaceEventKind
 import com.h0tk3y.rally.model.RaceEventKind.RACE_START
 import com.h0tk3y.rally.model.RaceEventKind.SECTION_START
 import com.h0tk3y.rally.model.RaceModel
 import com.h0tk3y.rally.model.RaceState
 import com.h0tk3y.rally.model.duration
-import com.h0tk3y.rally.modifier
-import com.h0tk3y.rally.preprocessRoadmap
-import com.h0tk3y.rally.roundTo3Digits
-import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.combineTransform
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.future.await
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
-import kotlinx.datetime.LocalDateTime
-import kotlinx.datetime.LocalTime
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.atStartOfDayIn
-import kotlinx.datetime.atTime
-import kotlinx.datetime.toInstant
-import kotlinx.datetime.toLocalDateTime
+import kotlinx.datetime.*
 import java.util.concurrent.CompletableFuture
 import kotlin.math.sign
 import kotlin.time.Clock
@@ -186,7 +133,7 @@ abstract class StatefulSectionViewModel(
             launch {
                 combineTransform(_preprocessedPositions, calibration) { a, b -> emit(a to b) }.collectLatest { (it, calibrationFactor) ->
                     val lines = it.filterIsInstance<PositionLine>()
-                    launch {
+                    this@launch.launch {
                         val odo = OdoDistanceCalculator.calculateOdoDistances(lines, calibrationFactor)
                         _odoValues.value = odo
 
@@ -565,7 +512,7 @@ class LiveSectionViewModel(
                                 it != currentItems.firstOrNull() &&
                                 it == currentItems.lastOrNull { d -> d is PositionLine && d.atKm == it.atKm }
                     }
-                    ?.takeIf { PositionLineModifier.IsSynthetic !in it.modifiers }
+                    ?.takeIf { IsSynthetic !in it.modifiers }
                     ?.takeIf { startModifiersToAdd.none { m -> m is SetAvg } || it.modifiers.none { m -> m is EndAvg } }
                     ?.let { addModifiersToItem(it, startModifiersToAdd) }
                     ?: maybeCreateItemAtDistanceFromModel(
@@ -753,7 +700,7 @@ class LiveSectionViewModel(
             launchDispatchable {
                 while (service?.raceState?.value?.let { it is RaceState.MovingWithRaceModel && !(it.raceModel.distanceGoingUp) } == true) {
                     if (soundFeedback) _soundFlow.emit(SoundEvent.BEEP_REVERSE)
-                    delay(3000L)
+                    delay(3000L.milliseconds)
                 }
             }
         }
@@ -860,7 +807,7 @@ class LiveSectionViewModel(
     }
 
     override fun addItem() {
-        createNewItem(1)?.let { launchDispatchable { selectLine(it, DataKind.Distance) } }
+        createNewItem()?.let { launchDispatchable { selectLine(it, DataKind.Distance) } }
     }
 
     override fun setSpeedLimitPercent(value: String?) {
@@ -1153,7 +1100,6 @@ class LiveSectionViewModel(
                             val newModifier = when (setAvg) {
                                 is SetAvgSpeed -> setAvg.copy(setavg = plainSpeed)
                                 is ThenAvgSpeed -> setAvg.copy(setavg = plainSpeed)
-                                else -> setAvg
                             }
                             val newItem = addModifiersToItem(item, listOf(newModifier))
                             val speedText = itemText(newItem, DataKind.AverageSpeed) ?: ""
@@ -1167,7 +1113,6 @@ class LiveSectionViewModel(
                         val newModifier = when (setAvg) {
                             is SetAvgSpeed -> setAvg.copy(setavg = speedWithPercent)
                             is ThenAvgSpeed -> setAvg.copy(setavg = speedWithPercent)
-                            else -> setAvg
                         }
                         val newItem = addModifiersToItem(item, listOf(newModifier))
                         moveFocusToModifier(newItem)
@@ -1219,7 +1164,6 @@ class LiveSectionViewModel(
         val newModifier = when (existingAvg) {
             is ThenAvgSpeed -> existingAvg.copy(setavg = newSpeed)
             is SetAvgSpeed -> existingAvg.copy(setavg = newSpeed)
-            else -> existingAvg
         }
         val newItem = addModifiersToItem(item, listOf(newModifier))
         val itemText = itemText(newItem, DataKind.SpeedPercentage) ?: ""
@@ -1247,16 +1191,19 @@ class LiveSectionViewModel(
             }
         }
 
-    private fun createNewItem(positionRelativeToCurrent: Int): LineNumber? {
+    private fun createNewItem(): LineNumber? {
         val items = currentItems
         val selectedIndex = items.indexOfFirst { it.lineNumber == _selectedLineIndex.value }
         if (selectedIndex != -1) {
+            val newItemIndex = selectedIndex + 1
             val positions = recalculateLineNumbers(
-                items.take(selectedIndex + positionRelativeToCurrent) +
-                        PositionLine(DistanceKm(0.0), LineNumber(1, 0), emptyList()) +
-                        items.drop(selectedIndex + positionRelativeToCurrent)
+                buildList {
+                    addAll(items.take(newItemIndex))
+                    add(PositionLine(DistanceKm(0.0), LineNumber(1, 0), emptyList()))
+                    addAll(items.drop(newItemIndex))
+                }
             )
-            val item = positions[selectedIndex + positionRelativeToCurrent]
+            val item = positions[newItemIndex]
             updateInputPositions(positions)
             return item.lineNumber
         }
@@ -1354,7 +1301,6 @@ class LiveSectionViewModel(
     }
 
     internal fun updateCurrentText(item: PositionLine, editorFocus: EditorFocus, newText: String): String {
-        val indexOfCurrentItem = currentItems.indexOf(item)
         val modifiers = item.modifiers
         val sanitizedText = sanitizeText(newText, editorFocus.kind)
         val newItem = when (editorFocus.kind) {
@@ -1369,7 +1315,6 @@ class LiveSectionViewModel(
                     when (it) {
                         is SetAvgSpeed -> it.copy(setavg = newSpeed)
                         is ThenAvgSpeed -> it.copy(setavg = newSpeed)
-                        else -> it
                     }
                 } else it
             })
@@ -1388,7 +1333,6 @@ class LiveSectionViewModel(
                         when (it) {
                             is SetAvgSpeed -> it.copy(setavg = newSpeed)
                             is ThenAvgSpeed -> it.copy(setavg = newSpeed)
-                            else -> it
                         }
                     } else it
                 })
@@ -1401,31 +1345,35 @@ class LiveSectionViewModel(
             })
 
         }
-        if (editorFocus.kind == DataKind.Distance) {
-            val allPositions = _inputPositions.value
-            val currentPosIndex = allPositions.indexOfFirst { it.lineNumber == item.lineNumber }
-            if (currentPosIndex != -1) {
+
+        val allPositions = _inputPositions.value
+        val currentPosIndex = allPositions.indexOfFirst { it.lineNumber == item.lineNumber }
+        if (currentPosIndex != -1) {
+            val (newPositions, newLineSelection) = if (editorFocus.kind == DataKind.Distance) {
                 val remaining = allPositions.filterIndexed { index, _ -> index != currentPosIndex }
                 val targetDistance = newItem.atKm
                 val indexToInsert = remaining.indices.firstOrNull { i ->
                     val it = remaining[i]
                     it is PositionLine && (it.atKm > targetDistance || (it.atKm == targetDistance && i >= currentPosIndex))
                 } ?: remaining.size
-                val newPositions = recalculateLineNumbers(
-                    remaining.take(indexToInsert) + newItem + remaining.drop(indexToInsert)
+                val updated = recalculateLineNumbers(
+                    buildList {
+                        addAll(remaining.take(indexToInsert))
+                        add(newItem)
+                        addAll(remaining.drop(indexToInsert))
+                    }
                 )
-                val resultingItem = newPositions[indexToInsert] as PositionLine
-                updateInputPositions(newPositions)
-                _selectedLineIndex.value = resultingItem.lineNumber
-                updateEditorConstraints()
+                val resultingItem = updated[indexToInsert] as PositionLine
+                updated to resultingItem.lineNumber
+            } else {
+                val allPositions = _inputPositions.value
+                allPositions.toMutableList().apply { set(currentPosIndex, newItem) } to item.lineNumber
             }
-        } else {
-            val allPositions = _inputPositions.value
-            val currentPosIndex = allPositions.indexOfFirst { it.lineNumber == item.lineNumber }
-            if (currentPosIndex != -1) {
-                updateInputPositions(allPositions.toMutableList().apply { set(currentPosIndex, newItem) })
-            }
+            updateInputPositions(newPositions)
+            updateEditorConstraints()
+            _selectedLineIndex.value = newLineSelection
         }
+
         return sanitizedText
     }
 
@@ -1527,8 +1475,8 @@ class StreamedSectionViewModel(coroutineDispatcher: CoroutineDispatcher) : State
             launch {
                 service?.raceState?.collectLatest {
                     _raceState.value = raceStateToUiState(it)
-                    delay(1000L)
-                    if (isActive) {
+                    delay(1000L.milliseconds)
+                    if (this@launch.isActive) {
                         _telemetryState.value = TelemetryPublicState.ReceivesStream(isDelayed = true)
                     }
                 }
