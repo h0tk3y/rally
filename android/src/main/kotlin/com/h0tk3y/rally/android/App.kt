@@ -147,7 +147,10 @@ fun App(
                             }
                             model.setRaceServiceConnector { connectToService(context, LocalRaceService::class.java, connection) }
                             model.setRaceServiceDisconnector(connection::disconnectIfConnected)
-                            DisposableEffect(context) { onDispose(connection::disconnectIfConnected) }
+                            DisposableEffect(connection) {
+                                probeExistingService(context, LocalRaceService::class.java, connection)
+                                onDispose(connection::disconnectIfConnected)
+                            }
 
                             if (withRace) {
                                 LaunchedEffect(sectionId) {
@@ -241,14 +244,4 @@ fun App(
             }
         }
     }
-}
-
-private fun <S : CommonRaceService> connectToService(
-    context: Context,
-    serviceClass: Class<S>,
-    connection: RaceServiceConnection<S>
-) {
-    val intent = Intent(context, serviceClass)
-    context.bindService(intent, connection, Context.BIND_AUTO_CREATE)
-    ContextCompat.startForegroundService(context, intent)
 }
