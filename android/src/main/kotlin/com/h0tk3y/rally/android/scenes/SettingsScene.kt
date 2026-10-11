@@ -27,7 +27,6 @@ import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.RadioButton
-import androidx.compose.material.RadioButtonDefaults
 import androidx.compose.material.Scaffold
 import androidx.compose.material.Switch
 import androidx.compose.material.Text
@@ -100,8 +99,6 @@ private fun LazyItemScope.TelemetrySource(
 ) {
     val telemetrySource by model.currentTelemetrySource.collectAsState(TelemetrySource.BT_OBD)
 
-    val rbColors = RadioButtonDefaults.colors(MaterialTheme.colors.primary)
-
     Text(stringResource(R.string.settingsTelemetrySource), style = MaterialTheme.typography.h6, modifier = Modifier.padding(16.dp))
 
     val isGps = telemetrySource == TelemetrySource.GPS
@@ -111,7 +108,7 @@ private fun LazyItemScope.TelemetrySource(
             .fillMaxWidth()
             .clickable { model.setTelemetrySource(TelemetrySource.GPS) }
     ) {
-        RadioButton(colors = rbColors, selected = isGps, onClick = null)
+        RadioButton(selected = isGps, onClick = null)
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(stringResource(R.string.telemetrySourceGps))
             Text(style = MaterialTheme.typography.caption, text = stringResource(R.string.telemetrySourceGpsHint))
@@ -125,7 +122,7 @@ private fun LazyItemScope.TelemetrySource(
             .fillMaxWidth()
             .clickable { model.setTelemetrySource(TelemetrySource.BT_OBD) }
     ) {
-        RadioButton(colors = rbColors, selected = isObd, onClick = null)
+        RadioButton(selected = isObd, onClick = null)
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(stringResource(R.string.telemetrySourceObd))
             Text(style = MaterialTheme.typography.caption, text = stringResource(R.string.telemetrySourceObdHint))
@@ -176,7 +173,7 @@ private fun LazyItemScope.TelemetrySource(
             .fillMaxWidth()
             .clickable { model.setTelemetrySource(TelemetrySource.OUTGAUGE) }
     ) {
-        RadioButton(colors = rbColors, selected = isOutgauge, onClick = null)
+        RadioButton(selected = isOutgauge, onClick = null)
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(stringResource(R.string.telemetrySourceOutgauge))
             Text(style = MaterialTheme.typography.caption, text = stringResource(R.string.telemetrySourceOutgaugeHint))
@@ -224,7 +221,7 @@ private fun LazyItemScope.TelemetrySource(
         Modifier.clickable { model.setTelemetrySource(TelemetrySource.SIMULATION) }
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            RadioButton(colors = rbColors, selected = telemetrySource == TelemetrySource.SIMULATION, onClick = null)
+            RadioButton(selected = telemetrySource == TelemetrySource.SIMULATION, onClick = null)
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(stringResource(R.string.telemetrySourceSimulation))
                 Text(style = MaterialTheme.typography.caption, text = stringResource(R.string.telemetrySourceSimulationHint))
@@ -365,20 +362,19 @@ private fun Allowance(
     model: SettingsViewModel,
 ) {
     val allowance by model.currentAllowance.collectAsState(null)
-    val rbColors = RadioButtonDefaults.colors(MaterialTheme.colors.primary)
 
     Text(stringResource(R.string.settingsAllowance), style = MaterialTheme.typography.h6, modifier = Modifier.padding(16.dp))
 
     SettingsRow(
         Modifier.clickable { model.setAllowance(null) }
     ) {
-        RadioButton(colors = rbColors, selected = allowance == null, onClick = null)
+        RadioButton(selected = allowance == null, onClick = null)
         Text(stringResource(R.string.allowanceNone))
     }
     SettingsRow(
         Modifier.clickable { model.setAllowance(TimeAllowance.BY_TEN_FULL) }
     ) {
-        RadioButton(colors = rbColors, selected = allowance == TimeAllowance.BY_TEN_FULL, onClick = null)
+        RadioButton(selected = allowance == TimeAllowance.BY_TEN_FULL, onClick = null)
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(stringResource(R.string.allowanceT10Down))
             Text(style = MaterialTheme.typography.caption, text = stringResource(R.string.allowanceT10DownHint))
@@ -387,7 +383,7 @@ private fun Allowance(
     SettingsRow(
         Modifier.clickable { model.setAllowance(TimeAllowance.BY_TEN_FULL_PLUS_ONE) }
     ) {
-        RadioButton(colors = rbColors, selected = allowance == TimeAllowance.BY_TEN_FULL_PLUS_ONE, onClick = null)
+        RadioButton(selected = allowance == TimeAllowance.BY_TEN_FULL_PLUS_ONE, onClick = null)
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(stringResource(R.string.allowanceT10Up))
             Text(style = MaterialTheme.typography.caption, text = stringResource(R.string.allowanceT10UpHint))
