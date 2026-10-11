@@ -22,6 +22,7 @@ import androidx.compose.material.Button
 import androidx.compose.material.Divider
 import androidx.compose.material.DropdownMenu
 import androidx.compose.material.DropdownMenuItem
+import androidx.compose.material.ExtendedFloatingActionButton
 import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
@@ -206,6 +207,23 @@ fun SectionScene(
         }
     }
 
+    val isLargeScreen = LocalConfiguration.current.screenWidthDp >= 600
+
+    val context = LocalContext.current
+    val launchServiceAfterObtainingPermission = permissionRequester(whenObtained = {
+        (model as? RaceModelControls)?.enterRaceMode()
+    }, whenFailedToObtain = {
+        Toast.makeText(context, context.getString(R.string.toastGrantPermission), Toast.LENGTH_LONG).show()
+    })
+
+    val onStartRaceMode: () -> Unit = {
+        if (raceState is RaceUiState.NoRaceServiceConnection) {
+            launchServiceAfterObtainingPermission()
+        } else {
+            (model as? RaceModelControls)?.enterRaceMode()
+        }
+    }
+
     @Composable
     fun layout(content: @Composable (listModifier: Modifier, keyboardModifier: Modifier) -> Unit) {
         if (LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE) {
@@ -234,6 +252,22 @@ fun SectionScene(
     layout { listModifier, keyboardModifier ->
         Scaffold(
             modifier = listModifier.imePadding(),
+            floatingActionButton = {
+                if (!isLargeScreen && !editorState.isEnabled && !raceUiVisible && model is RaceModelControls) {
+                    ExtendedFloatingActionButton(
+                        onClick = onStartRaceMode,
+                        icon = {
+                            Icon(
+                                imageVector = Icons.Rounded.Flag,
+                                contentDescription = null
+                            )
+                        },
+                        text = {
+                            Text(stringResource(R.string.buttonRaceMode))
+                        }
+                    )
+                }
+            },
             topBar = {
                 TopAppBar(
                     backgroundColor = MaterialTheme.colors.surface,
@@ -267,18 +301,26 @@ fun SectionScene(
                             Spacer(Modifier.width(4.dp))
                         }
 
+                        if (isLargeScreen && !editorState.isEnabled && !raceUiVisible && model is RaceModelControls) {
+                            Button(onClick = onStartRaceMode) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Flag,
+                                        contentDescription = stringResource(R.string.buttonRaceMode)
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(stringResource(R.string.buttonRaceMode))
+                                }
+                            }
+
+                            Spacer(Modifier.width(4.dp))
+                        }
+
                         IconButton(onClick = { showMenu = true }) {
                             Icon(Icons.Default.MoreVert, stringResource(R.string.showMenu))
                         }
                         DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                             if (model is RaceModelControls) {
-                                val context = LocalContext.current
-                                val launchServiceAfterObtainingPermission = permissionRequester(whenObtained = {
-                                    model.enterRaceMode()
-                                }, whenFailedToObtain = {
-                                    Toast.makeText(context, context.getString(R.string.toastGrantPermission), Toast.LENGTH_LONG).show()
-                                })
-
                                 if (raceState !is RaceUiState.RaceNotStarted) {
                                     DropdownMenuItem(onClick = {
                                         if (editorState.isEnabled && model is EditableSectionViewModel) {

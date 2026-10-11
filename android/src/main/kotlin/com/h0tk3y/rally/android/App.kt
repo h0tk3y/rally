@@ -2,12 +2,8 @@ package com.h0tk3y.rally.android
 
 import android.content.Context
 import android.content.Intent
-import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Surface
 import androidx.compose.material.Text
-import androidx.compose.material.darkColors
-import androidx.compose.material.lightColors
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -114,10 +110,9 @@ fun App(
     val backStack = rememberNavBackStack(HomeScene())
     val navigation = remember { NavigationModel(backStack) }
 
-    MaterialTheme(if (isSystemInDarkTheme()) darkColors() else lightColors()) {
-        applyTheme {
-            Surface {
-                NavDisplay(
+    applyTheme {
+        Surface {
+            NavDisplay(
                     backStack,
                     onBack = navigation::popBack,
                     entryDecorators = listOf(
@@ -243,5 +238,4 @@ fun App(
                 )
             }
         }
-    }
 }
