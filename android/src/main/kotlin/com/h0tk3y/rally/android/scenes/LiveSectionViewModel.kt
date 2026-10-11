@@ -344,6 +344,7 @@ class LiveSectionViewModel(
 
     override fun onServiceConnected(raceService: PrimaryRaceService) {
         service = raceService
+        _raceUiVisible.value = true
 
         serviceRelatedJob = launchDispatchable {
             launch {
