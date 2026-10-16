@@ -106,7 +106,8 @@
     <string name="raceGoingInAnotherSection">Race going in another section</string>
     <string name="raceNotStarted">Race not started</string>
     <string name="stoppedTimeDistancePrefix">"Stopped: "</string>
-    <string name="raceStatusHint">"Race status: "</string>
+    <string name="raceStatusRaceGoing">Race status: race going</string>
+    <string name="raceStatusSectionGoing">Race status: section going</string>
     <string name="allowanceLetter">A</string>
     <string name="switchDirectionHint">Switch direction</string>
     <string name="buttonMinus01" translatable="false">-0.1</string>

@@ -97,7 +97,8 @@
     <string name="raceGoingInAnotherSection">Идёт гонка по другой секции</string>
     <string name="raceNotStarted">Гонка не запущена</string>
     <string name="stoppedTimeDistancePrefix">"Остановка: "</string>
-    <string name="raceStatusHint">"Статус гонки: "</string>
+    <string name="raceStatusRaceGoing">Статус гонки: идёт ДС</string>
+    <string name="raceStatusSectionGoing">Статус гонки: идёт секция</string>
     <string name="allowanceLetter">Л</string>
     <string name="switchDirectionHint">Смена направления</string>
     <string name="buttonApplyOdo">Применить</string>
