@@ -125,8 +125,6 @@ fun RaceView(
     setDebugSpeed: (Int) -> Unit,
     raceControls: RaceModelControls?
 ) {
-    val time by timeFlow.collectAsState()
-
     val isTablet = isTablet()
 
     var showRememberedSpeedControls by remember { mutableStateOf(false) }
@@ -156,7 +154,7 @@ fun RaceView(
                     moreRaceControls()
                 }
 
-                RaceStatus(race, time, raceControls, distanceLocalizer, sectionDistanceLocalizer, allowance, selectedPosition)
+                RaceStatus(race, timeFlow, raceControls, distanceLocalizer, sectionDistanceLocalizer, allowance, selectedPosition)
                 if (raceControls != null) {
                     RaceControls(
                         race,
@@ -331,7 +329,7 @@ private fun satsString(sats: Int) = LocalContext.current.getString(R.string.satS
 @Composable
 private fun RaceStatus(
     race: RaceUiState,
-    time: Instant,
+    timeFlow: StateFlow<Instant>,
     raceControls: RaceModelControls?,
     distanceLocalizer: TimeDistanceLocalizer?,
     sectionDistanceLocalizer: TimeDistanceLocalizer?,
@@ -351,9 +349,9 @@ private fun RaceStatus(
                         Text(stringResource(R.string.finishedTimeDistancePrefix) + raceTimeDistanceString(race.lastFinishAt, race.lastFinishModel))
                     }
                     RaceTimeDistance(
-                        time, race, selectedPosition, isSectionTime = false, raceControls, distanceLocalizer, allowance
+                        timeFlow, race, selectedPosition, isSectionTime = false, raceControls, distanceLocalizer, allowance
                     )
-                    RaceSpeed(time, race)
+                    RaceSpeed(timeFlow, race)
                 }
             }
 
@@ -363,7 +361,7 @@ private fun RaceStatus(
                         Text(stringResource(R.string.finishedTimeDistancePrefix) + raceTimeDistanceString(race.finishedAt, race.raceModelAtFinish))
                     }
                     RaceTimeDistance(
-                        time, race, selectedPosition, isSectionTime = true, raceControls, sectionDistanceLocalizer, allowance
+                        timeFlow, race, selectedPosition, isSectionTime = true, raceControls, sectionDistanceLocalizer, allowance
                     )
                     GoingSpeed(race)
                 }
@@ -383,7 +381,7 @@ private fun RaceStatus(
 
 @Composable
 private fun RaceTimeDistance(
-    time: Instant,
+    timeFlow: StateFlow<Instant>,
     race: RaceUiState,
     selectedPosition: PositionLine?,
     isSectionTime: Boolean,
@@ -391,6 +389,7 @@ private fun RaceTimeDistance(
     distanceLocalizer: TimeDistanceLocalizer?,
     allowance: TimeAllowance?
 ) {
+    val time by timeFlow.collectAsState()
     val raceModel = when (race) {
         is RaceUiState.RaceGoing -> race.raceModel
         is RaceUiState.Going -> race.raceModel
@@ -528,7 +527,8 @@ private fun RaceTimeDistance(
 }
 
 @Composable
-private fun RaceSpeed(time: Instant, race: RaceUiState.RaceGoing) {
+private fun RaceSpeed(timeFlow: StateFlow<Instant>, race: RaceUiState.RaceGoing) {
+    val time by timeFlow.collectAsState()
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Absolute.SpaceBetween) {
         Text(
             "v=${race.raceModel.instantSpeed.valueKmh.roundToInt()}" + stringResource(R.string.perHourSuffix),
