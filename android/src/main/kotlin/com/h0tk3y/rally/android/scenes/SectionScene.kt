@@ -46,6 +46,7 @@ import androidx.compose.material.icons.rounded.Flag
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -156,7 +157,10 @@ fun SectionScene(
         else -> remember { mutableStateOf(EditorFocus(0, Distance)) }
     }
     val allowance by model.timeAllowance.collectAsState(null)
-    val raceState by model.raceState.collectAsState(RaceUiState.NoRaceServiceConnection)
+    val raceStateState = model.raceState.collectAsState(RaceUiState.NoRaceServiceConnection)
+    val raceState by raceStateState
+    // The race state changes with every telemetry update; read this flag where the details are not needed:
+    val inTimedRace by remember(raceStateState) { derivedStateOf { raceStateState.value is RaceUiState.RaceGoing } }
     val rememberSpeed by model.rememberSpeed.collectAsState(null)
     val raceUiVisible by model.raceUiVisible.collectAsState(false)
     val telemetryState by model.telemetryState.collectAsState(TelemetryPublicState.NotInitialized)
@@ -462,10 +466,11 @@ fun SectionScene(
                     when (section) {
                         is LoadState.Loaded -> {
                             val hasErrors = results is RallyTimesResultFailure
-                            val positionsToDisplay =
+                            val positionsToDisplay = remember(editorState.isEnabled, positions, preprocessed, hasErrors) {
                                 if (editorState.isEnabled) positions else preprocessed.filter {
                                     !hasErrors || it !is PositionLine || it.modifier<IsSynthetic>() == null
                                 }
+                            }
                             val listState = rememberLazyListState()
                             PositionsListView(
                                 listState,
@@ -480,7 +485,7 @@ fun SectionScene(
                                 subsMatch,
                                 allowance,
                                 !editorState.isEnabled && raceUiVisible,
-                                raceState,
+                                inTimedRace,
                                 // Let the last items scroll above the FAB: FAB height (56dp) + its margin (16dp) + a gap (16dp)
                                 contentPadding = if (showRaceModeFab) PaddingValues(bottom = 88.dp) else PaddingValues()
                             )

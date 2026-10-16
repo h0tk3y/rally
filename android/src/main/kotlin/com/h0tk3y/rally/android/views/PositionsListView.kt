@@ -55,12 +55,10 @@ fun PositionsListView(
     subsMatch: SubsMatch,
     allowance: TimeAllowance?,
     raceViewShown: Boolean,
-    raceState: RaceUiState,
+    inTimedRace: Boolean,
     contentPadding: PaddingValues = PaddingValues()
 ) {
-    val inTimedRace = raceState is RaceUiState.RaceGoing
-    
-    val time by produceState(Clock.System.now(), raceState) {
+    val time by produceState(Clock.System.now(), inTimedRace) {
         if (inTimedRace) {
             while (true) {
                 val time = Clock.System.now()
@@ -99,11 +97,16 @@ fun PositionsListView(
                 }
             }
         }
-        val errorsByLine = if (results is RallyTimesResultFailure) results.failures.groupBy { it.line } else emptyMap()
+        val errorsByLine = remember(results) {
+            if (results is RallyTimesResultFailure) results.failures.groupBy { it.line } else emptyMap()
+        }
+        val warningsByLine = remember(results) {
+            if (results is RallyTimesResultSuccess) results.warnings.groupBy { it.line } else emptyMap()
+        }
 
         LazyColumn(state = listState, contentPadding = contentPadding) {
 
-            itemsIndexed(positionsList) { _, line ->
+            itemsIndexed(positionsList, contentType = { _, line -> line is PositionLine }) { _, line ->
                 val isSelectedLine = line.lineNumber == selectedLineIndex
                 val isRaceCurrentLine = line.lineNumber == raceCurrentLineIndex
                 val background = when {
@@ -225,7 +228,7 @@ fun PositionsListView(
 
                                     is RallyTimesResultSuccess -> {
                                         if (!isEditorEnabled) {
-                                            val warningsInCurrentLine = results.warnings.filter { it.line == line }
+                                            val warningsInCurrentLine = warningsByLine[line].orEmpty()
                                             val go = results.goAtAvgSpeed[line.lineNumber]
                                             if (warningsInCurrentLine.isNotEmpty() || go != null) {
                                                 if (go != null && go.valueKmh >= 0) {
