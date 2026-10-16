@@ -398,7 +398,10 @@ private fun RaceTimeDistance(
     if (raceModel != null) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(if (race is RaceUiState.RaceGoing) Icons.Default.OutlinedFlag else Icons.Default.Timer, stringResource(R.string.raceStatusHint) + race)
+                Icon(
+                    if (race is RaceUiState.RaceGoing) Icons.Default.OutlinedFlag else Icons.Default.Timer,
+                    stringResource(if (race is RaceUiState.RaceGoing) R.string.raceStatusRaceGoing else R.string.raceStatusSectionGoing)
+                )
                 Spacer(Modifier.width(8.dp))
                 Text(timeString(time, raceModel), style = LocalCustomTypography.current.raceIndicatorText)
             }
