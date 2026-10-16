@@ -55,7 +55,8 @@ fun PositionsListView(
     subsMatch: SubsMatch,
     allowance: TimeAllowance?,
     raceViewShown: Boolean,
-    raceState: RaceUiState
+    raceState: RaceUiState,
+    contentPadding: PaddingValues = PaddingValues()
 ) {
     val inTimedRace = raceState is RaceUiState.RaceGoing
     
@@ -87,10 +88,12 @@ fun PositionsListView(
         }
         LaunchedEffect(key1 = positionsList, key2 = editorFocus, key3 = selectedLineIndex) {
             val selectedIndex = positionsList.indexOfFirst { it.lineNumber == selectedLineIndex }
-            val visibleItemsInfo = listState.layoutInfo.visibleItemsInfo
-            if ((visibleItemsInfo.firstOrNull()?.index ?: 0) > selectedIndex ||
-                (visibleItemsInfo.lastOrNull()?.index ?: 0) < selectedIndex
-            ) {
+            val layoutInfo = listState.layoutInfo
+            // Visible items also include the ones laid out in the content padding (e.g. under the FAB),
+            // so only consider the selected item visible if it ends above the bottom padding:
+            val visibleAreaEnd = layoutInfo.viewportEndOffset - layoutInfo.afterContentPadding
+            val selectedItemInfo = layoutInfo.visibleItemsInfo.find { it.index == selectedIndex }
+            if (selectedItemInfo == null || selectedItemInfo.offset + selectedItemInfo.size > visibleAreaEnd) {
                 if (selectedIndex != -1) {
                     listState.animateScrollToItem(if (selectedIndex >= 3) selectedIndex - 3 else selectedIndex)
                 }
@@ -98,7 +101,7 @@ fun PositionsListView(
         }
         val errorsByLine = if (results is RallyTimesResultFailure) results.failures.groupBy { it.line } else emptyMap()
 
-        LazyColumn(state = listState) {
+        LazyColumn(state = listState, contentPadding = contentPadding) {
 
             itemsIndexed(positionsList) { _, line ->
                 val isSelectedLine = line.lineNumber == selectedLineIndex

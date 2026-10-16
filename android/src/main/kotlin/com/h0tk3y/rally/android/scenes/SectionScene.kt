@@ -9,6 +9,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -208,6 +209,7 @@ fun SectionScene(
     }
 
     val isLargeScreen = LocalConfiguration.current.screenWidthDp >= 600
+    val showRaceModeFab = !isLargeScreen && !editorState.isEnabled && !raceUiVisible && model is RaceModelControls
 
     val context = LocalContext.current
     val launchServiceAfterObtainingPermission = permissionRequester(whenObtained = {
@@ -253,7 +255,7 @@ fun SectionScene(
         Scaffold(
             modifier = listModifier.imePadding(),
             floatingActionButton = {
-                if (!isLargeScreen && !editorState.isEnabled && !raceUiVisible && model is RaceModelControls) {
+                if (showRaceModeFab) {
                     ExtendedFloatingActionButton(
                         onClick = onStartRaceMode,
                         icon = {
@@ -478,7 +480,9 @@ fun SectionScene(
                                 subsMatch,
                                 allowance,
                                 !editorState.isEnabled && raceUiVisible,
-                                raceState
+                                raceState,
+                                // Let the last items scroll above the FAB: FAB height (56dp) + its margin (16dp) + a gap (16dp)
+                                contentPadding = if (showRaceModeFab) PaddingValues(bottom = 88.dp) else PaddingValues()
                             )
                         }
 
