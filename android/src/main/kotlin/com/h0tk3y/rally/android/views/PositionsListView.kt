@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.Divider
+import androidx.compose.material.LocalTextStyle
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -17,7 +18,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.h0tk3y.rally.*
 import com.h0tk3y.rally.PositionLineModifier.IsSynthetic
@@ -236,7 +241,11 @@ fun PositionsListView(
                                                         modifier = Modifier
                                                             .alpha(0.5f)
                                                             .align(Alignment.CenterVertically)
-                                                            .padding(start = 4.dp),
+                                                            .padding(start = 4.dp)
+                                                            // '➠' is drawn with a fallback font, whose line spacing would make the item taller;
+                                                            // take only the height of plain text, and let the glyph overflow it:
+                                                            .height(plainTextHeight(LocalTextStyle.current))
+                                                            .wrapContentHeight(unbounded = true),
                                                         text = "➠${go.valueKmh.strRound1()}",
                                                     )
                                                 }
@@ -329,6 +338,16 @@ private fun CountdownToPosition(time: Instant, currentLineAtime: TimeDayHrMinSec
             text = text,
             modifier = Modifier.padding(start = 4.dp, end = 4.dp)
         )
+    }
+}
+
+/** The height of a line of text in [style] that has no characters needing a fallback font. */
+@Composable
+private fun plainTextHeight(style: TextStyle): Dp {
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    return remember(style, measurer, density) {
+        with(density) { measurer.measure("0", style, density = density).size.height.toDp() }
     }
 }
 
