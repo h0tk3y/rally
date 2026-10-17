@@ -31,7 +31,7 @@ You do not need any computer knowledge. You only need to know how a TSD rally wo
 The app does three jobs.
 
 1. **It times you in the car.** In race mode it measures the distance you drive (from GPS, from the car through a small reader plugged into the car, or from a driving game for training). It shows the clock, your distance, and how many seconds you are early or late. It can also send all of this to a second phone for the driver.
-2. **It records the road book as you drive.** Before the rally you only create a section: its length, its average speed or time, and its start time. In the car, you tap a button when a regularity starts, when the set speed changes and when the regularity ends. The app writes each of these into the section's list of points, the **roadmap**.
+2. **It records the road book as you drive.** When you get the road book, right before the start, you only create a section: its length, its average speed or time, and its start time. In the car, you tap a button when a regularity starts, when the set speed changes and when the regularity ends. The app writes each of these into the section's list of points, the **roadmap**.
 3. **It calculates the times.** From the roadmap, the app calculates how long after the start you must pass each point, and at what time of day. When a regularity lies inside a liaison with a fixed total time, it also tells you what speed to drive on the rest of the liaison.
 
 You can also change the roadmap by hand with the app's editor. This is for fixing mistakes and for quick calculations; see [Editing positions (advanced)](#10-editing-positions-advanced).
@@ -58,7 +58,9 @@ You can also change the roadmap by hand with the app's editor. This is for fixin
 
 ## 3. Quick start
 
-**Before the rally:**
+**Some time before the rally:** if you use a reader in the car (OBD), calibrate it on an odometer check route (see [Calibration](#122-calibration)). With GPS you can skip this.
+
+**When you get the road book, right before the start:**
 
 1. On the first screen, tap **+** (Create section).
 2. Type a name, the length of the section, the average speed or the time, and the start time. Tap **Save**. The app opens the new section. That is all you need to prepare.
@@ -396,12 +398,22 @@ Turn sounds on in Settings (**Play sounds on race mode actions**). The app then 
 
 ## 7. A rally day with the app
 
-### 7.1 The night before
+### 7.1 Some time before the rally
+
+- If you use a reader in the car (OBD), calibrate it: drive an odometer check route, for example the one the organisers give, and set the calibration factor (see [Calibration](#122-calibration)). The factor stays in Settings until you change it.
+- Learn the app with the **Simulation** distance source (see [Measuring the distance](#11-measuring-the-distance)), or with a driving game (**OutGauge**).
+- If the driver uses a second phone, set it up (see [The driver's screen](#13-the-drivers-screen-driver-hud)).
+
+### 7.2 When you get the road book
+
+In a regularity rally you get the road book only shortly before the start. The app needs very little from it:
 
 1. Make one section for each part of the road book that starts at a given time of day, for example from one time control to the next (see [Create a section](#41-create-a-section)). Type its length, its time or average speed, and its start time.
-2. Write down, for each regularity, its set speed. You will tap it with the **v** button before the regularity starts.
+2. Mark in the road book, for each regularity, its set speed. You will tap it with the **v** button before the regularity starts.
 
-### 7.2 Before the start
+Everything else (where each regularity starts and ends, and where its speed changes) you record in race mode as you drive.
+
+### 7.3 Before the start
 
 - Set the phone's time to automatic, and compare it with the official clock.
 - Let the app run without battery limits, and connect the phone to power.
@@ -409,11 +421,11 @@ Turn sounds on in Settings (**Play sounds on race mode actions**). The app then 
 - If the driver uses a second phone, check that it shows **Data ✔**.
 - Turn sounds on or off in Settings.
 
-### 7.3 At the start
+### 7.4 At the start
 
 Select the start position (0.0). Tap **On 10:00:00** in the **Go** row. The clock counts down to the start. If the marshal gives you a different minute, tap **Now** in the Go row at the moment you start instead.
 
-### 7.4 A regularity inside a liaison
+### 7.5 A regularity inside a liaison
 
 1. Before the regularity, tap the **v** button and tap its set speed.
 2. At the start point of the regularity, tap **Now from …** in the **Start race:** row. (If you selected the start point in the list and the app's distance is not exactly there, use the **Now from …** button with three decimals: it also sets your distance to that point.)
@@ -423,28 +435,28 @@ Select the start position (0.0). Tap **On 10:00:00** in the **Go** row. The cloc
 
 If the regularity has its own start time, it is easiest to make it a separate section with that start time, and start it with **On 10:20:00** in the **Race** row.
 
-### 7.5 Moving to the next section
+### 7.6 Moving to the next section
 
 Race mode times one section at a time. At the end of a section:
 
 1. Tap **Finish race** (if a race timer runs), then **Stop**.
 2. Open the menu and tap **Drop race state and stop**.
 3. Go back to the section list and open the next section.
-4. Tap **Race mode**, select the start position and start as in [At the start](#73-at-the-start).
+4. Tap **Race mode**, select the start position and start as in [At the start](#74-at-the-start).
 
 Do this while you wait at the time control, before your next start time.
 
-### 7.6 Stops inside a regularity
+### 7.7 Stops inside a regularity
 
 The app has no pause. If a marshal stops you and gives you a new start time, tap **Finish race** while you wait. Then start a new race with **Now from …** at the moment you start again.
 
-### 7.7 On the road
+### 7.8 On the road
 
 - **Known points.** When you pass a point with an exact distance in the road book, correct the distance (see [Correcting the distance](#67-correcting-the-distance)).
 - **Secret checks.** The early/late value is correct at any point of the road, not only at the positions. Watch it all the time.
 - **Mistakes.** For a wrong turn, use **↶** (see [Correcting the distance](#67-correcting-the-distance)). For a wrong speed button, see [Speed buttons](#68-speed-buttons-and-the-v-button). If you tapped **Finish race** too early, tap **Undo finish race**. If you tapped **Stop** too early, tap **Undo stop**.
 
-### 7.8 After the stage
+### 7.9 After the stage
 
 - Open the **Event log** to see when each timer started and finished, and how long it ran.
 - The section now holds the regularities you drove. You can keep it to look at later, or delete it.
@@ -753,7 +765,7 @@ Choose the source in Settings, under **Telemetry source**. You can change it whi
 |---|---|
 | **GPS** | Uses the phone's location. You need nothing else. It works best with a clear view of the sky. Calibration does not change the GPS distance. |
 | **OBD over Bluetooth** | Reads the car's speed from a small reader (sold as "ELM327") that you plug into the car's diagnostic socket, usually under the dashboard. The app adds up the distance from the speed. Pair the reader with the phone first: plug it in, turn on the ignition, and choose the reader in the phone's Bluetooth settings. |
-| **OutGauge** | Receives the speed from a driving game on a computer (for example BeamNG) over Wi-Fi. For training at home. |
+| **OutGauge** | Receives the speed from a driving game on a computer (for example BeamNG) over Wi-Fi. For training at home. Calibration does not change it. |
 | **Simulation** | For testing. A **Simulate speed:** slider in the race panel sets the speed from 0 to 100 km/h. |
 
 The race panel shows the state of the source at the top. Tap it to open Settings. Orange text means a problem.
@@ -796,19 +808,16 @@ The car measures distance a little differently from the road book. The **calibra
 
 > calibration factor = distance the car measures ÷ distance in the road book
 
-For example, if the road book says 10.00 km and the car measures 10.20 km, the factor is 1.02. The app divides the speed from the reader (or the game) by this factor. It does not change the GPS distance.
-
-The calibration fields appear in Settings only when the source is **OBD over Bluetooth**. To set a factor for OutGauge, choose OBD, set the factor, and choose OutGauge again.
+For example, if the road book says 10.00 km and the car measures 10.20 km, the factor is 1.02. The app divides the speed from the reader by this factor. It applies only to **OBD over Bluetooth**: it does not change the GPS distance or the speed from a driving game. The calibration fields appear in Settings only when the source is **OBD over Bluetooth**.
 
 **To calibrate on an odometer check route** (with **OBD over Bluetooth** as the source):
 
-1. In Settings, set the calibration factor to **1** and tap **Save**. (The app calculates the new factor from the distance it measured. With an old factor, that distance is already corrected, and the new factor comes out wrong.)
-2. Make a section for the check route, starting at 0.0.
-3. At the start of the route, turn race mode on, select the 0.0 position and tap **Now** in the Go row.
-4. Drive the route, and stop the car at its end. You may tap **Stop**, but do not use **Drop race state and stop** before you calibrate.
-5. Open **Settings** from the section menu (three dots), not from the section list. Settings now shows **Odometer distance:**. In this field, "odometer" means the distance the app measured from the reader, not the car's dashboard.
-6. Type the exact distance from the road book in **Exact ODO check distance**. The app fills in the calibration factor.
-7. Tap **Save**.
+1. Make a section for the check route, starting at 0.0.
+2. At the start of the route, turn race mode on, select the 0.0 position and tap **Now** in the Go row.
+3. Drive the route, and stop the car at its end. You may tap **Stop**, but do not use **Drop race state and stop** before you calibrate.
+4. Open **Settings** from the section menu (three dots), or tap the distance source text at the top of the race panel. Do not open it from the section list. Settings now shows **Odometer distance:**. In this field, "odometer" means the distance the app measured from the reader, not the car's dashboard.
+5. Type the exact distance of the check route in **Exact ODO check distance**. The app fills in the calibration factor. The factor you had before does not matter: the app takes it into account.
+6. Tap **Save**.
 
 ### 12.3 Send data to the driver's device
 
