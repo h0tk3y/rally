@@ -39,6 +39,8 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.rounded.Cancel
 import androidx.compose.material.icons.rounded.Done
 import androidx.compose.material.icons.rounded.Edit
@@ -165,6 +167,11 @@ fun SectionScene(
     val raceUiVisible by model.raceUiVisible.collectAsState(false)
     val telemetryState by model.telemetryState.collectAsState(TelemetryPublicState.NotInitialized)
     val speedLimitPercent by model.speedLimitPercent.collectAsState(null)
+    val panelsSwapped by when (model) {
+        is PanelSwapControls -> model.panelsSwapped.collectAsState()
+        else -> remember { mutableStateOf(false) }
+    }
+    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
 
     var showDuplicateDialog by rememberSaveable { mutableStateOf(false) }
     var showRenameDialog by rememberSaveable { mutableStateOf(false) }
@@ -232,7 +239,7 @@ fun SectionScene(
 
     @Composable
     fun layout(content: @Composable (listModifier: Modifier, keyboardModifier: Modifier) -> Unit) {
-        if (LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+        if (isLandscape) {
             Row(Modifier.imePadding()) {
                 val listModifier = Modifier
                     .fillMaxHeight()
@@ -255,251 +262,272 @@ fun SectionScene(
         }
     }
 
-    layout { listModifier, keyboardModifier ->
-        Scaffold(
-            modifier = listModifier.imePadding(),
-            floatingActionButton = {
-                if (showRaceModeFab) {
-                    ExtendedFloatingActionButton(
-                        onClick = onStartRaceMode,
-                        icon = {
-                            Icon(
-                                imageVector = Icons.Rounded.Flag,
-                                contentDescription = null
-                            )
-                        },
-                        text = {
-                            Text(stringResource(R.string.buttonRaceMode))
-                        }
+    @Composable
+    fun raceModeFab() {
+        if (showRaceModeFab) {
+            ExtendedFloatingActionButton(
+                onClick = onStartRaceMode,
+                icon = {
+                    Icon(
+                        imageVector = Icons.Rounded.Flag,
+                        contentDescription = null
                     )
+                },
+                text = {
+                    Text(stringResource(R.string.buttonRaceMode))
                 }
-            },
-            topBar = {
-                TopAppBar(
-                    backgroundColor = MaterialTheme.colors.surface,
-                    title = {
-                        Text(
-                            when (currentSection) {
-                                is LoadState.Loaded -> currentSection.value.name
-                                is LoadState.LOADING -> stringResource(R.string.stateLoading)
-                                LoadState.EMPTY -> ""
-                                LoadState.FAILED -> stringResource(R.string.stateFailedToLoadSection)
-                            }
-                        )
-                    },
-                    navigationIcon = {
-                        IconButton(onClick = { onBack() }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
-                        }
-                    },
-                    actions = {
-                        if (model is EditableSectionViewModel) {
-                            Button(onClick = { model.switchEditor() }) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        imageVector = if (!editorState.isEnabled) Icons.Rounded.Edit else Icons.Rounded.Done,
-                                        stringResource(R.string.buttonSwitchEditor)
-                                    )
-                                    Text(if (editorState.isEnabled) stringResource(R.string.buttonCalculate) else stringResource(R.string.buttonEdit))
-                                }
-                            }
+            )
+        }
+    }
 
-                            Spacer(Modifier.width(4.dp))
-                        }
-
-                        if (isLargeScreen && !editorState.isEnabled && !raceUiVisible && model is RaceModelControls) {
-                            Button(onClick = onStartRaceMode) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Flag,
-                                        contentDescription = stringResource(R.string.buttonRaceMode)
-                                    )
-                                    Spacer(Modifier.width(4.dp))
-                                    Text(stringResource(R.string.buttonRaceMode))
-                                }
-                            }
-
-                            Spacer(Modifier.width(4.dp))
-                        }
-
-                        IconButton(onClick = { showMenu = true }) {
-                            Icon(Icons.Default.MoreVert, stringResource(R.string.showMenu))
-                        }
-                        DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                            if (model is RaceModelControls) {
-                                if (raceState !is RaceUiState.RaceNotStarted) {
-                                    DropdownMenuItem(onClick = {
-                                        if (editorState.isEnabled && model is EditableSectionViewModel) {
-                                            model.switchEditor()
-                                            when (raceState) {
-                                                is RaceUiState.NoRaceServiceConnection -> launchServiceAfterObtainingPermission()
-                                                else -> Unit
-                                            }
-                                        } else when (raceState) {
-                                            is RaceUiState.NoRaceServiceConnection -> launchServiceAfterObtainingPermission()
-                                            is RaceUiState.RaceGoing,
-                                            is RaceUiState.RaceGoingInAnotherSection,
-                                            is RaceUiState.Stopped,
-                                            is RaceUiState.Going,
-                                            RaceUiState.RaceNotStarted ->
-                                                if (raceUiVisible) model.hideRaceUi() else model.enterRaceMode()
-                                        }
-                                        showMenu = false
-                                    }) {
-                                        Icon(imageVector = Icons.Rounded.Flag, stringResource(R.string.buttonRaceMode))
-                                        Spacer(Modifier.width(8.dp))
-                                        Text(
-                                            if (editorState.isEnabled) {
-                                                when (raceState) {
-                                                    is RaceUiState.NoRaceServiceConnection -> stringResource(R.string.buttonRaceMode)
-                                                    else -> stringResource(R.string.buttonShowRacePanel)
-                                                }
-                                            } else
-                                                when (raceState) {
-                                                    RaceUiState.NoRaceServiceConnection -> stringResource(R.string.buttonRaceMode)
-
-                                                    is RaceUiState.RaceGoingInAnotherSection,
-                                                    is RaceUiState.Stopped,
-                                                    is RaceUiState.Going,
-                                                    RaceUiState.RaceNotStarted,
-                                                    is RaceUiState.RaceGoing ->
-                                                        if (raceUiVisible)
-                                                            stringResource(R.string.buttonHideRacePanel)
-                                                        else
-                                                            stringResource(R.string.buttonShowRacePanel)
-                                                }
-                                        )
-                                    }
-                                }
-                                if (raceState is RaceUiState.Stopped || raceState is RaceUiState.RaceNotStarted) {
-                                    DropdownMenuItem(onClick = {
-                                        model.leaveRaceMode(forceStop = true)
-                                        showMenu = false
-                                    }) {
-                                        Icon(imageVector = Icons.Rounded.Cancel, stringResource(R.string.buttonDropRaceState))
-                                        Spacer(Modifier.width(8.dp))
-                                        Text(stringResource(R.string.buttonDropRaceState))
-                                    }
-                                }
-
-                                Divider()
-                            }
-
-                            if (sectionOps != null) {
-                                var inDeleteConfirmation by remember { mutableStateOf(false) }
-                                if (!inDeleteConfirmation) {
-                                    DropdownMenuItem(onClick = {
-                                        inDeleteConfirmation = true
-                                    }) {
-                                        Icon(Icons.Default.Delete, stringResource(R.string.buttonDeleteThisSection))
-                                        Spacer(Modifier.width(8.dp))
-                                        Text(stringResource(R.string.buttonDeleteThisSection))
-                                    }
-                                } else {
-                                    DropdownMenuItem(onClick = {
-                                        showMenu = false
-                                        inDeleteConfirmation = false
-                                        sectionOps.deleteThisSection()
-                                        if (model is RaceModelControls) {
-                                            model.leaveRaceMode(forceStop = true)
-                                        }
-                                    }) {
-                                        Icon(Icons.Default.DeleteForever, stringResource(R.string.buttonTapAgainToDelete))
-                                        Spacer(Modifier.width(8.dp))
-                                        Text(stringResource(R.string.buttonTapAgainToDelete))
-                                    }
-                                }
-                                DropdownMenuItem(onClick = {
-                                    showMenu = false
-                                    showDuplicateDialog = true
-                                }) {
-                                    Icon(Icons.Default.Add, stringResource(R.string.buttonDuplicateThisSection))
-                                    Spacer(Modifier.width(8.dp))
-                                    Text(stringResource(R.string.buttonDuplicateThisSection))
-                                }
-
-                                DropdownMenuItem(onClick = {
-                                    showMenu = false
-                                    showRenameDialog = true
-                                }) {
-                                    Icon(Icons.Default.Edit, stringResource(R.string.buttonRenameThisSection))
-                                    Spacer(Modifier.width(8.dp))
-                                    Text(stringResource(R.string.buttonRenameThisSection))
-                                }
-                            }
-
-                            if (currentSection is LoadState.Loaded) {
-                                val clipboardManager = LocalClipboard.current
-                                DropdownMenuItem(onClick = {
-                                    model.viewModelScope.launch {
-                                        clipboardManager.setClipEntry(
-                                            ClipEntry(
-                                                ClipData.newPlainText(
-                                                    "Serialized positions of section${section.valueOrNull()?.name?.let { " '$it'" }.orEmpty()}",
-                                                    currentSection.value.serializedPositions
-                                                )
-                                            )
-                                        )
-                                    }
-                                    showMenu = false
-                                }) {
-                                    Icon(Icons.Default.Share, stringResource(R.string.buttonCopyAsText))
-                                    Spacer(Modifier.width(8.dp))
-                                    Text(stringResource(R.string.buttonCopyAsText))
-                                }
-                                Divider()
-                            }
-                            DropdownMenuItem(onClick = {
-                                onGoToSettings((raceState as? RaceUiState.HasRaceModel)?.raceModel?.currentDistance?.valueKm)
-                                showMenu = false
-                            }) {
-                                Icon(Icons.Default.Settings, stringResource(R.string.settings))
-                                Spacer(Modifier.width(8.dp))
-                                Text(stringResource(R.string.settings))
-                            }
-                        }
+    @Composable
+    fun topBar() {
+        TopAppBar(
+            backgroundColor = MaterialTheme.colors.surface,
+            title = {
+                Text(
+                    when (currentSection) {
+                        is LoadState.Loaded -> currentSection.value.name
+                        is LoadState.LOADING -> stringResource(R.string.stateLoading)
+                        LoadState.EMPTY -> ""
+                        LoadState.FAILED -> stringResource(R.string.stateFailedToLoadSection)
                     }
                 )
             },
-            content = { padding ->
-                Box(Modifier.padding(padding)) {
-                    when (section) {
-                        is LoadState.Loaded -> {
-                            val hasErrors = results is RallyTimesResultFailure
-                            val positionsToDisplay = remember(editorState.isEnabled, positions, preprocessed, hasErrors) {
-                                if (editorState.isEnabled) positions else preprocessed.filter {
-                                    !hasErrors || it !is PositionLine || it.modifier<IsSynthetic>() == null
-                                }
-                            }
-                            val listState = rememberLazyListState()
-                            PositionsListView(
-                                listState,
-                                odoValues,
-                                positionsToDisplay,
-                                selectedLineIndex,
-                                raceCurrentLineIndex,
-                                model as? EditorControls,
-                                editorState,
-                                editorFocus,
-                                results,
-                                subsMatch,
-                                allowance,
-                                !editorState.isEnabled && raceUiVisible,
-                                inTimedRace,
-                                // Let the last items scroll above the FAB: FAB height (56dp) + its margin (16dp) + a gap (16dp)
-                                contentPadding = if (showRaceModeFab) PaddingValues(bottom = 88.dp) else PaddingValues()
+            navigationIcon = {
+                IconButton(onClick = { onBack() }) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+                }
+            },
+            actions = {
+                if (model is EditableSectionViewModel) {
+                    Button(onClick = { model.switchEditor() }) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = if (!editorState.isEnabled) Icons.Rounded.Edit else Icons.Rounded.Done,
+                                stringResource(R.string.buttonSwitchEditor)
                             )
+                            Text(if (editorState.isEnabled) stringResource(R.string.buttonCalculate) else stringResource(R.string.buttonEdit))
                         }
-
-                        LoadState.LOADING -> CenterTextBox(stringResource(R.string.stateLoadingSections))
-                        LoadState.EMPTY -> Box(Modifier.fillMaxSize(), Alignment.Center) { emptySectionView() }
-                        LoadState.FAILED -> CenterTextBox(stringResource(R.string.stateSomethingWentWrong))
                     }
+
+                    Spacer(Modifier.width(4.dp))
                 }
 
+                if (isLargeScreen && !editorState.isEnabled && !raceUiVisible && model is RaceModelControls) {
+                    Button(onClick = onStartRaceMode) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Rounded.Flag,
+                                contentDescription = stringResource(R.string.buttonRaceMode)
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(stringResource(R.string.buttonRaceMode))
+                        }
+                    }
+
+                    Spacer(Modifier.width(4.dp))
+                }
+
+                IconButton(onClick = { showMenu = true }) {
+                    Icon(Icons.Default.MoreVert, stringResource(R.string.showMenu))
+                }
+                DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                    if (model is RaceModelControls) {
+                        if (raceState !is RaceUiState.RaceNotStarted) {
+                            DropdownMenuItem(onClick = {
+                                if (editorState.isEnabled && model is EditableSectionViewModel) {
+                                    model.switchEditor()
+                                    when (raceState) {
+                                        is RaceUiState.NoRaceServiceConnection -> launchServiceAfterObtainingPermission()
+                                        else -> Unit
+                                    }
+                                } else when (raceState) {
+                                    is RaceUiState.NoRaceServiceConnection -> launchServiceAfterObtainingPermission()
+                                    is RaceUiState.RaceGoing,
+                                    is RaceUiState.RaceGoingInAnotherSection,
+                                    is RaceUiState.Stopped,
+                                    is RaceUiState.Going,
+                                    RaceUiState.RaceNotStarted ->
+                                        if (raceUiVisible) model.hideRaceUi() else model.enterRaceMode()
+                                }
+                                showMenu = false
+                            }) {
+                                Icon(imageVector = Icons.Rounded.Flag, stringResource(R.string.buttonRaceMode))
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    if (editorState.isEnabled) {
+                                        when (raceState) {
+                                            is RaceUiState.NoRaceServiceConnection -> stringResource(R.string.buttonRaceMode)
+                                            else -> stringResource(R.string.buttonShowRacePanel)
+                                        }
+                                    } else
+                                        when (raceState) {
+                                            RaceUiState.NoRaceServiceConnection -> stringResource(R.string.buttonRaceMode)
+
+                                            is RaceUiState.RaceGoingInAnotherSection,
+                                            is RaceUiState.Stopped,
+                                            is RaceUiState.Going,
+                                            RaceUiState.RaceNotStarted,
+                                            is RaceUiState.RaceGoing ->
+                                                if (raceUiVisible)
+                                                    stringResource(R.string.buttonHideRacePanel)
+                                                else
+                                                    stringResource(R.string.buttonShowRacePanel)
+                                        }
+                                )
+                            }
+                        }
+                        if (raceState is RaceUiState.Stopped || raceState is RaceUiState.RaceNotStarted) {
+                            DropdownMenuItem(onClick = {
+                                model.leaveRaceMode(forceStop = true)
+                                showMenu = false
+                            }) {
+                                Icon(imageVector = Icons.Rounded.Cancel, stringResource(R.string.buttonDropRaceState))
+                                Spacer(Modifier.width(8.dp))
+                                Text(stringResource(R.string.buttonDropRaceState))
+                            }
+                        }
+
+                        Divider()
+                    }
+
+                    if (sectionOps != null) {
+                        var inDeleteConfirmation by remember { mutableStateOf(false) }
+                        if (!inDeleteConfirmation) {
+                            DropdownMenuItem(onClick = {
+                                inDeleteConfirmation = true
+                            }) {
+                                Icon(Icons.Default.Delete, stringResource(R.string.buttonDeleteThisSection))
+                                Spacer(Modifier.width(8.dp))
+                                Text(stringResource(R.string.buttonDeleteThisSection))
+                            }
+                        } else {
+                            DropdownMenuItem(onClick = {
+                                showMenu = false
+                                inDeleteConfirmation = false
+                                sectionOps.deleteThisSection()
+                                if (model is RaceModelControls) {
+                                    model.leaveRaceMode(forceStop = true)
+                                }
+                            }) {
+                                Icon(Icons.Default.DeleteForever, stringResource(R.string.buttonTapAgainToDelete))
+                                Spacer(Modifier.width(8.dp))
+                                Text(stringResource(R.string.buttonTapAgainToDelete))
+                            }
+                        }
+                        DropdownMenuItem(onClick = {
+                            showMenu = false
+                            showDuplicateDialog = true
+                        }) {
+                            Icon(Icons.Default.Add, stringResource(R.string.buttonDuplicateThisSection))
+                            Spacer(Modifier.width(8.dp))
+                            Text(stringResource(R.string.buttonDuplicateThisSection))
+                        }
+
+                        DropdownMenuItem(onClick = {
+                            showMenu = false
+                            showRenameDialog = true
+                        }) {
+                            Icon(Icons.Default.Edit, stringResource(R.string.buttonRenameThisSection))
+                            Spacer(Modifier.width(8.dp))
+                            Text(stringResource(R.string.buttonRenameThisSection))
+                        }
+                    }
+
+                    if (model is PanelSwapControls) {
+                        DropdownMenuItem(onClick = {
+                            model.togglePanelsSwapped()
+                            showMenu = false
+                        }) {
+                            Icon(
+                                if (isLandscape) Icons.Default.SwapHoriz else Icons.Default.SwapVert,
+                                stringResource(R.string.buttonSwapListAndRacePanel)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(stringResource(R.string.buttonSwapListAndRacePanel))
+                        }
+                        Divider()
+                    }
+
+                    if (currentSection is LoadState.Loaded) {
+                        val clipboardManager = LocalClipboard.current
+                        DropdownMenuItem(onClick = {
+                            model.viewModelScope.launch {
+                                clipboardManager.setClipEntry(
+                                    ClipEntry(
+                                        ClipData.newPlainText(
+                                            "Serialized positions of section${section.valueOrNull()?.name?.let { " '$it'" }.orEmpty()}",
+                                            currentSection.value.serializedPositions
+                                        )
+                                    )
+                                )
+                            }
+                            showMenu = false
+                        }) {
+                            Icon(Icons.Default.Share, stringResource(R.string.buttonCopyAsText))
+                            Spacer(Modifier.width(8.dp))
+                            Text(stringResource(R.string.buttonCopyAsText))
+                        }
+                        Divider()
+                    }
+                    DropdownMenuItem(onClick = {
+                        onGoToSettings((raceState as? RaceUiState.HasRaceModel)?.raceModel?.currentDistance?.valueKm)
+                        showMenu = false
+                    }) {
+                        Icon(Icons.Default.Settings, stringResource(R.string.settings))
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.settings))
+                    }
+                }
             }
         )
+    }
 
+    // Hoisted, so that the list keeps its scroll position when the HUD panels are swapped:
+    val listState = rememberLazyListState()
+
+    @Composable
+    fun listContent(padding: PaddingValues) {
+        Box(Modifier.padding(padding)) {
+            when (section) {
+                is LoadState.Loaded -> {
+                    val hasErrors = results is RallyTimesResultFailure
+                    val positionsToDisplay = remember(editorState.isEnabled, positions, preprocessed, hasErrors) {
+                        if (editorState.isEnabled) positions else preprocessed.filter {
+                            !hasErrors || it !is PositionLine || it.modifier<IsSynthetic>() == null
+                        }
+                    }
+                    PositionsListView(
+                        listState,
+                        odoValues,
+                        positionsToDisplay,
+                        selectedLineIndex,
+                        raceCurrentLineIndex,
+                        model as? EditorControls,
+                        editorState,
+                        editorFocus,
+                        results,
+                        subsMatch,
+                        allowance,
+                        !editorState.isEnabled && raceUiVisible,
+                        inTimedRace,
+                        // Let the last items scroll above the FAB: FAB height (56dp) + its margin (16dp) + a gap (16dp)
+                        contentPadding = if (showRaceModeFab) PaddingValues(bottom = 88.dp) else PaddingValues()
+                    )
+                }
+
+                LoadState.LOADING -> CenterTextBox(stringResource(R.string.stateLoadingSections))
+                LoadState.EMPTY -> Box(Modifier.fillMaxSize(), Alignment.Center) { emptySectionView() }
+                LoadState.FAILED -> CenterTextBox(stringResource(R.string.stateSomethingWentWrong))
+            }
+        }
+    }
+
+    val isKeyboardVisible = model is EditorControls && editorState.isEnabled
+
+    @Composable
+    fun bottomPanel(keyboardModifier: Modifier) {
         if (model is EditorControls && editorState.isEnabled) {
             Keyboard(editorState, model, keyboardModifier)
         } else if (raceUiVisible) {
@@ -537,6 +565,53 @@ fun SectionScene(
                 setDebugSpeed = { (model as? LiveSectionViewModel)?.setDebugSpeed(SpeedKmh(it.toDouble())) },
                 raceControls = model as? RaceModelControls,
             )
+        }
+    }
+
+    if (panelsSwapped && raceUiVisible && !isKeyboardVisible) {
+        // Driver HUD with swapped panels: the race panel goes first, the top bar stays at the top
+        if (isLandscape) {
+            Row(Modifier.imePadding()) {
+                val panelModifier = Modifier
+                    .fillMaxHeight()
+                    .weight(1.0f, true)
+                    .fillMaxWidth(0.5f)
+                val listModifier = Modifier
+                    .fillMaxHeight()
+                    .weight(1.0f, true)
+                    .fillMaxWidth(0.5f)
+                bottomPanel(panelModifier)
+                Scaffold(
+                    modifier = listModifier.imePadding(),
+                    floatingActionButton = { raceModeFab() },
+                    topBar = { topBar() },
+                    content = { padding -> listContent(padding) }
+                )
+            }
+        } else {
+            Column(Modifier.imePadding()) {
+                topBar()
+                bottomPanel(Modifier.fillMaxWidth())
+                Scaffold(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1.0f)
+                        .imePadding(),
+                    floatingActionButton = { raceModeFab() },
+                    content = { padding -> listContent(padding) }
+                )
+            }
+        }
+    } else {
+        layout { listModifier, keyboardModifier ->
+            Scaffold(
+                modifier = listModifier.imePadding(),
+                floatingActionButton = { raceModeFab() },
+                topBar = { topBar() },
+                content = { padding -> listContent(padding) }
+            )
+
+            bottomPanel(keyboardModifier)
         }
     }
 }

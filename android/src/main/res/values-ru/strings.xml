@@ -47,6 +47,7 @@
     <string name="buttonDuplicateThisSection">Дублировать секцию</string>
     <string name="buttonRenameThisSection">Переименовать секцию</string>
     <string name="buttonCopyAsText">Скопировать как текст</string>
+    <string name="buttonSwapListAndRacePanel">Поменять местами</string>
     <string name="settingsTelemetrySource">Источник телеметрии</string>
     <string name="telemetrySourceSimulation">Симуляция</string>
     <string name="telemetrySourceSimulationHint">Скорость задаётся \"ползунком\" на экране режима гонки</string>
