@@ -783,9 +783,7 @@ class LocalRaceService : PrimaryRaceService, Service() {
                                 val prevTime = lastTime
                                 val dt = if (prevTime != null) now - prevTime else Duration.ZERO
                                 lastTime = now
-                                val rawSpeedKmh = packet.speedKmh
-                                val calibratedSpeedKmh = SpeedKmh(rawSpeedKmh.valueKmh / calibration)
-                                updateRaceStateFromOutGauge(calibratedSpeedKmh, dt)
+                                updateRaceStateFromOutGauge(packet.speedKmh, dt)
                             },
                             onTimeout = {
                                 lastTime = null
