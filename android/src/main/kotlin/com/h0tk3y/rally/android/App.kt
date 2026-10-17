@@ -189,7 +189,7 @@ fun App(
 
                         entry<StreamedSectionScene> { key ->
                             val context = LocalContext.current
-                            val model = viewModel { StreamedSectionViewModel(Dispatchers.Default) }
+                            val model = viewModel { StreamedSectionViewModel(userPreferences, Dispatchers.Default) }
 
                             val connection = remember(context) {
                                 tcpStreamedRaceServiceConnection(context, model::onServiceConnected, model::onServiceDisconnected)

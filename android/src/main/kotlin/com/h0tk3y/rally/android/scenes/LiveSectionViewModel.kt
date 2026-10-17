@@ -166,6 +166,14 @@ interface RaceModelControls {
     fun setSpeedLimitPercent(value: String?)
 }
 
+/**
+ * Lets the user swap the places of the positions list and the race panel. Only the driver HUD supports this.
+ */
+interface PanelSwapControls {
+    val panelsSwapped: StateFlow<Boolean>
+    fun togglePanelsSwapped()
+}
+
 interface EditableSectionViewModel : CommonSectionViewModel, EditorControls {
     val editorState: StateFlow<EditorState>
     val editorFocus: StateFlow<EditorFocus>
@@ -1490,10 +1498,23 @@ class LiveSectionViewModel(
     }
 }
 
-class StreamedSectionViewModel(coroutineDispatcher: CoroutineDispatcher) : StatefulSectionViewModel(coroutineDispatcher),
-    RaceServiceHolder<StreamedRaceService> {
+class StreamedSectionViewModel(
+    private val prefs: PreferenceRepository,
+    coroutineDispatcher: CoroutineDispatcher
+) : StatefulSectionViewModel(coroutineDispatcher),
+    RaceServiceHolder<StreamedRaceService>, PanelSwapControls {
     override val viewModelScope: CoroutineScope
         get() = (this as ViewModel).viewModelScope
+
+    override val panelsSwapped: StateFlow<Boolean> =
+        prefs.userPreferencesFlow.map { it.hudSwapPanels }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    override fun togglePanelsSwapped() {
+        val newValue = !panelsSwapped.value
+        viewModelScope.launch {
+            prefs.saveHudSwapPanels(newValue)
+        }
+    }
 
     private val _calibration = MutableStateFlow(1.0)
 
