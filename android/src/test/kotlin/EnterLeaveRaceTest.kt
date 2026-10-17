@@ -171,12 +171,6 @@ class EnterLeaveRaceTest {
 
     @Ignore
     @Test
-    fun `finish at a lower distance than the start was`() {
-        // TODO
-    }
-
-    @Ignore
-    @Test
     fun `removing speed limits while going backward`() {
         // TODO
     }
