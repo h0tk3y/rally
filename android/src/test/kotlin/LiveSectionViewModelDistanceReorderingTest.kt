@@ -17,6 +17,8 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Rule
 import org.junit.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class LiveSectionViewModelDistanceReorderingTest {
@@ -276,18 +278,107 @@ class LiveSectionViewModelDistanceReorderingTest {
             viewModel.keyPress(GridKey.ADD)
             repeat(10) { runCurrent() }
 
-            // There should now be 3 items: 1.0 km, 0.0 km (inserted at line 2), and 3.0 km (now line 3)
+            // There should now be 3 items: 1.0 km, 1.0 km (inserted at line 2 with the distance of line 1), and 3.0 km (now line 3)
             val positions = viewModel.inputPositions.value.filterIsInstance<PositionLine>()
             assertEquals(3, positions.size)
             assertEquals(1.0, positions[0].atKm.valueKm)
-            assertEquals(0.0, positions[1].atKm.valueKm)
+            assertEquals(1.0, positions[1].atKm.valueKm)
             assertEquals(3.0, positions[2].atKm.valueKm)
 
-            // The selected line should be the new line (Line 2) with focus on Distance field
+            // The selected line should be the new line (Line 2) with the whole Distance field selected
             assertEquals(LineNumber(2, 0), viewModel.selectedLineIndex.value)
             assertEquals(DataKind.Distance, viewModel.editorFocus.value.kind)
+            assertTrue(viewModel.editorFocus.value.selectAll)
         } finally {
             viewModel.viewModelScope.cancel()
         }
+    }
+
+    private fun addItemAfterLine(lineNumber: Int, block: suspend (LiveSectionViewModel) -> Unit) = runTest(withMain.dispatcher) {
+        val sec = db.createSection("TestSectionAddSelected$lineNumber", null) as SectionInsertOrRenameResult.Success
+        db.updateSectionPositions(
+            sec.section.id,
+            """
+                1.0 setavg 50
+                3.0 setavg 60
+                5.0 endavg
+            """.trimIndent()
+        )
+
+        val viewModel = LiveSectionViewModel(sec.section.id, db, defaultPreferencesMock(), withMain.dispatcher)
+        try {
+            repeat(10) { runCurrent() }
+            viewModel.switchEditor()
+            repeat(10) { runCurrent() }
+            viewModel.selectLine(LineNumber(lineNumber, 0), DataKind.Distance)
+            repeat(10) { runCurrent() }
+            viewModel.keyPress(GridKey.ADD)
+            repeat(10) { runCurrent() }
+            block(viewModel)
+        } finally {
+            viewModel.viewModelScope.cancel()
+        }
+    }
+
+    private fun LiveSectionViewModel.distances() =
+        inputPositions.value.filterIsInstance<PositionLine>().map { it.atKm.valueKm }
+
+    private fun LiveSectionViewModel.selectedDistanceText() =
+        editorFocus.value.rawText ?: inputPositions.value.filterIsInstance<PositionLine>()
+            .single { it.lineNumber == selectedLineIndex.value }.atKm.valueKm.toString()
+
+    @Test
+    fun testDigitAfterAddReplacesSelectedDistance() = addItemAfterLine(1) { viewModel ->
+        viewModel.keyPress(GridKey.N_2)
+        assertEquals(listOf(1.0, 2.0, 3.0, 5.0), viewModel.distances())
+        assertEquals(LineNumber(2, 0), viewModel.selectedLineIndex.value)
+        assertEquals("2.0", viewModel.selectedDistanceText())
+        assertEquals(1, viewModel.editorFocus.value.cursor)
+        assertFalse(viewModel.editorFocus.value.selectAll)
+
+        // Further digits extend the integral part
+        viewModel.keyPress(GridKey.N_4)
+        assertEquals(listOf(1.0, 3.0, 5.0, 24.0), viewModel.distances())
+        assertEquals(LineNumber(4, 0), viewModel.selectedLineIndex.value)
+    }
+
+    @Test
+    fun testDigitAfterAddMovesItemUp() = addItemAfterLine(3) { viewModel ->
+        assertEquals(listOf(1.0, 3.0, 5.0, 5.0), viewModel.distances())
+        viewModel.keyPress(GridKey.N_2)
+        assertEquals(listOf(1.0, 2.0, 3.0, 5.0), viewModel.distances())
+        assertEquals(LineNumber(2, 0), viewModel.selectedLineIndex.value)
+    }
+
+    @Test
+    fun testDotAfterAddStartsFraction() = addItemAfterLine(1) { viewModel ->
+        viewModel.keyPress(GridKey.DOT)
+        assertEquals("0.0", viewModel.selectedDistanceText())
+        assertEquals(2, viewModel.editorFocus.value.cursor)
+        viewModel.keyPress(GridKey.N_3)
+        assertEquals("0.3", viewModel.selectedDistanceText())
+        assertEquals(listOf(0.3, 1.0, 3.0, 5.0), viewModel.distances())
+    }
+
+    @Test
+    fun testDeleteAfterAddClearsDistance() = addItemAfterLine(2) { viewModel ->
+        viewModel.keyPress(GridKey.DEL)
+        assertEquals("0.0", viewModel.selectedDistanceText())
+        assertEquals(1, viewModel.editorFocus.value.cursor)
+        assertFalse(viewModel.editorFocus.value.selectAll)
+        assertEquals(listOf(0.0, 1.0, 3.0, 5.0), viewModel.distances())
+    }
+
+    @Test
+    fun testArrowAfterAddKeepsDistanceAndDropsSelection() = addItemAfterLine(2) { viewModel ->
+        val cursor = viewModel.editorFocus.value.cursor
+        viewModel.keyPress(GridKey.RIGHT)
+        assertFalse(viewModel.editorFocus.value.selectAll)
+        assertEquals(cursor, viewModel.editorFocus.value.cursor)
+        assertEquals(listOf(1.0, 3.0, 3.0, 5.0), viewModel.distances())
+
+        // Now typing edits at the cursor instead of replacing the text
+        viewModel.keyPress(GridKey.N_1)
+        assertEquals("3.01", viewModel.selectedDistanceText())
     }
 }

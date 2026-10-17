@@ -594,7 +594,7 @@ class LiveSectionViewModel(
         val isEnabled = !currentEditorState.isEnabled
         _editorState.value = currentEditorState.copy(isEnabled = isEnabled)
         if (!isEnabled) {
-            _editorFocus.value = _editorFocus.value.copy(rawText = null)
+            _editorFocus.value = _editorFocus.value.copy(rawText = null, selectAll = false)
         } else {
             val item = currentItem
             val currentFocus = _editorFocus.value
@@ -782,6 +782,11 @@ class LiveSectionViewModel(
     }
 
     override fun keyPress(key: GridKey) {
+        if (_editorFocus.value.selectAll) {
+            if (keyPressWithFieldSelected(key)) return
+            _editorFocus.value = _editorFocus.value.copy(selectAll = false)
+            if (key == GridKey.LEFT || key == GridKey.RIGHT) return
+        }
         when (key) {
             GridKey.SETAVG, GridKey.THENAVG, GridKey.ENDAVG, GridKey.ATIME, GridKey.PERCENT -> focusOrSwitchModifier(key)
             GridKey.APPLY_LAST_PERCENT -> applyLastPercent()
@@ -799,6 +804,25 @@ class LiveSectionViewModel(
             GridKey.ADD -> addItem()
             GridKey.REMOVE -> currentItem?.let(::deletePositionViaEditor)
         }
+    }
+
+    /**
+     * Handles a key that replaces the whole selected distance text: a digit starts a new value, a dot starts a fraction,
+     * and DEL clears the field. Returns false if the key should instead be handled as usual.
+     */
+    private fun keyPressWithFieldSelected(key: GridKey): Boolean {
+        val focus = _editorFocus.value
+        val item = currentItem ?: return false
+        if (focus.kind != DataKind.Distance) return false
+        val (newText, newCursor) = when (key) {
+            GridKey.N_1, GridKey.N_2, GridKey.N_3, GridKey.N_4, GridKey.N_5, GridKey.N_6, GridKey.N_7, GridKey.N_8, GridKey.N_9, GridKey.N_0 ->
+                "${key.name.last()}.0" to 1
+            GridKey.DOT -> if (_editorState.value.canEnterDot) "0.0" to 2 else return false
+            GridKey.DEL -> "0.0" to 1
+            else -> return false
+        }
+        updateCurrentText(item, focus.copy(selectAll = false), newText, newCursor)
+        return true
     }
 
     override fun deletePositionViaEditor(line: RoadmapInputLine) {
@@ -834,7 +858,13 @@ class LiveSectionViewModel(
     }
 
     override fun addItem() {
-        createNewItem()?.let { launchDispatchable { selectLine(it, DataKind.Distance) } }
+        createNewItem()?.let {
+            launchDispatchable {
+                selectLine(it, DataKind.Distance)
+                val text = currentItem?.let { item -> itemText(item, DataKind.Distance) } ?: return@launchDispatchable
+                _editorFocus.value = _editorFocus.value.copy(cursor = text.length, rawText = null, selectAll = true)
+            }
+        }
     }
 
     override fun setSpeedLimitPercent(value: String?) {
@@ -990,7 +1020,8 @@ class LiveSectionViewModel(
         val focusWithSanitizedCursor = if (editorFocus.kind == DataKind.AstroTime) {
             if (clampedCursor == 2 || clampedCursor == 5) editorFocus.copy(cursor = clampedCursor + 1) else editorFocus.copy(cursor = clampedCursor)
         } else editorFocus.copy(cursor = clampedCursor)
-        _editorFocus.value = focusWithSanitizedCursor
+        // Any focus change other than the one made by adding an item drops the selection
+        _editorFocus.value = focusWithSanitizedCursor.copy(selectAll = false)
     }
 
     private fun maybePreprocess(positions: List<RoadmapInputLine>): List<RoadmapInputLine> =
@@ -1242,10 +1273,12 @@ class LiveSectionViewModel(
         val selectedIndex = items.indexOfFirst { it.lineNumber == _selectedLineIndex.value }
         if (selectedIndex != -1) {
             val newItemIndex = selectedIndex + 1
+            // Positions are reordered by distance, so start from the distance of the position above to stay in place
+            val distance = items.take(newItemIndex).filterIsInstance<PositionLine>().lastOrNull()?.atKm ?: DistanceKm(0.0)
             val positions = recalculateLineNumbers(
                 buildList {
                     addAll(items.take(newItemIndex))
-                    add(PositionLine(DistanceKm(0.0), LineNumber(1, 0), emptyList()))
+                    add(PositionLine(distance, LineNumber(1, 0), emptyList()))
                     addAll(items.drop(newItemIndex))
                 }
             )
