@@ -593,7 +593,9 @@ data class EditorState(
 data class EditorFocus(
     val cursor: Int,
     val kind: DataKind,
-    val rawText: String? = null
+    val rawText: String? = null,
+    /** The whole field text is selected, so that typing replaces it rather than editing at the cursor. */
+    val selectAll: Boolean = false
 )
 
 enum class DataKind {
