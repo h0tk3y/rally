@@ -37,6 +37,7 @@ fun FocusedTextFieldWithoutKeyboard(
     modifier: Modifier = Modifier,
     textStyle: TextStyle = LocalCustomTypography.current.dataTextStyle,
     selectionPosition: Int = text.length,
+    selectAll: Boolean = false,
     placeholder: String? = null,
     enabled: Boolean = true,
     focused: Boolean = false,
@@ -57,7 +58,11 @@ fun FocusedTextFieldWithoutKeyboard(
 
         val textFieldValue = TextFieldValue(
             text,
-            selection = if (focused) TextRange(selectionPosition, selectionPosition) else TextRange.Zero
+            selection = when {
+                !focused -> TextRange.Zero
+                selectAll -> TextRange(0, text.length)
+                else -> TextRange(selectionPosition, selectionPosition)
+            }
         )
 
 

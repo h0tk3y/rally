@@ -396,6 +396,7 @@ private fun DataField(
         kind = field,
         modifier = if (line.modifier<IsSynthetic>() != null) fieldModifier.alpha(0.5f) else fieldModifier,
         selectionPosition = cursorIndex,
+        selectAll = isFocused && editorFocus.selectAll,
         placeholder = placeholder,
         focused = isFocused,
         onTextChange = { },
