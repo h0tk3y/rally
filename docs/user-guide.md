@@ -44,7 +44,7 @@ The app does three jobs.
 | **Section** | One list of points that you time together, for example a stretch from one time control to the next. The app keeps many sections. |
 | **Position** | One line of a section: a point on the road, with its distance in km. A position can carry marks. |
 | **Roadmap** | The app's copy of your road book: all the positions of a section, in order of distance. |
-| **Mark** | Extra information on a position. The app writes the marks in short form: `setavg` (set average speed starts), `thenavg` (set average speed changes), `endavg` (set average speed ends), `atime` (time of day) and `odo` (odometer reading). |
+| **Mark** | Extra information on a position. The app writes the marks in short form: `setavg` (set average speed starts), `thenavg` (set average speed changes), `endavg` (set average speed ends) and `atime` (time of day). |
 | **Stretch** | Part of the road from the point where a set average speed starts to the point where it ends. |
 | **Inner stretch** | A stretch inside a longer stretch, with its own speed. The app's messages call these "subs". |
 | **Time of day** | The real time on the rally clock at a position, for example 10:00:00. The app calls it `atime` ("astronomical time"). |
@@ -61,7 +61,7 @@ The app does three jobs.
 
 1. On the first screen, tap **+** (Create section).
 2. Type a name, the length of the section, and the average speed or the time. Type the start time too, if you know it. Tap **Save**. The app opens the new section.
-3. Tap **Edit**. Add your positions with the keypad at the bottom (see [Editing positions](#9-editing-positions)). Give the last position an `endavg` with the **END** key (see [What race mode changes in your roadmap](#106-what-race-mode-changes-in-your-roadmap) for why). Tap **Calculate** when you are done.
+3. Tap **Edit**. Add your positions with the keypad at the bottom (see [Editing positions](#9-editing-positions)). If you typed a regularity with its own `endavg`, also give the last position an `endavg` with the **END** key (see [What race mode changes in your roadmap](#106-what-race-mode-changes-in-your-roadmap) for why). Tap **Calculate** when you are done.
 4. Check the times on the right of each position.
 5. Make a copy of the section with **Duplicate this section** in the menu, and drive with the copy. Race mode writes into the roadmap (see [What race mode changes in your roadmap](#106-what-race-mode-changes-in-your-roadmap)), so keep the first section clean.
 6. Before the start, tap **Race mode**. Allow everything the phone asks.
@@ -117,7 +117,7 @@ Tap **Save**. The new section has two positions:
 - the start, at 0.0 km, with the average speed (and the start time, if you typed one);
 - the end, at the distance you typed.
 
-The app then opens the section. The end position has no `endavg`. Before you use race mode, give it one (see [What race mode changes in your roadmap](#106-what-race-mode-changes-in-your-roadmap)).
+The app then opens the section. The end position has no `endavg`. If you add a regularity with its own `endavg`, give the end position one too (see [What race mode changes in your roadmap](#106-what-race-mode-changes-in-your-roadmap)).
 
 ### 4.2 Import a section
 
@@ -141,7 +141,7 @@ The section screen shows the roadmap as a list, one row per position. At the top
 
 From left to right:
 
-1. **The distance** in km. If the section has an `odo` mark, the odometer reading appears under it in grey (see [Odometer readings](#77-odometer-readings-odo)).
+1. **The distance** in km.
 2. **The marks:**
    - `setavg` and a speed: a set average speed starts here.
    - `thenavg` and a speed: the set average speed changes here.
@@ -155,11 +155,9 @@ From left to right:
 5. **On the right, the times:**
    - one or more times in **minutes and seconds** from a start, for example `18:00` or `10:00 18:00`. These are not times of day: `18:00` means 18 minutes, and `90:00` means 1 hour 30 minutes;
    - then the **time of day**, with hours, minutes and seconds, for example `10:18:00`;
-   - then an allowance such as `-1`, if you turned it on in Settings (see [Allowance](#711-allowance)).
+   - then an allowance such as `-1`, if you turned it on in Settings (see [Allowance](#79-allowance)).
 
    See [Several times on one row](#73-several-times-on-one-row) for what each time means.
-
-Some rows are lighter than others. These are helper points that the app adds by itself (see [Helper points](#78-helper-points-s)).
 
 ### 5.2 View mode and edit mode
 
@@ -168,8 +166,7 @@ The button at the top switches between the two modes.
 **View mode** (the button says **Edit**):
 
 - shows the times, the ➠ speeds, the warnings and all errors;
-- if the roadmap has errors, shows a red bar at the top, **Failed to calculate because of errors**, and no times at all;
-- shows the helper points.
+- if the roadmap has errors, shows a red bar at the top, **Failed to calculate because of errors**, and no times at all.
 
 **Edit mode** (the button says **Calculate**):
 
@@ -221,25 +218,17 @@ If a `setavg` comes while another stretch is still open, it starts an inner stre
 
 You may write a speed after `endavg` (for example `endavg 60`). The app keeps it, but does not use it.
 
-For the times, the last stretch of a section does not need an `endavg`: it runs to the last position. But race mode needs it, so always end the section with `endavg` on its last position (see [What race mode changes in your roadmap](#106-what-race-mode-changes-in-your-roadmap)).
+The last stretch of a section does not need an `endavg`: it runs to the last position. But if the section holds a regularity that ends with its own `endavg`, put `endavg` on the last position too, because of a problem in race mode (see [What race mode changes in your roadmap](#106-what-race-mode-changes-in-your-roadmap)).
 
 ### 6.5 Speed as a percentage
 
-Some rallies give speeds as a percentage of a base speed. The app shows such a speed as the base speed and the percentage: `60.0 110 %`. The real speed is the base speed times the percentage: 60 × 110% = 66 km/h.
+Some rallies give speeds as a percentage of a base speed, usually below 100%. For example: "the set average speed is the speed limit on the road signs, times 80%". The app shows such a speed as the base speed and the percentage: `60.0 80 %`. The real speed is the base speed times the percentage: 60 × 80% = 48 km/h.
 
 ### 6.6 `atime`: time of day
 
 `atime 10:00:00` means "at this position, the rally clock shows 10:00:00". The app then calculates the time of day at the other positions.
 
 A section can have **only one** time of day. When you give a time of day to one position, the app removes it from all the others. So if your road book gives a time of day at several time controls, make a separate section for each part that starts at a given time.
-
-### 6.7 `odo`: odometer reading
-
-`odo 5.0` means "at this position, the car's odometer shows 5.0 km". The app then shows in grey what the odometer should show at the next positions. This does not change any times. The keypad has no key for `odo`: you can only add it in the text (see [Roadmap text format](#17-roadmap-text-format-reference)).
-
-### 6.8 `s`: helper points
-
-`s 0.5 3` on a position means "add 3 helper points, every 0.5 km after this position". You can only add it in the text. See [Helper points](#78-helper-points-s).
 
 ---
 
@@ -362,6 +351,8 @@ A position inside an inner stretch shows one time for each stretch it lies in, f
 
 So in `10:00 18:00`, `10:00` is the time from the start of the inner stretch, and `18:00` is the time from the start of the section.
 
+If a position in the section has a time of day, the row then shows the time of day at this position, for example `10:18:00` (see [Time of day](#76-time-of-day-atime)).
+
 The position where an inner stretch starts (with `setavg`) shows only the times of the larger stretches around it, not its own 00:00. (Stretches that follow one another, as in the next part, are different: each one starts at 00:00.)
 
 ### 7.4 One stretch after another
@@ -409,25 +400,11 @@ When one position has a time of day, the app calculates the time of day at each 
 
 For example, with `setavg 60` at 0.0 and `atime 10:00:00` at 10.0, the position at 20.0 shows `10:10:00`.
 
-When the race panel is open and no race timer runs, the app also shows the time of day at the positions **before** the time of day, calculated from the overall average speed (see [Section times in race mode](#79-section-times-in-race-mode)).
+When the race panel is open and no race timer runs, the app also shows the time of day at the positions **before** the time of day, calculated from the overall average speed (see [Section times in race mode](#77-section-times-in-race-mode)).
 
 After midnight the time of day starts again from 00:00:00. The app does not show the day.
 
-### 7.7 Odometer readings (`odo`)
-
-From a position with `odo`, each later position shows in grey what the odometer should read there:
-
-> odometer reading = the `odo` value + (distance of this position − distance of the `odo` position) × calibration factor
-
-The app takes the calibration factor from Settings (see [Calibration](#132-calibration)). It uses it here whatever distance source you use, because it describes how your car's odometer differs from the road book. If you use GPS and do not know this for your car, leave the factor at 1. A later `odo` mark starts the count again. Positions before the first `odo` show no odometer reading.
-
-### 7.8 Helper points (`s`)
-
-`s 0.5 3` on the position at 0.0 adds lighter rows at 0.5, 1.0 and 1.5 km. The app calculates times for them like for any position. It skips a helper point if a real position already has that distance, or if it lies at or past the end of the section.
-
-Helper points appear only in view mode, and only when the roadmap has no errors. The app does not save them as positions.
-
-### 7.9 Section times in race mode
+### 7.7 Section times in race mode
 
 When the race panel is open and no race timer runs, the list shows **section times** instead of the normal times. The app calculates section times as if you drove the whole section at its overall average speed, with no inner stretches:
 
@@ -437,13 +414,13 @@ These are the times that the section timer uses. When a race timer starts, the l
 
 > **Remember:** the screen does not mark which kind of times you see. Whenever the race panel is open and no race timer runs (before the start, while only the section timer runs, after **Stop**), every time on the rows is a section time.
 
-### 7.10 Rounding
+### 7.8 Rounding
 
 - The app calculates times exactly, and rounds them to whole seconds only when it shows them. For example, 1.234 km at 47 km/h takes 94.52 seconds, and the app shows `01:35`.
 - Distances have three decimals.
 - The ➠ speed has one decimal.
 
-### 7.11 Allowance
+### 7.9 Allowance
 
 Some rallies give an allowance in minutes that grows with the time of the section. Turn it on in Settings, under **Allowance**:
 
@@ -675,7 +652,8 @@ It does not show this value if the roadmap has errors.
 
 Race mode writes into the roadmap of the section. Know this before you drive:
 
-- **Starting a timer** with **Now** or **On…** gives the start position a time of day: the start time. A section has only one time of day, so the app removes the time of day you typed.
+- **Starting a timer with Now** gives the start position a time of day: the moment you tapped. A section has only one time of day, so this replaces the time of day you typed, on whatever position it was.
+- **Starting a timer with On…** uses the time of day that the selected position already has, and keeps it. (You see the **On…** buttons only when the selected position has a time of day.)
 - **Starting the race timer** also gives the start position a `setavg` with the race speed. Sometimes the app adds a new position at the start point for this.
 - **Finish race** adds a position at the finish distance. Then it counts the `setavg` and `endavg` marks in the whole section (with the `setavg` it wrote at the race start). If more stretches start than end, it gives the new position an `endavg`. Then the app gives the start of the section its start time back.
 - **Undo finish race** removes the position that **Finish race** added. **Undo stop** changes nothing in the roadmap.
@@ -683,7 +661,9 @@ Race mode writes into the roadmap of the section. Know this before you drive:
 - **Driving backwards** in a race removes **every** `thenavg` at the points you drive back over, also the ones you typed from the road book (see [Going backwards](#107-correcting-the-distance)).
 - **Add passed position** adds a position.
 
-> **Important: end the longest stretch with `endavg`.** If the stretch of the whole section has no `endavg` at its last position, **Finish race** ends it at the finish point instead. All the positions after that point then show `outside intervals`, the red error bar appears, and the early/late value disappears for the rest of the section. To avoid this, always put `endavg` on the last position of the section.
+> **Known problem: Finish race can end the wrong stretch.** This happens when the roadmap already ends the race's stretch with its own `endavg` (for example, you typed the regularity with `setavg` at its start and `endavg` at its end), and the longest stretch of the section has no `endavg`. Then more stretches start than end, so **Finish race** adds an `endavg` at the finish point, and that ends the longest stretch there. All the positions after the finish then show `outside intervals`, the red error bar appears, and the early/late value disappears for the rest of the section.
+>
+> To avoid this, put `endavg` on the last position of the section. Then the marks are even, and **Finish race** adds only a plain position.
 >
 > If the red bar appears after **Finish race** anyway, switch to edit mode, find the position at the finish distance, and remove its `endavg` with **END** (or delete the position with **DEL ╳**). The timers keep running while you edit.
 
@@ -742,7 +722,7 @@ Turn sounds on in Settings (**Play sounds on race mode actions**). The app then 
 ### 11.1 The night before
 
 1. Make one section for each part of the road book that starts at a given time of day, for example from one time control to the next. A section can hold only one time of day.
-2. Enter the positions: the start with `setavg` and the time of day, the speed changes with `thenavg`, the inner stretches with `setavg` and `endavg`, and an `endavg` on the last position.
+2. Enter the positions: the start with `setavg` and the time of day, the speed changes with `thenavg`, the inner stretches with `setavg` and `endavg`. If there are inner stretches, put an `endavg` on the last position too.
 3. Check the times against the road book.
 4. Make a copy of each section to drive with (**Duplicate this section**).
 
@@ -787,7 +767,6 @@ The app has no pause. If a marshal stops you and gives you a new start time, tap
 ### 11.7 On the road
 
 - **Known points.** When you pass a point with an exact distance in the road book, correct the distance (see [Correcting the distance](#107-correcting-the-distance)).
-- **Odometer checks.** If you entered `odo` marks, the grey numbers under the distances show what the car's odometer should read. Compare them with the car.
 - **Secret checks.** The early/late value is correct at any point of the road, not only at the positions. Watch it all the time. To note a point where you saw a check, tap **Add passed position**.
 - **Mistakes.** For a wrong turn, use **↶** (see [Going backwards](#107-correcting-the-distance)). For a wrong speed button, see [Speed buttons](#108-speed-buttons-and-the-v-button). If you tapped **Finish race** too early, tap **Undo finish race**. If you tapped **Stop** too early, tap **Undo stop**.
 
@@ -849,9 +828,9 @@ The car measures distance a little differently from the road book. The **calibra
 
 > calibration factor = distance the car measures ÷ distance in the road book
 
-For example, if the road book says 10.00 km and the car measures 10.20 km, the factor is 1.02. The app divides the speed from the reader (or the game) by this factor, and multiplies the odometer readings in the list by it. It does not change the GPS distance.
+For example, if the road book says 10.00 km and the car measures 10.20 km, the factor is 1.02. The app divides the speed from the reader (or the game) by this factor. It does not change the GPS distance.
 
-The calibration fields appear in Settings only when the source is **OBD over Bluetooth**. To set a factor while you use GPS or OutGauge (for example, to get the right odometer readings in the list), choose OBD, set the factor, and choose your source again.
+The calibration fields appear in Settings only when the source is **OBD over Bluetooth**. To set a factor for OutGauge, choose OBD, set the factor, and choose OutGauge again.
 
 **To calibrate on an odometer check route** (with **OBD over Bluetooth** as the source):
 
@@ -869,7 +848,7 @@ Type the address of the driver's phone in **The driver's device IP address**. Se
 
 ### 13.4 Allowance
 
-See [Allowance](#711-allowance).
+See [Allowance](#79-allowance).
 
 ### 13.5 Race mode
 
@@ -928,8 +907,6 @@ The app uses light or dark colours, like the rest of the phone. It uses the phon
 - **Rename this section** changes the name.
 - **Delete this section** asks you to tap twice. You cannot undo it.
 
-**To add `odo` or `s` marks to a section you already have:** use **Copy as text**, paste the text into a notes app, add the marks, copy the text again, and use **Import section** with a new name. Then delete the old section if you no longer need it.
-
 ---
 
 ## 17. Roadmap text format (reference)
@@ -946,14 +923,12 @@ You need this only for **Import section**, or to read what **Copy as text** give
 | `thenavg <speed>` | `10.0 thenavg 45` | The set average speed changes. |
 | `endavg` | `20.0 endavg` | A set average speed ends. If you write `endavg` without a speed, put it last on the line. |
 | `atime <time>` | `0.0 setavg 60 atime 10:00:00` | Time of day: hours, minutes and seconds. `10:00` alone is wrong. |
-| `odo <km>` | `2.0 odo 5.05` | The car's odometer reading here. |
-| `s <step> <count>` | `0.0 setavg 60 s 0.5 3` | Add `count` helper points, one every `step` km. |
 
 A speed can be written as:
 
 - `60`: 60 km/h;
 - `1.0/1:30`: 1.0 km in 1 minute 30 seconds, which is 40 km/h (only in text: the keypad takes speeds in km/h);
-- `60;110%`: 110% of 60 km/h, which is 66 km/h.
+- `60;80%`: 80% of 60 km/h, which is 48 km/h.
 
 One line can have only one of `setavg`, `thenavg` and `endavg`. A section can have only one `atime`.
 
@@ -966,7 +941,7 @@ A full example:
 5.25
 10.0 setavg 30
 15.0 endavg
-22.4 thenavg 50;110%
+22.4 thenavg 50;80%
 30.0
 ```
 
@@ -978,13 +953,13 @@ A full example:
 The roadmap has an error. Look for red messages on the rows, and see [Errors and warnings](#8-errors-and-warnings).
 
 **The times changed when I opened the race panel.**
-With the race panel open and no race timer running, the list shows section times. See [Section times in race mode](#79-section-times-in-race-mode).
+With the race panel open and no race timer running, the list shows section times. See [Section times in race mode](#77-section-times-in-race-mode).
 
 **I cannot type a colon when I create a section.**
 Use dots: `1.30` for 1 hour 30 minutes. See [Create a section](#41-create-a-section).
 
 **The time of day I typed is gone.**
-Starting a timer replaces it with the start time. See [What race mode changes in your roadmap](#106-what-race-mode-changes-in-your-roadmap).
+Starting a timer with **Now** replaces it with the moment you tapped. **On…** keeps it. See [What race mode changes in your roadmap](#106-what-race-mode-changes-in-your-roadmap).
 
 **The early/late value does not show.**
 The roadmap has errors, or the app has no time for your distance. Correct the roadmap first.
