@@ -26,6 +26,7 @@ private object PreferencesKeys {
     val SEND_TELE_TO_IP = stringPreferencesKey("sendTeleToIp")
     val SOUND_FEEDBACK = booleanPreferencesKey("soundFeedback")
     val OUTGAUGE_PORT = intPreferencesKey("outgaugePort")
+    val HUD_SWAP_PANELS = booleanPreferencesKey("hudSwapPanels")
 }
 
 data class UserPreferences(
@@ -36,7 +37,8 @@ data class UserPreferences(
     val speedLimitPercent: String?,
     val sendTeleToIp: String?,
     val soundFeedback: Boolean,
-    val outgaugePort: Int = 4444
+    val outgaugePort: Int = 4444,
+    val hudSwapPanels: Boolean = false
 )
 
 enum class TelemetrySource {
@@ -96,6 +98,12 @@ class PreferenceRepository(val dataStore: DataStore<Preferences>) {
         }
     }
 
+    suspend fun saveHudSwapPanels(value: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.HUD_SWAP_PANELS] = value
+        }
+    }
+
 }
 
 private fun mapUserPreferences(preferences: Preferences): UserPreferences {
@@ -110,6 +118,7 @@ private fun mapUserPreferences(preferences: Preferences): UserPreferences {
     val sendTeleToIp = preferences[PreferencesKeys.SEND_TELE_TO_IP]
     val soundFeedback = preferences[PreferencesKeys.SOUND_FEEDBACK] ?: false
     val outgaugePort = preferences[PreferencesKeys.OUTGAUGE_PORT] ?: 4444
+    val hudSwapPanels = preferences[PreferencesKeys.HUD_SWAP_PANELS] ?: false
     return UserPreferences(
         timeAllowance,
         calibration,
@@ -118,6 +127,7 @@ private fun mapUserPreferences(preferences: Preferences): UserPreferences {
         speedLimitPercent,
         sendTeleToIp?.takeIf { it.isNotEmpty() },
         soundFeedback,
-        outgaugePort
+        outgaugePort,
+        hudSwapPanels
     )
 }
