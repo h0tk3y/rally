@@ -64,7 +64,7 @@
     <string name="settingsCalibration">Тарировка</string>
     <string name="settingsCalibrationHint">Дистанция по одометру, делённая на дистанцию тарировочного участка:</string>
     <string name="settingsCalibrationFactor">Тарировочный коэффициент</string>
-    <string name="invalidNumberShouldBeBetween01and10">Неверное число, должно быть в пределах от 0.1 до 10</string>
+    <string name="invalidNumberShouldBeBetween001and10">Неверное число, должно быть в пределах от 0.01 до 10.0</string>
     <string name="calibrateFromRouteHint">Вы можете проехать тарировочный участок в режиме гонки и открыть этот экран, чтобы вычислить коэффициент по пройденной дистанции.</string>
     <string name="settingsCalibrateByOdoCheckRoute">Тарировка по пройденному тарировочному участку:</string>
     <string name="settingsExactOdoCheckDistance">Длина тарировочного участка</string>

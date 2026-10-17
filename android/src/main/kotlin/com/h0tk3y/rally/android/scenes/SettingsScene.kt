@@ -307,7 +307,7 @@ private fun Calibration(model: SettingsViewModel, calibrateByCurrentDistance: Do
                 if (isOdoInvalidValue) {
                     Spacer(Modifier.height(8.dp))
                     Box(Modifier.height(48.dp)) {
-                        Text(text = stringResource(R.string.invalidNumberShouldBeBetween01and10), color = MaterialTheme.colors.error)
+                        Text(text = stringResource(R.string.invalidNumberShouldBeBetween001and10), color = MaterialTheme.colors.error)
                     }
                 }
             }
