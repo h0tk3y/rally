@@ -622,13 +622,11 @@ class LiveSectionViewModel(
 
         val currentState = _raceState.value
         if (currentState is RaceUiState.RaceGoing) {
-            val addEndAvg = currentItems.filterIsInstance<PositionLine>().fold(0) { acc, it ->
-                acc + (if (it.modifier<SetAvg>() != null) 1 else 0) + (if (it.modifier<EndAvg>() != null) -1 else 0)
-            } >= 1
+            val finishDistance = currentState.raceModel.currentDistance.roundTo3Digits()
             maybeCreateItemAtDistanceFromModel(
-                currentState.raceModel.currentDistance.roundTo3Digits(),
+                finishDistance,
                 true,
-                if (addEndAvg) listOf(EndAvgSpeed(null)) else emptyList()
+                if (shouldEndStretchAtFinish(finishDistance)) listOf(EndAvgSpeed(null)) else emptyList()
             )
             restoreStartAtime(currentState.raceModelOfGoingAtSection)
             service?.finishRace(currentState.raceModel)
@@ -643,14 +641,46 @@ class LiveSectionViewModel(
         }
     }
 
+    /**
+     * Whether the position added at the race finish should end a stretch with an `endavg`.
+     *
+     * The race start opens a stretch with a `setavg`, but the roadmap may already end that stretch (when the race started at a
+     * typed `setavg` that has a typed `endavg`), and the finish may even be before the race start. An `endavg` at the finish
+     * ends the innermost open stretch, so every later position becomes one stretch less deep. Add it only if a stretch is open
+     * at the finish and every later position is at least two stretches deep: then no later position falls outside all
+     * stretches, and no later `endavg` is left without a stretch to end.
+     */
+    private fun shouldEndStretchAtFinish(finishDistance: DistanceKm): Boolean {
+        val positions = currentItems.filterIsInstance<PositionLine>()
+        val finishIndex = insertionIndex(positions, finishDistance)
+        val depths = stretchDepthsBefore(positions)
+        return depths[finishIndex] >= 1 && (finishIndex until positions.size).all { depths[it] >= 2 }
+    }
+
+    /** For each position, how many stretches are open just before it; the last item is the number open after the last position. */
+    private fun stretchDepthsBefore(positions: List<PositionLine>): IntArray {
+        val depths = IntArray(positions.size + 1)
+        positions.forEachIndexed { index, position ->
+            val depth = depths[index]
+            depths[index + 1] = when {
+                position.isThenAvg -> maxOf(depth, 1)
+                position.isSetAvg -> depth + 1
+                position.isEndAvg -> maxOf(depth - 1, 0)
+                else -> depth
+            }
+        }
+        return depths
+    }
+
     override fun undoFinishRace() {
         val currentState = _raceState.value
         if (currentState is RaceUiState.Going && currentState.raceModelAtFinish != null) {
-            val findLast = currentItems.filterIsInstance<PositionLine>().findLast {
-                it.atKm == currentState.raceModelAtFinish.currentDistance.roundTo3Digits() && it.modifier<EndAvgSpeed>() != null
-            }
-            if (findLast != null) {
-                deletePosition(findLast)
+            // The finish added the last position at its distance, with an `endavg` or with no marks:
+            val finishPosition = currentItems.filterIsInstance<PositionLine>().findLast {
+                it.atKm == currentState.raceModelAtFinish.currentDistance.roundTo3Digits()
+            }?.takeIf { it.modifiers.all { modifier -> modifier is EndAvgSpeed } }
+            if (finishPosition != null) {
+                deletePosition(finishPosition)
             }
             restoreStartAtime(currentState.raceModelAtFinish)
             database.insertEvent(
@@ -1275,6 +1305,10 @@ class LiveSectionViewModel(
         return maybeCreateItemAtDistanceFromModel(distanceKm, forceCreateIfExists, addModifiers)
     }
 
+    /** Where a new position at [distance] goes: after all the positions at that distance. */
+    private fun insertionIndex(items: List<RoadmapInputLine>, distance: DistanceKm): Int =
+        items.indexOfFirst { it is PositionLine && it.atKm > distance }.takeIf { it != -1 } ?: items.size
+
     private fun maybeCreateItemAtDistanceFromModel(
         distanceKm: DistanceKm,
         forceCreateIfExists: Boolean,
@@ -1290,7 +1324,7 @@ class LiveSectionViewModel(
             }
         }
 
-        val indexToInsert = items.indexOfFirst { it is PositionLine && it.atKm > roundedDistance }.takeIf { it != -1 } ?: items.size
+        val indexToInsert = insertionIndex(items, roundedDistance)
 
         val shouldSelectLine = indexToInsert == items.indexOfFirst { it.lineNumber == selectedLineIndex.value } + 1
 
