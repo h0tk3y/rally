@@ -461,16 +461,19 @@ private fun RaceTimeDistance(
                 if (selectedPosition != null) {
                     Text(deltaDistanceString(raceModel.currentDistance - selectedPosition.atKm), style = LocalCustomTypography.current.raceSmallIndicatorText)
                 }
-                TextButton(
-                    onClick = {
-                        if (raceControls != null) {
-                            hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
-                            raceControls.setGoingForward(!raceModel.distanceGoingUp)
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(if (!raceModel.distanceGoingUp) LocalCustomColorsPalette.current.dangerous else Color.Unspecified)
-                ) {
-                    Icon(Icons.AutoMirrored.Default.Undo, stringResource(R.string.switchDirectionHint))
+                // Without controls (driver HUD), the button can't be toggled, so only show it as an indicator when reversing
+                if (raceControls != null || !raceModel.distanceGoingUp) {
+                    TextButton(
+                        onClick = {
+                            if (raceControls != null) {
+                                hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                                raceControls.setGoingForward(!raceModel.distanceGoingUp)
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(if (!raceModel.distanceGoingUp) LocalCustomColorsPalette.current.dangerous else Color.Unspecified)
+                    ) {
+                        Icon(Icons.AutoMirrored.Default.Undo, stringResource(R.string.switchDirectionHint))
+                    }
                 }
                 Spacer(Modifier.weight(1.0f))
                 if (raceControls != null) {
