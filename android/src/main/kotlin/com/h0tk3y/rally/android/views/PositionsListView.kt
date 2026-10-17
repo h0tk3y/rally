@@ -177,8 +177,9 @@ fun PositionsListView(
                                     )
 
                                     if (matchSpeed != null) {
+                                        // Show the matched speed as the setavg shows it, with the base speed and the percentage, if any
                                         FocusedTextFieldWithoutKeyboard(
-                                            matchSpeed.setavg.valueKmh.strRound3(),
+                                            matchSpeed.setavg.baseSpeedKmh.strRound3(),
                                             AverageSpeed,
                                             modifier = Modifier
                                                 .alpha(0.5f)
@@ -190,6 +191,30 @@ fun PositionsListView(
                                             onPositionChange = { },
                                             enabled = false
                                         )
+                                        val matchPercentage = matchSpeed.setavg.percentage
+                                        if (matchPercentage != null) {
+                                            FocusedTextFieldWithoutKeyboard(
+                                                matchPercentage.formatPercentage(),
+                                                SpeedPercentage,
+                                                modifier = Modifier
+                                                    .alpha(0.5f)
+                                                    .padding(start = 2.dp)
+                                                    .align(Alignment.CenterVertically),
+                                                selectionPosition = cursorIndex,
+                                                focused = false,
+                                                onTextChange = { },
+                                                onFocused = { },
+                                                onPositionChange = { },
+                                                enabled = false
+                                            )
+                                            Text(
+                                                "%",
+                                                Modifier
+                                                    .alpha(0.5f)
+                                                    .padding(end = 2.dp)
+                                                    .align(Alignment.CenterVertically)
+                                            )
+                                        }
                                     }
                                 }
                                 presentFields(line).filter { it != Distance && shouldBeDisplayed(it, editorState) }
