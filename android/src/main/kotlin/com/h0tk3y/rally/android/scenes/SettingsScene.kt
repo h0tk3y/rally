@@ -330,8 +330,11 @@ private fun Calibration(model: SettingsViewModel, calibrateByCurrentDistance: Do
                     onValueChange = {
                         isErrorInvalidExactDistance = validateDistance(it) == null
                         exactValueString = it
-                        if (!isErrorInvalidExactDistance) {
-                            val odoFactor = calibrateByCurrentDistance.strRound3().toDouble() / exactValueString.toDouble()
+                        val currentFactor = calibration
+                        if (!isErrorInvalidExactDistance && currentFactor != null) {
+                            // The race distance has already been divided by the current factor, so undo that first
+                            val rawDistance = calibrateByCurrentDistance.strRound3().toDouble() * currentFactor
+                            val odoFactor = rawDistance / exactValueString.toDouble()
                             if (odoFactor.isFinite()) {
                                 updateOdoCalibrationField(odoFactor.strRound5())
                             }
