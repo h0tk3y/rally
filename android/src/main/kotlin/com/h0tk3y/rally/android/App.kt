@@ -2,12 +2,8 @@ package com.h0tk3y.rally.android
 
 import android.content.Context
 import android.content.Intent
-import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Surface
 import androidx.compose.material.Text
-import androidx.compose.material.darkColors
-import androidx.compose.material.lightColors
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -21,12 +17,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.NavBackStack
 import androidx.navigation3.runtime.NavKey
-import androidx.navigation3.runtime.entry
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
-import androidx.navigation3.runtime.rememberSavedStateNavEntryDecorator
+import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
-import androidx.navigation3.ui.rememberSceneSetupNavEntryDecorator
 import com.h0tk3y.rally.R
 import com.h0tk3y.rally.android.db.Database
 import com.h0tk3y.rally.android.db.SectionInsertOrRenameResult
@@ -44,6 +38,7 @@ import com.h0tk3y.rally.android.scenes.SettingsViewModel
 import com.h0tk3y.rally.android.scenes.StreamedSectionViewModel
 import com.h0tk3y.rally.android.util.StreamingServerEmptyInfo
 import com.h0tk3y.rally.db.Section
+import kotlinx.coroutines.Dispatchers
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -67,7 +62,7 @@ data class SectionEventLogScene(val sectionId: Long) : NavKey
 @Serializable
 data class SettingsScene(val currentDistance: Double?) : NavKey
 
-private class NavigationModel(private val backStack: NavBackStack) {
+private class NavigationModel(private val backStack: NavBackStack<NavKey>) {
     fun navigateTo(key: NavKey) {
         backStack.add(key)
     }
@@ -115,15 +110,13 @@ fun App(
     val backStack = rememberNavBackStack(HomeScene())
     val navigation = remember { NavigationModel(backStack) }
 
-    MaterialTheme(if (isSystemInDarkTheme()) darkColors() else lightColors()) {
-        applyTheme {
-            Surface {
-                NavDisplay(
+    applyTheme {
+        Surface {
+            NavDisplay(
                     backStack,
                     onBack = navigation::popBack,
                     entryDecorators = listOf(
-                        rememberSceneSetupNavEntryDecorator(),
-                        rememberSavedStateNavEntryDecorator(),
+                        rememberSaveableStateHolderNavEntryDecorator(),
                         rememberViewModelStoreNavEntryDecorator()
                     ),
                     entryProvider = entryProvider {
@@ -143,13 +136,16 @@ fun App(
                             val withRace = it.withRace
 
                             val context = LocalContext.current
-                            val model = viewModel { LiveSectionViewModel(sectionId, database, userPreferences) }
+                            val model = viewModel { LiveSectionViewModel(sectionId, database, userPreferences, Dispatchers.Default) }
                             val connection = remember(context) {
                                 localRaceServiceConnection(context, model::onServiceConnected, model::onServiceDisconnected)
                             }
                             model.setRaceServiceConnector { connectToService(context, LocalRaceService::class.java, connection) }
                             model.setRaceServiceDisconnector(connection::disconnectIfConnected)
-                            DisposableEffect(context) { onDispose(connection::disconnectIfConnected) }
+                            DisposableEffect(connection) {
+                                probeExistingService(context, LocalRaceService::class.java, connection)
+                                onDispose(connection::disconnectIfConnected)
+                            }
 
                             if (withRace) {
                                 LaunchedEffect(sectionId) {
@@ -193,7 +189,7 @@ fun App(
 
                         entry<StreamedSectionScene> { key ->
                             val context = LocalContext.current
-                            val model = viewModel { StreamedSectionViewModel() }
+                            val model = viewModel { StreamedSectionViewModel(Dispatchers.Default) }
 
                             val connection = remember(context) {
                                 tcpStreamedRaceServiceConnection(context, model::onServiceConnected, model::onServiceDisconnected)
@@ -242,15 +238,4 @@ fun App(
                 )
             }
         }
-    }
-}
-
-private fun <S : CommonRaceService> connectToService(
-    context: Context,
-    serviceClass: Class<S>,
-    connection: RaceServiceConnection<S>
-) {
-    val intent = Intent(context, serviceClass)
-    context.bindService(intent, connection, Context.BIND_AUTO_CREATE)
-    ContextCompat.startForegroundService(context, intent)
 }

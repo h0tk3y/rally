@@ -74,10 +74,10 @@ class InputRoadmapParser(private val modifiersValidator: ModifiersValidator) {
 
     private val parsers = listOf<ModifierParser<*>>(
         ByWord("odo", 1) { (arg) -> PositionLineModifier.OdoDistance(DistanceKm(arg.toDouble())) },
-        ByWord("setavg", 1) { (arg) -> PositionLineModifier.SetAvgSpeed(parseAvgSpeed(arg)) },
-        ByWord("endavg", 1) { (arg) -> PositionLineModifier.EndAvgSpeed(parseAvgSpeed(arg)) },
+        ByWord("setavg", 1, partsAreNumbers = false) { (arg) -> tryParseAvgSpeed(arg)?.let(PositionLineModifier::SetAvgSpeed) },
+        ByWord("endavg", 1, partsAreNumbers = false) { (arg) -> tryParseAvgSpeed(arg)?.let(PositionLineModifier::EndAvgSpeed) },
         ByWord("endavg", 0) { (_) -> PositionLineModifier.EndAvgSpeed(null) },
-        ByWord("thenavg", 1) { (arg) -> PositionLineModifier.ThenAvgSpeed(parseAvgSpeed(arg)) },
+        ByWord("thenavg", 1, partsAreNumbers = false) { (arg) -> tryParseAvgSpeed(arg)?.let(PositionLineModifier::ThenAvgSpeed) },
         ByWord("atime", 1, partsAreNumbers = false) { (arg) -> PositionLineModifier.AstroTime(TimeDayHrMinSec.tryParse(arg)!!) },
         ByWord("here", 1) { (arg) ->
             PositionLineModifier.Here(TimeMinSec.parse(arg)?.toHr() ?: error("failed to parse time"))
@@ -92,7 +92,27 @@ class InputRoadmapParser(private val modifiersValidator: ModifiersValidator) {
     )
 }
 
+/** Returns null if [string] is not an avgspd notation, so that the next modifier parser gets a chance, e.g. `endavg atime 12:00`. */
+private fun tryParseAvgSpeed(string: String): SpeedKmh? =
+    try {
+        parseAvgSpeed(string)
+    } catch (_: IllegalStateException) {
+        null
+    }
+
 private fun parseAvgSpeed(string: String): SpeedKmh {
+    val s = string.replace("\\s+".toRegex(), "")
+    if (";" in s) {
+        val speedPart = s.substringBefore(";")
+        val percentPart = s.substringAfter(";").removeSuffix("%")
+        val percent = percentPart.toDoubleOrNull() ?: error("failed to parse percentage in avgspd notation $string")
+        val baseSpeed = parseAvgSpeedKmh(speedPart)
+        return SpeedWithPercentage(baseSpeed, percent)
+    }
+    return parseAvgSpeedKmh(s)
+}
+
+private fun parseAvgSpeedKmh(string: String): SpeedKmh {
     val s = string.replace("\\s+".toRegex(), "")
     return when {
         s.count { it == '/' } == 1 -> {
@@ -103,7 +123,7 @@ private fun parseAvgSpeed(string: String): SpeedKmh {
         }
 
         s.toDoubleOrNull() != null ->
-            parseAvgSpeed(s + SpeedKmh.KMH_SUFFIX)
+            parseAvgSpeedKmh(s + SpeedKmh.KMH_SUFFIX)
 
         else -> SpeedKmh.parse(s) ?: error("failed to parse avgspd notation $string")
     }

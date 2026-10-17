@@ -27,7 +27,6 @@ import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.RadioButton
-import androidx.compose.material.RadioButtonDefaults
 import androidx.compose.material.Scaffold
 import androidx.compose.material.Switch
 import androidx.compose.material.Text
@@ -52,6 +51,7 @@ import androidx.lifecycle.viewModelScope
 import com.h0tk3y.rally.R
 import com.h0tk3y.rally.android.PreferenceRepository
 import com.h0tk3y.rally.android.TelemetrySource
+import com.h0tk3y.rally.android.util.IpAddressDisplay
 import com.h0tk3y.rally.strRound3
 import com.h0tk3y.rally.strRound5
 import kotlinx.coroutines.flow.map
@@ -99,8 +99,6 @@ private fun LazyItemScope.TelemetrySource(
 ) {
     val telemetrySource by model.currentTelemetrySource.collectAsState(TelemetrySource.BT_OBD)
 
-    val rbColors = RadioButtonDefaults.colors(MaterialTheme.colors.primary)
-
     Text(stringResource(R.string.settingsTelemetrySource), style = MaterialTheme.typography.h6, modifier = Modifier.padding(16.dp))
 
     val isGps = telemetrySource == TelemetrySource.GPS
@@ -110,7 +108,7 @@ private fun LazyItemScope.TelemetrySource(
             .fillMaxWidth()
             .clickable { model.setTelemetrySource(TelemetrySource.GPS) }
     ) {
-        RadioButton(colors = rbColors, selected = isGps, onClick = null)
+        RadioButton(selected = isGps, onClick = null)
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(stringResource(R.string.telemetrySourceGps))
             Text(style = MaterialTheme.typography.caption, text = stringResource(R.string.telemetrySourceGpsHint))
@@ -124,7 +122,7 @@ private fun LazyItemScope.TelemetrySource(
             .fillMaxWidth()
             .clickable { model.setTelemetrySource(TelemetrySource.BT_OBD) }
     ) {
-        RadioButton(colors = rbColors, selected = isObd, onClick = null)
+        RadioButton(selected = isObd, onClick = null)
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(stringResource(R.string.telemetrySourceObd))
             Text(style = MaterialTheme.typography.caption, text = stringResource(R.string.telemetrySourceObdHint))
@@ -168,11 +166,62 @@ private fun LazyItemScope.TelemetrySource(
         }
     }
 
+    val isOutgauge = telemetrySource == TelemetrySource.OUTGAUGE
+
+    SettingsRow(
+        Modifier
+            .fillMaxWidth()
+            .clickable { model.setTelemetrySource(TelemetrySource.OUTGAUGE) }
+    ) {
+        RadioButton(selected = isOutgauge, onClick = null)
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(stringResource(R.string.telemetrySourceOutgauge))
+            Text(style = MaterialTheme.typography.caption, text = stringResource(R.string.telemetrySourceOutgaugeHint))
+        }
+    }
+    if (isOutgauge) {
+        val outgaugePort by model.outgaugePort.collectAsState(4444)
+        var portText by rememberSaveable(outgaugePort) { mutableStateOf(outgaugePort.toString()) }
+        val parsedPort = portText.toIntOrNull()
+        val isValidPort = parsedPort != null && parsedPort in 1024..65535
+        Row {
+            Spacer(Modifier.width(48.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    modifier = Modifier.fillMaxWidth(),
+                    value = portText,
+                    onValueChange = {
+                        portText = it
+                        val p = it.toIntOrNull()
+                        if (p != null && p in 1024..65535) {
+                            model.setOutgaugePort(p)
+                        }
+                    },
+                    isError = !isValidPort,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    label = { Text(stringResource(R.string.settingsOutgaugePort)) }
+                )
+                if (!isValidPort) {
+                    Text(
+                        stringResource(R.string.invalidPortShouldBeBetween1024And65535),
+                        color = MaterialTheme.colors.error,
+                        style = MaterialTheme.typography.caption
+                    )
+                }
+                Text(
+                    text = stringResource(R.string.settingsOutgaugeInstruction),
+                    style = MaterialTheme.typography.caption
+                )
+                IpAddressDisplay(alignment = Alignment.Start)
+            }
+        }
+    }
+
     SettingsRow(
         Modifier.clickable { model.setTelemetrySource(TelemetrySource.SIMULATION) }
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            RadioButton(colors = rbColors, selected = telemetrySource == TelemetrySource.SIMULATION, onClick = null)
+            RadioButton(selected = telemetrySource == TelemetrySource.SIMULATION, onClick = null)
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(stringResource(R.string.telemetrySourceSimulation))
                 Text(style = MaterialTheme.typography.caption, text = stringResource(R.string.telemetrySourceSimulationHint))
@@ -258,7 +307,7 @@ private fun Calibration(model: SettingsViewModel, calibrateByCurrentDistance: Do
                 if (isOdoInvalidValue) {
                     Spacer(Modifier.height(8.dp))
                     Box(Modifier.height(48.dp)) {
-                        Text(text = stringResource(R.string.invalidNumberShouldBeBetween01and10), color = MaterialTheme.colors.error)
+                        Text(text = stringResource(R.string.invalidNumberShouldBeBetween001and10), color = MaterialTheme.colors.error)
                     }
                 }
             }
@@ -281,8 +330,11 @@ private fun Calibration(model: SettingsViewModel, calibrateByCurrentDistance: Do
                     onValueChange = {
                         isErrorInvalidExactDistance = validateDistance(it) == null
                         exactValueString = it
-                        if (!isErrorInvalidExactDistance) {
-                            val odoFactor = calibrateByCurrentDistance.strRound3().toDouble() / exactValueString.toDouble()
+                        val currentFactor = calibration
+                        if (!isErrorInvalidExactDistance && currentFactor != null) {
+                            // The race distance has already been divided by the current factor, so undo that first
+                            val rawDistance = calibrateByCurrentDistance.strRound3().toDouble() * currentFactor
+                            val odoFactor = rawDistance / exactValueString.toDouble()
                             if (odoFactor.isFinite()) {
                                 updateOdoCalibrationField(odoFactor.strRound5())
                             }
@@ -313,20 +365,19 @@ private fun Allowance(
     model: SettingsViewModel,
 ) {
     val allowance by model.currentAllowance.collectAsState(null)
-    val rbColors = RadioButtonDefaults.colors(MaterialTheme.colors.primary)
 
     Text(stringResource(R.string.settingsAllowance), style = MaterialTheme.typography.h6, modifier = Modifier.padding(16.dp))
 
     SettingsRow(
         Modifier.clickable { model.setAllowance(null) }
     ) {
-        RadioButton(colors = rbColors, selected = allowance == null, onClick = null)
+        RadioButton(selected = allowance == null, onClick = null)
         Text(stringResource(R.string.allowanceNone))
     }
     SettingsRow(
         Modifier.clickable { model.setAllowance(TimeAllowance.BY_TEN_FULL) }
     ) {
-        RadioButton(colors = rbColors, selected = allowance == TimeAllowance.BY_TEN_FULL, onClick = null)
+        RadioButton(selected = allowance == TimeAllowance.BY_TEN_FULL, onClick = null)
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(stringResource(R.string.allowanceT10Down))
             Text(style = MaterialTheme.typography.caption, text = stringResource(R.string.allowanceT10DownHint))
@@ -335,7 +386,7 @@ private fun Allowance(
     SettingsRow(
         Modifier.clickable { model.setAllowance(TimeAllowance.BY_TEN_FULL_PLUS_ONE) }
     ) {
-        RadioButton(colors = rbColors, selected = allowance == TimeAllowance.BY_TEN_FULL_PLUS_ONE, onClick = null)
+        RadioButton(selected = allowance == TimeAllowance.BY_TEN_FULL_PLUS_ONE, onClick = null)
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(stringResource(R.string.allowanceT10Up))
             Text(style = MaterialTheme.typography.caption, text = stringResource(R.string.allowanceT10UpHint))
@@ -386,6 +437,7 @@ class SettingsViewModel(
     val currentMacSelection = prefs.userPreferencesFlow.map { it.btMac }
     val currentAllowance = prefs.userPreferencesFlow.map { it.allowance }
     val currentCalibration = prefs.userPreferencesFlow.map { it.calibration }
+    val outgaugePort = prefs.userPreferencesFlow.map { it.outgaugePort }
 
     fun setTelemetrySource(newTelemetrySource: TelemetrySource) {
         viewModelScope.launch {
@@ -420,6 +472,12 @@ class SettingsViewModel(
     fun setSoundFeedback(soundFeedback: Boolean) {
         viewModelScope.launch {
             prefs.saveSoundFeedback(soundFeedback)
+        }
+    }
+
+    fun setOutgaugePort(port: Int) {
+        viewModelScope.launch {
+            prefs.saveOutgaugePort(port)
         }
     }
 

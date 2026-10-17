@@ -72,7 +72,7 @@ sealed interface PositionLineModifier {
     ) : SetAvg, EndAvg {
         override val endavg get() = null
     }
-    
+
     @Serializable
     data class EndAvgSpeed(
         override val endavg: SpeedKmh?,
