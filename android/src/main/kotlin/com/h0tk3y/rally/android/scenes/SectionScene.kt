@@ -515,7 +515,7 @@ fun SectionScene(
                 goToEventLog = sectionOps?.let { it::navigateToEventLog },
                 goToSettings = {
                     if (model is RaceModelControls)
-                        onGoToSettings((model.raceState as? RaceUiState.HasRaceModel)?.raceModel?.currentDistance?.valueKm)
+                        onGoToSettings((raceState as? RaceUiState.HasRaceModel)?.raceModel?.currentDistance?.valueKm)
                     else null
                 },
                 modifier = keyboardModifier,
