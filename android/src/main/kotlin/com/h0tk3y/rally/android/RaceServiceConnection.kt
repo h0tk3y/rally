@@ -2,8 +2,10 @@ package com.h0tk3y.rally.android
 
 import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
 import android.content.ServiceConnection
 import android.os.IBinder
+import androidx.core.content.ContextCompat
 import com.h0tk3y.rally.android.racecervice.CommonRaceService
 import com.h0tk3y.rally.android.racecervice.LocalRaceService
 import com.h0tk3y.rally.android.racecervice.TcpStreamedRaceService
@@ -15,24 +17,58 @@ class RaceServiceConnection<S : CommonRaceService>(
     val binderMapping: (IBinder?) -> S
 ) : ServiceConnection {
 
-    private var isConnected = false
+    var isBound = false
+        private set
 
     override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
-        isConnected = true
+        isBound = true
         serviceConsumer(binderMapping(service))
     }
 
     override fun onServiceDisconnected(name: ComponentName?) {
         onDisconnected()
-        isConnected = false
+        isBound = false
+    }
+
+    fun markBound() {
+        isBound = true
     }
 
     fun disconnectIfConnected() {
-        if (isConnected) {
-            context.unbindService(this)
+        if (isBound) {
+            try {
+                context.unbindService(this)
+            } catch (e: IllegalArgumentException) {
+                // Ignore if not registered or already unbound
+            }
+            isBound = false
         }
-        isConnected = false
     }
+}
+
+fun <S : CommonRaceService> probeExistingService(
+    context: Context,
+    serviceClass: Class<S>,
+    connection: RaceServiceConnection<S>
+): Boolean {
+    val intent = Intent(context, serviceClass)
+    val bound = context.bindService(intent, connection, 0)
+    if (bound) {
+        connection.markBound()
+    }
+    return bound
+}
+
+fun <S : CommonRaceService> connectToService(
+    context: Context,
+    serviceClass: Class<S>,
+    connection: RaceServiceConnection<S>
+) {
+    val intent = Intent(context, serviceClass)
+    if (context.bindService(intent, connection, Context.BIND_AUTO_CREATE)) {
+        connection.markBound()
+    }
+    ContextCompat.startForegroundService(context, intent)
 }
 
 fun localRaceServiceConnection(

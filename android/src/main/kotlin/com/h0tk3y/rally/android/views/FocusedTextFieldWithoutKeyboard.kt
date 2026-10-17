@@ -1,18 +1,11 @@
 package com.h0tk3y.rally.android.views
 
-import android.util.Log
-import android.view.inputmethod.EditorInfo
-import android.view.inputmethod.InputConnection
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.*
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -25,16 +18,11 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.InterceptPlatformTextInput
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalTextInputService
-import androidx.compose.ui.platform.PlatformTextInputInterceptor
-import androidx.compose.ui.platform.PlatformTextInputMethodRequest
-import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Constraints
-import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
@@ -42,7 +30,6 @@ import com.h0tk3y.rally.android.scenes.DataKind
 import com.h0tk3y.rally.android.theme.LocalCustomTypography
 import kotlinx.coroutines.awaitCancellation
 
-@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun FocusedTextFieldWithoutKeyboard(
     text: String,
@@ -50,24 +37,32 @@ fun FocusedTextFieldWithoutKeyboard(
     modifier: Modifier = Modifier,
     textStyle: TextStyle = LocalCustomTypography.current.dataTextStyle,
     selectionPosition: Int = text.length,
+    selectAll: Boolean = false,
+    placeholder: String? = null,
     enabled: Boolean = true,
     focused: Boolean = false,
     onTextChange: (String) -> Unit = {},
     onFocused: () -> Unit = {},
     onPositionChange: (Int) -> Unit = {},
 ) {
-    InterceptPlatformTextInput(interceptor = { request, nextHandler ->
+    InterceptPlatformTextInput(interceptor = { _, _ ->
         awaitCancellation()
     }) {
         val focusRequester = remember { FocusRequester() }
 
-        if (focused) {
-            LaunchedEffect(key1 = Unit) { focusRequester.requestFocus() }
+        LaunchedEffect(focused) {
+            if (focused) {
+                focusRequester.requestFocus()
+            }
         }
 
         val textFieldValue = TextFieldValue(
             text,
-            selection = if (focused) TextRange(selectionPosition, selectionPosition) else TextRange.Zero
+            selection = when {
+                !focused -> TextRange.Zero
+                selectAll -> TextRange(0, text.length)
+                else -> TextRange(selectionPosition, selectionPosition)
+            }
         )
 
 
@@ -91,30 +86,29 @@ fun FocusedTextFieldWithoutKeyboard(
                     .focusRequester(focusRequester)
                     .onFocusChanged { if (it.isFocused) onFocused() }
                     .widthIn(if (kind == DataKind.Distance) 45.dp else Dp.Unspecified)
-                    .width(with(density) { measurer.measure(text, textStyle, density = density, constraints = Constraints()).size.width.toDp() + 4.dp })
+                    .width(
+                        with(density) {
+                            val measuredText = text.ifEmpty { placeholder.orEmpty() }
+                            val extraWidth = if (kind == DataKind.SpeedPercentage && measuredText.isNotEmpty()) 2.dp else 4.dp
+                            measurer.measure(measuredText, textStyle, density = density, constraints = Constraints()).size.width.toDp() + extraWidth
+                        }
+                    )
                     .disabledHorizontalPointerInputScroll(),
                 singleLine = true,
-                decorationBox = { fn ->
-                    Box(propagateMinConstraints = true) { fn() }
+                decorationBox = { innerTextField ->
+                    Box(propagateMinConstraints = true) {
+                        if (text.isEmpty() && placeholder != null) {
+                            Text(
+                                text = placeholder,
+                                style = textStyle.copy(color = MaterialTheme.colors.onBackground.copy(alpha = 0.38f))
+                            )
+                        }
+                        innerTextField()
+                    }
                 }
             )
         }
     }
-}
-
-private fun measure(
-    density: Density,
-    measurer: TextMeasurer,
-    style: TextStyle,
-    text: String
-) = with(density) {
-    measurer.measure(text, style = style, constraints = Constraints(), density = density).size.width.toDp() * 2
-}.also { Log.i("measurer", "measured: $it") }
-
-private fun DataKind.width() = when (this) {
-    DataKind.SyntheticCount -> 20.dp
-    DataKind.AstroTime -> 70.dp
-    else -> 40.dp
 }
 
 

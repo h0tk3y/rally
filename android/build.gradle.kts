@@ -1,15 +1,13 @@
-import com.android.build.gradle.api.ApkVariantOutput
 import org.apache.tools.ant.filters.StringInputStream
 import java.util.Properties
 
 plugins {
-    kotlin("android")
+    id("com.android.application")
+    
     kotlin("plugin.compose")
     kotlin("plugin.serialization")
     kotlin("plugin.power-assert")
-
     id("org.jetbrains.compose")
-    id("com.android.application")
     id("app.cash.sqldelight")
 }
 
@@ -23,42 +21,42 @@ dependencies {
     implementation(compose.runtime)
     implementation(compose.foundation)
     implementation(compose.material)
-    implementation(platform("androidx.compose:compose-bom:2025.09.00"))
-    implementation("androidx.compose.material:material-icons-extended:1.7.8")
-    implementation("androidx.compose.material:material-icons-extended-android:1.7.8")
-    implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.7.1")
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
-    implementation("app.cash.sqldelight:coroutines-extensions:2.1.0")
-    implementation("com.github.h0tk3y.betterParse:better-parse:0.4.4")
-    implementation("androidx.appcompat:appcompat:1.7.1")
-    implementation("androidx.core:core-ktx:1.17.0")
-    implementation("app.cash.sqldelight:android-driver:2.1.0")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.9.3")
+    implementation(platform(libs.androidx.compose.bom))
+    implementation(libs.androidx.compose.material.icons.extended)
+    implementation(libs.androidx.compose.material.icons.extended.android)
+    implementation(libs.kotlinx.datetime)
+    implementation(libs.kotlinx.serialization.json)
+    implementation(libs.coroutines.extensions1)
+    implementation(libs.better.parse)
+    implementation(libs.androidx.appcompat)
+    implementation(libs.androidx.core.ktx)
+    implementation(libs.android.driver)
+    implementation(libs.androidx.lifecycle.viewmodel.ktx)
     implementation(libs.androidx.navigation3.ui)
     implementation(libs.androidx.navigation3.runtime)
     implementation(libs.androidx.lifecycle.viewmodel.navigation3)
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.3")
-    implementation("androidx.compose.material3:material3-window-size-class:1.3.2")
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.compose.material3.window.size.class1)
 
-    implementation(project(":common"))
-    implementation("androidx.activity:activity-compose:1.11.0")
-    implementation("com.google.accompanist:accompanist-webview:0.36.0")
-    implementation("com.google.accompanist:accompanist-systemuicontroller:0.36.0")
-    implementation("com.google.accompanist:accompanist-insets:0.30.1")
+    implementation(libs.androidx.activity.compose)
+    implementation(libs.accompanist.webview)
+    implementation(libs.accompanist.systemuicontroller)
+    implementation(libs.accompanist.insets)
 
-    implementation("com.github.pires:obd-java-api:1.0")
+    implementation(libs.obd.java.api)
 
-    implementation("androidx.datastore:datastore-preferences:1.1.7")
+    implementation(libs.androidx.datastore.preferences)
     
     testImplementation(libs.mockk)
     testImplementation(libs.mockk.agent)
     testImplementation(libs.mockk.android)
     testImplementation(kotlin("test"))
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
-    testImplementation("app.cash.turbine:turbine:1.2.1")
+    testImplementation(kotlin("test-junit"))
+    testImplementation(libs.jetbrains.kotlinx.coroutines.test)
+    testImplementation(libs.turbine)
 
-    androidTestImplementation("androidx.compose.ui:ui-test-junit4:1.9.1")
-    debugImplementation("androidx.compose.ui:ui-test-manifest:1.9.1")
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
 }
 
 sqldelight {
@@ -76,9 +74,15 @@ kotlin {
     }
 }
 
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+    compilerOptions {
+        freeCompilerArgs.add("-Xopt-in=kotlin.time.ExperimentalTime")
+    }
+}
+
 android {
     namespace = "com.h0tk3y.rally"
-    compileSdk = 36
+    compileSdk = 37
     sourceSets["main"].manifest.srcFile("src/androidMain/AndroidManifest.xml")
     signingConfigs {
         create("release") {
@@ -129,16 +133,16 @@ android {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
-    kotlin {
-        jvmToolchain(11)
-    }
+//    applicationVariants.all {
+//        val variantName = name
+//        outputs.all {
+//            if (this is ApkVariantOutput) {
+//                this.outputFileName = "com.h0tk3y.rally.${variantName}.apk"
+//            }
+//        }
+//    }
+}
 
-    applicationVariants.all {
-        val variantName = name
-        outputs.all {
-            if (this is ApkVariantOutput) {
-                this.outputFileName = "com.h0tk3y.rally.${variantName}.apk"
-            }
-        }
-    }
+kotlin {
+    jvmToolchain(11)
 }

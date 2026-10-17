@@ -52,6 +52,11 @@
     <string name="telemetrySourceSimulationHint">Скорость задаётся \"ползунком\" на экране режима гонки</string>
     <string name="telemetrySourceObd">OBD через Bluetooth</string>
     <string name="telemetrySourceObdHint">Подключение к модулю ELM327 в машине по OBD через Bluetooth</string>
+    <string name="telemetrySourceOutgauge">OutGauge</string>
+    <string name="telemetrySourceOutgaugeHint">Получение телеметрии по UDP из автосимуляторов</string>
+    <string name="settingsOutgaugePort">UDP-порт</string>
+    <string name="invalidPortShouldBeBetween1024And65535">Неверный порт, должен быть в пределах от 1024 до 65535</string>
+    <string name="settingsOutgaugeInstruction">Укажите IP-адрес этого устройства и номер порта выше в настройках симулятора (например, в BeamNG: Настройки > Другое > OutGauge).</string>
     <string name="settingsBtMac">MAC-адрес Bluetooth-устройства</string>
     <string name="settingsSendDataToAnotherDevice">Отправка данных на устройство пилота</string>
     <string name="settingsSendDataToAnotherDeviceHint">Введите IP-адрес второго устройства. Оба устройства должны быть в одной Wi-Fi-сети. На другом устройстве откройте "Экран пилота" в меню списка секций.</string>
@@ -59,7 +64,7 @@
     <string name="settingsCalibration">Тарировка</string>
     <string name="settingsCalibrationHint">Дистанция по одометру, делённая на дистанцию тарировочного участка:</string>
     <string name="settingsCalibrationFactor">Тарировочный коэффициент</string>
-    <string name="invalidNumberShouldBeBetween01and10">Неверное число, должно быть в пределах от 0.1 до 10</string>
+    <string name="invalidNumberShouldBeBetween001and10">Неверное число, должно быть в пределах от 0.01 до 10.0</string>
     <string name="calibrateFromRouteHint">Вы можете проехать тарировочный участок в режиме гонки и открыть этот экран, чтобы вычислить коэффициент по пройденной дистанции.</string>
     <string name="settingsCalibrateByOdoCheckRoute">Тарировка по пройденному тарировочному участку:</string>
     <string name="settingsExactOdoCheckDistance">Длина тарировочного участка</string>
@@ -82,6 +87,9 @@
     <string name="telemetrySourceGpsHint">Измерение дистанции и скорости по GPS</string>
     <string name="satStatusPattern">" (%1$d спут.)"</string>
     <string name="telemetrySimulationOk">Симуляция ✔</string>
+    <string name="telemetryOutgaugeWaiting">OutGauge: ожидание…</string>
+    <string name="telemetryOutgaugeDelayed">OutGauge: задержка</string>
+    <string name="telemetryOutgaugeError">OutGauge: ошибка</string>
     <string name="telemetryData">Данные</string>
     <string name="telemetryDataWaiting">Данные: ожидание</string>
     <string name="notConnectedToRaceService">Гоночный режим не работает</string>
@@ -89,7 +97,8 @@
     <string name="raceGoingInAnotherSection">Идёт гонка по другой секции</string>
     <string name="raceNotStarted">Гонка не запущена</string>
     <string name="stoppedTimeDistancePrefix">"Остановка: "</string>
-    <string name="raceStatusHint">"Статус гонки: "</string>
+    <string name="raceStatusRaceGoing">Статус гонки: идёт ДС</string>
+    <string name="raceStatusSectionGoing">Статус гонки: идёт секция</string>
     <string name="allowanceLetter">Л</string>
     <string name="switchDirectionHint">Смена направления</string>
     <string name="buttonApplyOdo">Применить</string>
@@ -120,10 +129,7 @@
     <string name="noNetworkFoundPleaseConnectToWiFi">Нет подходящей сети. Пожалуйста, подключитесь к Wi-Fi.</string>
     <string name="labelSetavg">старт%1$s</string>
     <string name="labelThenAvg">смена%1$s</string>
-    <string name="labelSynth">синт.</string>
-    <string name="labelEach">через</string>
     <string name="labelAtime">а.время</string>
-    <string name="labelOdo">одо</string>
     <string name="labelEndavg">финиш</string>
     <string name="errOutsideIntervals">вне интервалов</string>
     <string name="errNoSetavg">нет старта для этой позиции</string>
@@ -134,11 +140,8 @@
     <string name="keySetavg">старт</string>
     <string name="keyThen">смена</string>
     <string name="keyEndavg">финиш</string>
-    <string name="keySynth">синт.</string>
     <string name="keyAtime">а.время</string>
-    <string name="keyOdo">одо</string>
-    <string name="keyAddBelow">доб▼</string>
-    <string name="keyAddAbove">доб▲</string>
+    <string name="keyAdd">доб</string>
     <string name="keyRemove">удалить ╳</string>
     <string name="notificationGoing">: Секция</string>
     <string name="notificationInRace">: ДС</string>
