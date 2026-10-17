@@ -392,6 +392,8 @@ The grey **➠** value is the speed to drive on the parts of a stretch that are 
 
 It does not show it at the last position of the section, or at a `thenavg` inside an inner stretch: there you stay inside the inner stretch, so the rest of the road does not start yet.
 
+**How to use it.** In theory you hold the ➠ speed all the way. On a real road you cannot drive a long stretch at one even speed, so take the ➠ speed as a hint about the pace of the stretch. In practice, drive as fast as you can within the allowance (see [Allowance](#79-allowance)), and use the early/late value of the section timer to check that you are not too early.
+
 If the inner stretches need more time than the whole longer stretch allows, the app cannot give a useful ➠ speed. It shows the warning `🚫late by` instead (see [Errors and warnings](#8-errors-and-warnings)).
 
 ### 7.6 Time of day (`atime`)
@@ -422,7 +424,7 @@ These are the times that the section timer uses. When a race timer starts, the l
 
 ### 7.9 Allowance
 
-Some rallies give an allowance in minutes that grows with the time of the section. Turn it on in Settings, under **Allowance**:
+Some rallies let you arrive early by a number of minutes that grows with the time of the section: the allowance. Within it, being early costs you nothing. Turn it on in Settings, under **Allowance**:
 
 | Setting | Rule | Examples |
 |---|---|---|
@@ -430,9 +432,9 @@ Some rallies give an allowance in minutes that grows with the time of the sectio
 | **⌊t/10⌋** | The time in minutes divided by 10, **rounded down**: one minute for each full 10 minutes. | 9 min → 0; 10 min → 1; 11 min → 1 |
 | **⌈t/10⌉** | The time in minutes divided by 10, **rounded up**: one minute for each 10 minutes or part of 10 minutes. | 9 min → 1; 10 min → 1; 11 min → 2 |
 
-The app uses the time from the start of the section (the last time on the row). It shows the allowance as `-N` at the end of the row: `-2` means an allowance of 2 minutes at that position. It does not show it while a race timer runs.
+The app uses the time from the start of the section (the last time on the row). It shows the allowance as `-N` at the end of the row: `-2` means that at this position you may be up to 2 minutes early. It does not show it while a race timer runs.
 
-While the section timer (Go) runs, the race panel shows the allowance as `(A:N)` next to the early/late value. That value turns red when you are **early** by more than N minutes. See [What the race panel shows](#105-what-the-race-panel-shows).
+While the section timer (Go) runs, the race panel shows the allowance as `(A:N)` next to the early/late value. That value turns red when you are **early** by more than N minutes, that is, earlier than the allowance lets you be. See [What the race panel shows](#105-what-the-race-panel-shows).
 
 ---
 
@@ -544,7 +546,7 @@ To hide the panel without stopping, use **Hide race panel** in the menu. To end 
 
 The app has two timers:
 
-- The **section timer** (started with **Go**) times the **whole section** at its overall average speed (section length ÷ section time). It ignores inner stretches and speed changes. Use it, for example, for a liaison with a target time. The panel shows a stopwatch icon. Its early/late value compares you with an even speed over the whole section, not with the ➠ speed, so after an inner stretch the two can disagree.
+- The **section timer** (started with **Go**) times the **whole section** at its overall average speed (section length ÷ section time). It ignores inner stretches and speed changes. Use it, for example, for a liaison with a target time. The panel shows a stopwatch icon. Its early/late value compares you with an even speed over the whole section, not with the ➠ speed, so after an inner stretch the two can disagree. On a liaison with an allowance, drive by the section timer: as fast as you can, while the early/late value stays within the allowance (not red). The ➠ speed is only a hint about the pace (see [The ➠ speed](#75-the--speed)).
 - The **race timer** (started with **Race**) times a **timed stretch** where each `setavg` and `thenavg` counts. Use it for a regularity. The panel shows a flag icon.
 
 Both timers use the **phone's clock**. Before the rally, set the phone's time to automatic and compare it with the official rally clock.
@@ -626,7 +628,7 @@ The race timer does not end by itself, even after the last position: tap **Finis
 
 It does not show this value if the roadmap has errors.
 
-**Allowance.** While the section timer runs, if you turned on an allowance in Settings, the panel shows `(A:N)`: the allowance in minutes at your distance. The early/late value turns red when you are early by more than the allowance.
+**Allowance.** While the section timer runs, if you turned on an allowance in Settings, the panel shows `(A:N)`: how many minutes early you may be at your distance. The early/late value turns red when you are earlier than that. As long as it is not red, you are early within the allowance.
 
 **The distance.** Your current distance in km. If a position is selected, a smaller number shows how far you are from it: `+0.125` means 125 m past it, `-0.300` means 300 m before it.
 
@@ -746,7 +748,7 @@ Enter the regularity as a stretch inside the liaison (see [Inner stretches](#72-
 1. At the start of the liaison, start the section timer with the **Go** row: **On 10:00:00** at the liaison's start time.
 2. Before the regularity, check the "v" button. Tap **Clear** if it shows a speed.
 3. At the start of the regularity, select its start position, and tap **Now from …** (with three decimals) at the moment you start. The **On …** buttons do not help here: the section has only one time of day, and the liaison start holds it.
-4. At the end of the regularity, tap **Finish race**. The section timer keeps running for the rest of the liaison, and the liaison start gets its time of day back.
+4. At the end of the regularity, tap **Finish race**. The section timer keeps running for the rest of the liaison, and the liaison start gets its time of day back. For the rest of the liaison, drive by the section timer: as fast as you can, while its early/late value is not red.
 5. At the end of the liaison, tap **Stop**.
 
 ### 11.5 Moving to the next section
