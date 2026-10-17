@@ -64,7 +64,7 @@
     <string name="settingsCalibration">Calibration</string>
     <string name="settingsCalibrationHint">Distance measured by the odometer divided by the roadmap distance:</string>
     <string name="settingsCalibrationFactor">Calibration factor</string>
-    <string name="invalidNumberShouldBeBetween01and10">Invalid number, should be between 0.1 and 10.0</string>
+    <string name="invalidNumberShouldBeBetween001and10">Invalid number, should be between 0.01 and 10.0</string>
     <string name="calibrateFromRouteHint">You can calibrate from the real distance by going over the ODO check route in Race Mode and opening Settings after that.</string>
     <string name="settingsCalibrateByOdoCheckRoute">Calibrate by ODO check route:</string>
     <string name="settingsExactOdoCheckDistance">Exact ODO check distance</string>
