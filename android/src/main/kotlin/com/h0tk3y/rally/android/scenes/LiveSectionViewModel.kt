@@ -1,5 +1,6 @@
 package com.h0tk3y.rally.android.scenes
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.h0tk3y.rally.*
@@ -264,7 +265,13 @@ class LiveSectionViewModel(
     override val calibration: Flow<Double> = prefs.userPreferencesFlow.map { it.calibration }
 
     override fun onSectionUpdate(section: LoadState<Section>) {
-        _inputPositions.value = positionLines(section)
+        // Keep the current positions on a parse error rather than replacing them with a placeholder that could get saved
+        _inputPositions.value = try {
+            positionLines(section)
+        } catch (e: IllegalStateException) {
+            Log.e("LiveSectionViewModel", "Failed to parse section positions", e)
+            return
+        }
     }
 
     override fun hideRaceUi() {

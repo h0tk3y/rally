@@ -74,10 +74,10 @@ class InputRoadmapParser(private val modifiersValidator: ModifiersValidator) {
 
     private val parsers = listOf<ModifierParser<*>>(
         ByWord("odo", 1) { (arg) -> PositionLineModifier.OdoDistance(DistanceKm(arg.toDouble())) },
-        ByWord("setavg", 1, partsAreNumbers = false) { (arg) -> PositionLineModifier.SetAvgSpeed(parseAvgSpeed(arg)) },
-        ByWord("endavg", 1, partsAreNumbers = false) { (arg) -> PositionLineModifier.EndAvgSpeed(parseAvgSpeed(arg)) },
+        ByWord("setavg", 1, partsAreNumbers = false) { (arg) -> tryParseAvgSpeed(arg)?.let(PositionLineModifier::SetAvgSpeed) },
+        ByWord("endavg", 1, partsAreNumbers = false) { (arg) -> tryParseAvgSpeed(arg)?.let(PositionLineModifier::EndAvgSpeed) },
         ByWord("endavg", 0) { (_) -> PositionLineModifier.EndAvgSpeed(null) },
-        ByWord("thenavg", 1, partsAreNumbers = false) { (arg) -> PositionLineModifier.ThenAvgSpeed(parseAvgSpeed(arg)) },
+        ByWord("thenavg", 1, partsAreNumbers = false) { (arg) -> tryParseAvgSpeed(arg)?.let(PositionLineModifier::ThenAvgSpeed) },
         ByWord("atime", 1, partsAreNumbers = false) { (arg) -> PositionLineModifier.AstroTime(TimeDayHrMinSec.tryParse(arg)!!) },
         ByWord("here", 1) { (arg) ->
             PositionLineModifier.Here(TimeMinSec.parse(arg)?.toHr() ?: error("failed to parse time"))
@@ -91,6 +91,14 @@ class InputRoadmapParser(private val modifiersValidator: ModifiersValidator) {
         ByWord("endcalc", 0) { PositionLineModifier.EndCalculateAverage }
     )
 }
+
+/** Returns null if [string] is not an avgspd notation, so that the next modifier parser gets a chance, e.g. `endavg atime 12:00`. */
+private fun tryParseAvgSpeed(string: String): SpeedKmh? =
+    try {
+        parseAvgSpeed(string)
+    } catch (_: IllegalStateException) {
+        null
+    }
 
 private fun parseAvgSpeed(string: String): SpeedKmh {
     val s = string.replace("\\s+".toRegex(), "")
