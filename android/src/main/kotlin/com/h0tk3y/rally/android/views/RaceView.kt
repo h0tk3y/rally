@@ -74,10 +74,12 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.h0tk3y.rally.DistanceKm
+import com.h0tk3y.rally.PlainSpeedKmh
 import com.h0tk3y.rally.PositionLine
 import com.h0tk3y.rally.PositionLineModifier
 import com.h0tk3y.rally.R
 import com.h0tk3y.rally.SpeedKmh
+import com.h0tk3y.rally.SpeedWithPercentage
 import com.h0tk3y.rally.TimeDistanceLocalizer
 import com.h0tk3y.rally.TimeHr
 import com.h0tk3y.rally.TimeMinSec
@@ -90,6 +92,7 @@ import com.h0tk3y.rally.android.theme.LocalCustomColorsPalette
 import com.h0tk3y.rally.android.theme.LocalCustomTypography
 import com.h0tk3y.rally.android.util.KeepScreenOn
 import com.h0tk3y.rally.android.util.VolumeKeyHandler
+import com.h0tk3y.rally.formatPercentage
 import com.h0tk3y.rally.model.RaceModel
 import com.h0tk3y.rally.modifier
 import com.h0tk3y.rally.strRound1
@@ -122,8 +125,6 @@ fun RaceView(
     setDebugSpeed: (Int) -> Unit,
     raceControls: RaceModelControls?
 ) {
-    val time by timeFlow.collectAsState()
-
     val isTablet = isTablet()
 
     var showRememberedSpeedControls by remember { mutableStateOf(false) }
@@ -153,7 +154,7 @@ fun RaceView(
                     moreRaceControls()
                 }
 
-                RaceStatus(race, time, raceControls, distanceLocalizer, sectionDistanceLocalizer, allowance, selectedPosition)
+                RaceStatus(race, timeFlow, raceControls, distanceLocalizer, sectionDistanceLocalizer, allowance, selectedPosition)
                 if (raceControls != null) {
                     RaceControls(
                         race,
@@ -215,13 +216,23 @@ private fun MoreRaceControls(
         }
         TelemetryStatus(telemetryState, onGoToSettings ?: { })
         Spacer(Modifier.weight(1f))
-        SpeedLimitLikeButton(
-            label = rememberSpeed?.valueKmh?.roundToInt()?.toString() ?: stringResource(R.string.vSpeedButton),
-            isEnabled = canRememberSpeed && raceModelControls != null,
-            typography = if (isBigUi) LocalCustomTypography.current.raceControlButton else MaterialTheme.typography.caption,
-            size = if (isBigUi) 48.dp else 24.dp,
-        ) {
-            switchRememberedSpeedControls()
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            SpeedLimitLikeButton(
+                label = rememberSpeed?.baseSpeedKmh?.roundToInt()?.toString() ?: stringResource(R.string.vSpeedButton),
+                isEnabled = canRememberSpeed && raceModelControls != null,
+                typography = if (isBigUi) LocalCustomTypography.current.raceControlButton else MaterialTheme.typography.caption,
+                size = if (isBigUi) 48.dp else 24.dp,
+            ) {
+                switchRememberedSpeedControls()
+            }
+            val percent = rememberSpeed?.percentage
+            if (percent != null && percent != 100.0) {
+                Text(
+                    text = "${percent.formatPercentage()}%",
+                    style = if (isBigUi) LocalCustomTypography.current.raceControlButton else MaterialTheme.typography.caption,
+                    color = LocalCustomColorsPalette.current.speedLimit
+                )
+            }
         }
         if (raceModelControls != null) {
             val hapticFeedback = LocalHapticFeedback.current
@@ -263,6 +274,10 @@ private fun TelemetryStatus(
             TelemetryPublicState.BtNoTargetMacAddress -> stringResource(R.string.telemetryObdNoMac)
 
             TelemetryPublicState.BtWorking -> stringResource(R.string.telemetryObdOk)
+            TelemetryPublicState.OutGaugeWorking -> stringResource(R.string.telemetryOutgaugeOk)
+            TelemetryPublicState.OutGaugeWaiting -> stringResource(R.string.telemetryOutgaugeWaiting)
+            TelemetryPublicState.OutGaugeDelayed -> stringResource(R.string.telemetryOutgaugeDelayed)
+            is TelemetryPublicState.OutGaugeError -> stringResource(R.string.telemetryOutgaugeError)
             TelemetryPublicState.Simulation -> stringResource(R.string.telemetrySimulationOk)
             is TelemetryPublicState.ReceivesStream ->
                 stringResource(R.string.telemetryData) + (if (telemetryPublicState.isDelayed) stringResource(R.string.telemetryDataDelay) else stringResource(R.string.telemetryOk))
@@ -283,9 +298,13 @@ private fun TelemetryStatus(
             }
 
             TelemetryPublicState.Simulation,
+            TelemetryPublicState.OutGaugeWorking,
             is TelemetryPublicState.GpsGood,
             TelemetryPublicState.BtWorking -> Color.Unspecified
 
+            TelemetryPublicState.OutGaugeWaiting,
+            TelemetryPublicState.OutGaugeDelayed,
+            is TelemetryPublicState.OutGaugeError,
             TelemetryPublicState.BtConnecting,
             TelemetryPublicState.BtNoPermissions,
             TelemetryPublicState.BtNoTargetMacAddress,
@@ -310,7 +329,7 @@ private fun satsString(sats: Int) = LocalContext.current.getString(R.string.satS
 @Composable
 private fun RaceStatus(
     race: RaceUiState,
-    time: Instant,
+    timeFlow: StateFlow<Instant>,
     raceControls: RaceModelControls?,
     distanceLocalizer: TimeDistanceLocalizer?,
     sectionDistanceLocalizer: TimeDistanceLocalizer?,
@@ -330,9 +349,9 @@ private fun RaceStatus(
                         Text(stringResource(R.string.finishedTimeDistancePrefix) + raceTimeDistanceString(race.lastFinishAt, race.lastFinishModel))
                     }
                     RaceTimeDistance(
-                        time, race, selectedPosition, isSectionTime = false, raceControls, distanceLocalizer, allowance
+                        timeFlow, race, selectedPosition, isSectionTime = false, raceControls, distanceLocalizer, allowance
                     )
-                    RaceSpeed(time, race)
+                    RaceSpeed(timeFlow, race)
                 }
             }
 
@@ -342,7 +361,7 @@ private fun RaceStatus(
                         Text(stringResource(R.string.finishedTimeDistancePrefix) + raceTimeDistanceString(race.finishedAt, race.raceModelAtFinish))
                     }
                     RaceTimeDistance(
-                        time, race, selectedPosition, isSectionTime = true, raceControls, sectionDistanceLocalizer, allowance
+                        timeFlow, race, selectedPosition, isSectionTime = true, raceControls, sectionDistanceLocalizer, allowance
                     )
                     GoingSpeed(race)
                 }
@@ -362,7 +381,7 @@ private fun RaceStatus(
 
 @Composable
 private fun RaceTimeDistance(
-    time: Instant,
+    timeFlow: StateFlow<Instant>,
     race: RaceUiState,
     selectedPosition: PositionLine?,
     isSectionTime: Boolean,
@@ -370,6 +389,7 @@ private fun RaceTimeDistance(
     distanceLocalizer: TimeDistanceLocalizer?,
     allowance: TimeAllowance?
 ) {
+    val time by timeFlow.collectAsState()
     val raceModel = when (race) {
         is RaceUiState.RaceGoing -> race.raceModel
         is RaceUiState.Going -> race.raceModel
@@ -378,7 +398,10 @@ private fun RaceTimeDistance(
     if (raceModel != null) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(if (race is RaceUiState.RaceGoing) Icons.Default.OutlinedFlag else Icons.Default.Timer, stringResource(R.string.raceStatusHint) + race)
+                Icon(
+                    if (race is RaceUiState.RaceGoing) Icons.Default.OutlinedFlag else Icons.Default.Timer,
+                    stringResource(if (race is RaceUiState.RaceGoing) R.string.raceStatusRaceGoing else R.string.raceStatusSectionGoing)
+                )
                 Spacer(Modifier.width(8.dp))
                 Text(timeString(time, raceModel), style = LocalCustomTypography.current.raceIndicatorText)
             }
@@ -507,7 +530,8 @@ private fun RaceTimeDistance(
 }
 
 @Composable
-private fun RaceSpeed(time: Instant, race: RaceUiState.RaceGoing) {
+private fun RaceSpeed(timeFlow: StateFlow<Instant>, race: RaceUiState.RaceGoing) {
+    val time by timeFlow.collectAsState()
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Absolute.SpaceBetween) {
         Text(
             "v=${race.raceModel.instantSpeed.valueKmh.roundToInt()}" + stringResource(R.string.perHourSuffix),
@@ -882,7 +906,8 @@ private fun NewSpeedLimits(
                             onPercentChange(it.text)
                         },
                         placeholderString = "100%",
-                        suffix = "%"
+                        suffix = "%",
+                        selectAllOnFocus = true
                     )
                     Spacer(Modifier.size(2.dp))
                     Text("×")
@@ -893,11 +918,26 @@ private fun NewSpeedLimits(
 
         item {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                val multiplier = percent?.toDoubleOrNull()?.div(100.0)
-                CustomSpeedLimitInput("${stringResource(R.string.perHourSuffix)} →", { it * (multiplier ?: 1.0) }, applyLimit)
+                fun currentPercent(): Double? =
+                    textFieldValue.value.text.toDoubleOrNull() ?: percent?.toDoubleOrNull()
+
+                fun makeSpeed(baseSpeedKmh: Double): SpeedKmh {
+                    val p = currentPercent()
+                    return if (p != null && p != 100.0) {
+                        SpeedWithPercentage(PlainSpeedKmh(baseSpeedKmh), p)
+                    } else {
+                        PlainSpeedKmh(baseSpeedKmh)
+                    }
+                }
+
+                CustomSpeedLimitInput("${stringResource(R.string.perHourSuffix)} →", { it }, { speedKmh ->
+                    applyLimit(speedKmh?.valueKmh?.let(::makeSpeed))
+                })
 
                 speedLimitValues.forEach { limit ->
-                    SpeedLimitButton("$limit", limit * (multiplier ?: 1.0), applyLimit)
+                    SpeedLimitButton("$limit", limit.toDouble()) { speedKmh ->
+                        applyLimit(speedKmh?.valueKmh?.let(::makeSpeed))
+                    }
                 }
             }
         }
@@ -924,7 +964,7 @@ private fun SpeedLimitButton(label: String, limit: Double?, applyLimit: (SpeedKm
         speedLimitButtonSize,
         LocalCustomTypography.current.raceControlButton
     ) {
-        applyLimit(limit?.let(::SpeedKmh))
+        applyLimit(limit?.let(::PlainSpeedKmh))
     }
 }
 

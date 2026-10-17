@@ -9,6 +9,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -22,6 +23,7 @@ import androidx.compose.material.Button
 import androidx.compose.material.Divider
 import androidx.compose.material.DropdownMenu
 import androidx.compose.material.DropdownMenuItem
+import androidx.compose.material.ExtendedFloatingActionButton
 import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
@@ -44,6 +46,7 @@ import androidx.compose.material.icons.rounded.Flag
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -63,7 +66,6 @@ import com.h0tk3y.rally.InputToTextSerializer
 import com.h0tk3y.rally.LineNumber
 import com.h0tk3y.rally.PositionLine
 import com.h0tk3y.rally.PositionLineModifier
-import com.h0tk3y.rally.PositionLineModifier.AddSynthetic
 import com.h0tk3y.rally.PositionLineModifier.IsSynthetic
 import com.h0tk3y.rally.PositionLineModifier.SetAvg
 import com.h0tk3y.rally.R
@@ -79,14 +81,13 @@ import com.h0tk3y.rally.android.racecervice.TelemetryPublicState
 import com.h0tk3y.rally.android.scenes.DataKind.AstroTime
 import com.h0tk3y.rally.android.scenes.DataKind.AverageSpeed
 import com.h0tk3y.rally.android.scenes.DataKind.Distance
-import com.h0tk3y.rally.android.scenes.DataKind.OdoDistance
-import com.h0tk3y.rally.android.scenes.DataKind.SyntheticCount
-import com.h0tk3y.rally.android.scenes.DataKind.SyntheticInterval
+import com.h0tk3y.rally.android.scenes.DataKind.SpeedPercentage
 import com.h0tk3y.rally.android.valueOrNull
 import com.h0tk3y.rally.android.views.GridKey
 import com.h0tk3y.rally.android.views.Keyboard
 import com.h0tk3y.rally.android.views.PositionsListView
 import com.h0tk3y.rally.android.views.RaceView
+import com.h0tk3y.rally.formatPercentage
 import com.h0tk3y.rally.modifier
 import com.h0tk3y.rally.strRound3
 import kotlinx.coroutines.launch
@@ -156,7 +157,10 @@ fun SectionScene(
         else -> remember { mutableStateOf(EditorFocus(0, Distance)) }
     }
     val allowance by model.timeAllowance.collectAsState(null)
-    val raceState by model.raceState.collectAsState(RaceUiState.NoRaceServiceConnection)
+    val raceStateState = model.raceState.collectAsState(RaceUiState.NoRaceServiceConnection)
+    val raceState by raceStateState
+    // The race state changes with every telemetry update; read this flag where the details are not needed:
+    val inTimedRace by remember(raceStateState) { derivedStateOf { raceStateState.value is RaceUiState.RaceGoing } }
     val rememberSpeed by model.rememberSpeed.collectAsState(null)
     val raceUiVisible by model.raceUiVisible.collectAsState(false)
     val telemetryState by model.telemetryState.collectAsState(TelemetryPublicState.NotInitialized)
@@ -208,6 +212,24 @@ fun SectionScene(
         }
     }
 
+    val isLargeScreen = LocalConfiguration.current.screenWidthDp >= 600
+    val showRaceModeFab = !isLargeScreen && !editorState.isEnabled && !raceUiVisible && model is RaceModelControls
+
+    val context = LocalContext.current
+    val launchServiceAfterObtainingPermission = permissionRequester(whenObtained = {
+        (model as? RaceModelControls)?.enterRaceMode()
+    }, whenFailedToObtain = {
+        Toast.makeText(context, context.getString(R.string.toastGrantPermission), Toast.LENGTH_LONG).show()
+    })
+
+    val onStartRaceMode: () -> Unit = {
+        if (raceState is RaceUiState.NoRaceServiceConnection) {
+            launchServiceAfterObtainingPermission()
+        } else {
+            (model as? RaceModelControls)?.enterRaceMode()
+        }
+    }
+
     @Composable
     fun layout(content: @Composable (listModifier: Modifier, keyboardModifier: Modifier) -> Unit) {
         if (LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE) {
@@ -236,6 +258,22 @@ fun SectionScene(
     layout { listModifier, keyboardModifier ->
         Scaffold(
             modifier = listModifier.imePadding(),
+            floatingActionButton = {
+                if (showRaceModeFab) {
+                    ExtendedFloatingActionButton(
+                        onClick = onStartRaceMode,
+                        icon = {
+                            Icon(
+                                imageVector = Icons.Rounded.Flag,
+                                contentDescription = null
+                            )
+                        },
+                        text = {
+                            Text(stringResource(R.string.buttonRaceMode))
+                        }
+                    )
+                }
+            },
             topBar = {
                 TopAppBar(
                     backgroundColor = MaterialTheme.colors.surface,
@@ -269,18 +307,26 @@ fun SectionScene(
                             Spacer(Modifier.width(4.dp))
                         }
 
+                        if (isLargeScreen && !editorState.isEnabled && !raceUiVisible && model is RaceModelControls) {
+                            Button(onClick = onStartRaceMode) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Flag,
+                                        contentDescription = stringResource(R.string.buttonRaceMode)
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(stringResource(R.string.buttonRaceMode))
+                                }
+                            }
+
+                            Spacer(Modifier.width(4.dp))
+                        }
+
                         IconButton(onClick = { showMenu = true }) {
                             Icon(Icons.Default.MoreVert, stringResource(R.string.showMenu))
                         }
                         DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                             if (model is RaceModelControls) {
-                                val context = LocalContext.current
-                                val launchServiceAfterObtainingPermission = permissionRequester(whenObtained = {
-                                    model.enterRaceMode()
-                                }, whenFailedToObtain = {
-                                    Toast.makeText(context, context.getString(R.string.toastGrantPermission), Toast.LENGTH_LONG).show()
-                                })
-
                                 if (raceState !is RaceUiState.RaceNotStarted) {
                                     DropdownMenuItem(onClick = {
                                         if (editorState.isEnabled && model is EditableSectionViewModel) {
@@ -420,10 +466,11 @@ fun SectionScene(
                     when (section) {
                         is LoadState.Loaded -> {
                             val hasErrors = results is RallyTimesResultFailure
-                            val positionsToDisplay =
+                            val positionsToDisplay = remember(editorState.isEnabled, positions, preprocessed, hasErrors) {
                                 if (editorState.isEnabled) positions else preprocessed.filter {
                                     !hasErrors || it !is PositionLine || it.modifier<IsSynthetic>() == null
                                 }
+                            }
                             val listState = rememberLazyListState()
                             PositionsListView(
                                 listState,
@@ -438,7 +485,9 @@ fun SectionScene(
                                 subsMatch,
                                 allowance,
                                 !editorState.isEnabled && raceUiVisible,
-                                raceState
+                                inTimedRace,
+                                // Let the last items scroll above the FAB: FAB height (56dp) + its margin (16dp) + a gap (16dp)
+                                contentPadding = if (showRaceModeFab) PaddingValues(bottom = 88.dp) else PaddingValues()
                             )
                         }
 
@@ -466,7 +515,7 @@ fun SectionScene(
                 goToEventLog = sectionOps?.let { it::navigateToEventLog },
                 goToSettings = {
                     if (model is RaceModelControls)
-                        onGoToSettings((model.raceState as? RaceUiState.HasRaceModel)?.raceModel?.currentDistance?.valueKm)
+                        onGoToSettings((raceState as? RaceUiState.HasRaceModel)?.raceModel?.currentDistance?.valueKm)
                     else null
                 },
                 modifier = keyboardModifier,
@@ -519,8 +568,7 @@ interface EditorControls {
     fun deletePositionViaEditor(line: RoadmapInputLine)
     fun selectNextItem()
     fun selectPreviousItem()
-    fun addItemAbove()
-    fun addItemBelow()
+    fun addItem()
     fun deleteCharacter()
 }
 
@@ -534,6 +582,8 @@ data class EditorState(
     val canMoveLeft: Boolean = true,
     val canMoveRight: Boolean = true,
     val canDelete: Boolean = true,
+    val canSetPercent: Boolean = true,
+    val lastEnteredPercent: String? = null
 ) {
     companion object {
         val disabled = EditorState(false)
@@ -543,10 +593,11 @@ data class EditorState(
 data class EditorFocus(
     val cursor: Int,
     val kind: DataKind,
+    val rawText: String? = null
 )
 
 enum class DataKind {
-    Distance, OdoDistance, AverageSpeed, SyntheticCount, SyntheticInterval, AstroTime
+    Distance, AverageSpeed, SpeedPercentage, AstroTime
 }
 
 fun itemText(line: RoadmapInputLine, dataKind: DataKind): String? =
@@ -554,24 +605,19 @@ fun itemText(line: RoadmapInputLine, dataKind: DataKind): String? =
         null
     else when (dataKind) {
         Distance -> line.atKm.valueKm.strRound3()
-        OdoDistance -> line.modifier<PositionLineModifier.OdoDistance>()?.distanceKm?.valueKm?.strRound3()
-        AverageSpeed -> line.modifier<SetAvg>()?.setavg?.valueKmh?.strRound3()
-        SyntheticCount -> line.modifier<AddSynthetic>()?.count.toString()
-        SyntheticInterval -> line.modifier<AddSynthetic>()?.interval?.valueKm?.strRound3()
+        AverageSpeed -> line.modifier<SetAvg>()?.setavg?.baseSpeedKmh?.strRound3()
+        SpeedPercentage -> line.modifier<SetAvg>()?.setavg?.percentage?.formatPercentage()
         AstroTime -> line.modifier<PositionLineModifier.AstroTime>()?.timeOfDay?.timeStrNoDayOverflow()
     }
 
 fun presentFields(item: PositionLine) = buildList {
     add(Distance)
-    if (item.modifier<SetAvg>() != null) {
+    val setAvg = item.modifier<SetAvg>()
+    if (setAvg != null) {
         add(AverageSpeed)
-    }
-    if (item.modifier<AddSynthetic>() != null) {
-        add(SyntheticCount)
-        add(SyntheticInterval)
-    }
-    if (item.modifier<PositionLineModifier.OdoDistance>() != null) {
-        add(OdoDistance)
+        if (setAvg.setavg.percentage != null) {
+            add(SpeedPercentage)
+        }
     }
     if (item.modifier<PositionLineModifier.AstroTime>() != null) {
         add(AstroTime)
@@ -584,3 +630,6 @@ fun String.toDouble3Digits() =
             substringBeforeLast(".") + "." + substringAfterLast(".").take(3)
         else this
     }.toDouble()
+
+fun String.toDouble3DigitsOrDefault(default: Double = 0.0): Double =
+    if (isEmpty() || this == ".") default else toDouble3Digits()

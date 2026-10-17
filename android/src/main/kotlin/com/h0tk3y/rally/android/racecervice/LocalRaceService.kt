@@ -37,8 +37,10 @@ import com.h0tk3y.rally.DistanceKm
 import com.h0tk3y.rally.LineNumber
 import com.h0tk3y.rally.PositionLine
 import com.h0tk3y.rally.PositionLineModifier
+import com.h0tk3y.rally.PlainSpeedKmh
 import com.h0tk3y.rally.R
 import com.h0tk3y.rally.SpeedKmh
+import com.h0tk3y.rally.SpeedWithPercentage
 import com.h0tk3y.rally.TimeHr
 import com.h0tk3y.rally.android.MainActivity
 import com.h0tk3y.rally.android.PreferenceRepository
@@ -66,14 +68,15 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.flow.zip
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.serialization.Contextual
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
@@ -101,6 +104,7 @@ import kotlin.time.Instant
 interface CommonRaceService : StoppableService {
     val raceState: StateFlow<RaceState>
     val rememberSpeedLimit: StateFlow<SpeedKmh?>
+    val speedLimitPercent: StateFlow<String?>
     val telemetryPublicState: Flow<TelemetryPublicState>
 }
 
@@ -115,6 +119,11 @@ private const val telemetryPort = 63663
 
 sealed interface TelemetryPublicState {
     data object Simulation : TelemetryPublicState
+
+    data object OutGaugeWaiting : TelemetryPublicState
+    data object OutGaugeWorking : TelemetryPublicState
+    data object OutGaugeDelayed : TelemetryPublicState
+    data class OutGaugeError(val message: String) : TelemetryPublicState
 
     data object WaitingForStream : TelemetryPublicState
     data class ReceivesStream(val isDelayed: Boolean) : TelemetryPublicState
@@ -146,6 +155,7 @@ interface RaceServiceControls : CommonRaceService {
     fun distanceCorrection(distanceKm: DistanceKm)
     fun setDebugSpeed(speedKmh: SpeedKmh)
     fun setRememberSpeedLimit(speedKmh: SpeedKmh?)
+    fun setSpeedLimitPercent(percent: String?)
     fun startRace(raceSectionId: Long, startAtDistanceKm: DistanceKm, setDistance: DistanceKm, startAtTime: Instant)
     fun go(raceSectionId: Long, startAtDistanceKm: DistanceKm, setDistance: DistanceKm, startAtTime: Instant)
     fun finishRace(withRaceModel: RaceModel)
@@ -172,6 +182,9 @@ class TcpStreamedRaceService : StreamedRaceService, StoppableService, Service() 
 
     private val _rememberSpeedLimit = MutableStateFlow<SpeedKmh?>(null)
     override val rememberSpeedLimit: StateFlow<SpeedKmh?> get() = _rememberSpeedLimit
+
+    private val _speedLimitPercent = MutableStateFlow<String?>(null)
+    override val speedLimitPercent: StateFlow<String?> get() = _speedLimitPercent
 
     private val _section = MutableStateFlow<Section?>(null)
     override val section: StateFlow<Section?> get() = _section
@@ -284,12 +297,13 @@ class TcpStreamedRaceService : StreamedRaceService, StoppableService, Service() 
                             while (isActive) {
                                 val size = input.readInt()
                                 val version = input.readLong()
+                                val buffer = ByteArray(size)
+                                input.readFully(buffer)
                                 if (version != telemetryStreamingVersion) {
                                     _telemetryState.value = TelemetryState.Incompatible
                                     Log.d("raceService", "unsupported telemetry version $version, expected $telemetryStreamingVersion")
+                                    continue
                                 }
-                                val buffer = ByteArray(size)
-                                input.readFully(buffer)
 
                                 handleFrame(unzipBytesToString(buffer).toByteArray())
                             }
@@ -314,6 +328,7 @@ class TcpStreamedRaceService : StreamedRaceService, StoppableService, Service() 
         _currentLine.value = raceState.currentLine
         _currentRaceLine.value = raceState.currentRaceLine
         _rememberSpeedLimit.value = raceState.rememberSpeed
+        _speedLimitPercent.value = raceState.speedLimitPercent
     }
 
     override fun forceStop() {
@@ -333,7 +348,8 @@ data class TelemetryFrame(
     val currentLine: LineNumber,
     val currentRaceLine: LineNumber?,
     val rememberSpeed: SpeedKmh?,
-    val raceState: RaceState
+    val raceState: RaceState,
+    val speedLimitPercent: String? = null
 )
 
 interface StoppableService {
@@ -345,6 +361,7 @@ interface PrimaryRaceService : CommonRaceService, RaceServiceControls, StreamSou
 class LocalRaceService : PrimaryRaceService, Service() {
     private val _raceState = MutableStateFlow<RaceState>(RaceState.NotStarted)
     private val _rememberSpeedLimit = MutableStateFlow<SpeedKmh?>(null)
+    private val _speedLimitPercent = MutableStateFlow<String?>(null)
 
     private val _section = MutableStateFlow<Section?>(null)
     private val _positions = MutableStateFlow<List<PositionLine>>(emptyList())
@@ -353,10 +370,12 @@ class LocalRaceService : PrimaryRaceService, Service() {
 
     override val raceState: StateFlow<RaceState> get() = _raceState
     override val rememberSpeedLimit: StateFlow<SpeedKmh?> = _rememberSpeedLimit
+    override val speedLimitPercent: StateFlow<String?> = _speedLimitPercent
 
     private val prefs by lazy { PreferenceRepository(dataStore).userPreferencesFlow }
     private val btMac by lazy { prefs.map { it.btMac } }
     private val telemetrySource by lazy { prefs.map { it.telemetrySource } }
+    private val outgaugePort by lazy { prefs.map { it.outgaugePort } }
     private val sendTeleToIp by lazy { prefs.map { it.sendTeleToIp } }
 
     private var debugSpeed: SpeedKmh? = null
@@ -419,6 +438,21 @@ class LocalRaceService : PrimaryRaceService, Service() {
 
     override fun setRememberSpeedLimit(speedKmh: SpeedKmh?) {
         _rememberSpeedLimit.value = speedKmh
+    }
+
+    override fun setSpeedLimitPercent(percent: String?) {
+        _speedLimitPercent.value = percent
+        if (_raceState.value !is RaceState.InRace) {
+            val currentRemember = _rememberSpeedLimit.value
+            if (currentRemember != null) {
+                val percentDouble = percent?.toDoubleOrNull()
+                _rememberSpeedLimit.value = if (percentDouble != null && percentDouble != 100.0) {
+                    SpeedWithPercentage(PlainSpeedKmh(currentRemember.baseSpeedKmh), percentDouble)
+                } else {
+                    PlainSpeedKmh(currentRemember.baseSpeedKmh)
+                }
+            }
+        }
     }
 
     override fun startRace(raceSectionId: Long, startAtDistanceKm: DistanceKm, setDistance: DistanceKm, startAtTime: Instant) {
@@ -524,6 +558,8 @@ class LocalRaceService : PrimaryRaceService, Service() {
 
     override fun resetRace() {
         _raceState.value = RaceState.NotStarted
+        _rememberSpeedLimit.value = null
+        _speedLimitPercent.value = null
     }
 
     private fun updateRaceStateByMoving(
@@ -622,11 +658,18 @@ class LocalRaceService : PrimaryRaceService, Service() {
         data object ReceivesStream : TelemetryState
         data class BtTelemetry(val connectionState: BtConnectionState) : TelemetryState
         data class GpsTelemetry(val gpsState: GpsReceiverState, val sats: Int) : TelemetryState
+        data class OutGaugeTelemetry(val state: OutGaugeReceiverState) : TelemetryState
 
         fun toPublicState(): TelemetryPublicState {
             return when (this) {
                 NotInitialized -> TelemetryPublicState.NotInitialized
                 UsesSimulator -> TelemetryPublicState.Simulation
+                is OutGaugeTelemetry -> when (val s = this.state) {
+                    OutGaugeReceiverState.Listening -> TelemetryPublicState.OutGaugeWaiting
+                    OutGaugeReceiverState.Receiving -> TelemetryPublicState.OutGaugeWorking
+                    OutGaugeReceiverState.DelayedTimeout -> TelemetryPublicState.OutGaugeDelayed
+                    is OutGaugeReceiverState.Error -> TelemetryPublicState.OutGaugeError(s.message)
+                }
                 is BtTelemetry -> when (this.connectionState) {
                     BtConnectionState.NoTargetMacAddress -> TelemetryPublicState.BtNoTargetMacAddress
                     BtConnectionState.NoPermissions -> TelemetryPublicState.BtNoPermissions
@@ -677,10 +720,18 @@ class LocalRaceService : PrimaryRaceService, Service() {
             raceDataJob?.cancel()
         }
 
-        telemetrySource.zip(btMac, ::Pair)
-            .map { if (it.first != BT_OBD) it.copy(second = "") else it }
+        combine(telemetrySource, btMac, outgaugePort) { source, mac, port ->
+            Triple(source, mac, port)
+        }
+            .map { (source, mac, port) ->
+                Triple(
+                    source,
+                    if (source == BT_OBD) mac else "",
+                    if (source == TelemetrySource.OUTGAUGE) port else 0
+                )
+            }
             .distinctUntilChanged()
-            .onEach { (telemetrySource, newBtMac) ->
+            .onEach { (telemetrySource, newBtMac, newOutgaugePort) ->
                 raceDataJob?.cancel()
                 debugSpeed = SpeedKmh(0.0)
                 debugSpeedJob?.cancel()
@@ -708,7 +759,7 @@ class LocalRaceService : PrimaryRaceService, Service() {
 
                     TelemetrySource.GPS -> {
                         val gpsMeasurement = GpsDistanceMeasurement(this@LocalRaceService, serviceScope)
-                        raceDataJob = serviceScope.launch gpsJob@{
+                        val job = serviceScope.launch gpsJob@{
                             btState.value = TelemetryState.GpsTelemetry(GpsReceiverState.NoSatellite, 0)
                             launch {
                                 gpsMeasurement.requestPlatformUpdates()
@@ -716,9 +767,42 @@ class LocalRaceService : PrimaryRaceService, Service() {
                             }
                             launch { startSendTeleJob() }
                         }
-                        raceDataJob.invokeOnCompletion {
+                        job.invokeOnCompletion {
                             gpsMeasurement.stopPlatformUpdates()
                         }
+                        raceDataJob = job
+                    }
+
+                    TelemetrySource.OUTGAUGE -> {
+                        var lastTime: Instant? = null
+                        val receiver = OutGaugeReceiver(
+                            port = newOutgaugePort,
+                            scope = serviceScope,
+                            onPacketReceived = { packet ->
+                                val now = Clock.System.now()
+                                val prevTime = lastTime
+                                val dt = if (prevTime != null) now - prevTime else Duration.ZERO
+                                lastTime = now
+                                updateRaceStateFromOutGauge(packet.speedKmh, dt)
+                            },
+                            onTimeout = {
+                                lastTime = null
+                                resetOutGaugeSpeedOnTimeout()
+                            }
+                        )
+                        val job = serviceScope.launch(Dispatchers.IO) {
+                            receiver.start()
+                            launch {
+                                receiver.state.collectLatest { state ->
+                                    btState.value = TelemetryState.OutGaugeTelemetry(state)
+                                }
+                            }
+                            launch { startSendTeleJob() }
+                        }
+                        job.invokeOnCompletion {
+                            receiver.close()
+                        }
+                        raceDataJob = job
                     }
                 }
             }.launchIn(serviceScope)
@@ -814,7 +898,8 @@ class LocalRaceService : PrimaryRaceService, Service() {
                             _currentLine.value,
                             _currentRaceLine.value,
                             _rememberSpeedLimit.value,
-                            _raceState.value
+                            _raceState.value,
+                            _speedLimitPercent.value
                         )
                         sendFrame(
                             json.encodeToString<TelemetryFrame>(data).toByteArray()
@@ -947,6 +1032,29 @@ class LocalRaceService : PrimaryRaceService, Service() {
         )
     }
 
+    private fun updateRaceStateFromOutGauge(speedKmh: SpeedKmh, deltaTime: Duration) {
+        updateRaceStateByMoving(
+            newDistance = { dst ->
+                if (deltaTime > Duration.ZERO && deltaTime <= 2.seconds) {
+                    val deltaDistance = DistanceKm.byMoving(
+                        speedKmh,
+                        TimeHr(deltaTime.inWholeMicroseconds / 1000_000.0 / 3600.0)
+                    )
+                    dst + deltaDistance.times(if (deltaDistanceGoingUp.value) 1.0 else -1.0)
+                } else {
+                    dst
+                }
+            },
+            newInstantSpeed = { speedKmh }
+        )
+    }
+
+    private fun resetOutGaugeSpeedOnTimeout() {
+        updateRaceStateByMoving(
+            newInstantSpeed = { SpeedKmh(0.0) }
+        )
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         startRaceJob()
 
@@ -982,7 +1090,7 @@ class LocalRaceService : PrimaryRaceService, Service() {
 
 private const val tag = "raceService"
 
-private object SerializationUtils {
+internal object SerializationUtils {
     val json = Json {
         classDiscriminator = "type"
         serializersModule = SerializersModule {
@@ -991,6 +1099,10 @@ private object SerializationUtils {
                 subclass(RaceState.Stopped::class)
                 subclass(RaceState.InRace::class)
                 subclass(RaceState.Going::class)
+            }
+            polymorphic(SpeedKmh::class) {
+                subclass(PlainSpeedKmh::class)
+                subclass(SpeedWithPercentage::class)
             }
             polymorphic(PositionLineModifier::class) {
                 subclass(PositionLineModifier.SetAvgSpeed::class)
@@ -1104,4 +1216,4 @@ private object RaceNotificationUtils {
     private const val TIMER_SERVICE_NOTIFICATION_CHANNEL_ID = "RaceService"
 }
 
-private const val telemetryStreamingVersion = 2L
+private const val telemetryStreamingVersion = 3L

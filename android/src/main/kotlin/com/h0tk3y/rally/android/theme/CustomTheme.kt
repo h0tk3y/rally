@@ -65,7 +65,12 @@ fun AppTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {
-    val colors = if (darkTheme) darkColors() else lightColors()
+    val baseColors = if (darkTheme) darkColors() else lightColors()
+    val colors = baseColors.copy(
+        secondary = baseColors.primary,
+        secondaryVariant = baseColors.primary,
+        onSecondary = baseColors.onPrimary
+    )
 
     val customColorsPalette =
         if (darkTheme) OnDarkCustomColorsPalette
