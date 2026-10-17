@@ -47,6 +47,7 @@
     <string name="buttonDuplicateThisSection">Duplicate this section</string>
     <string name="buttonRenameThisSection">Rename this section</string>
     <string name="buttonCopyAsText">Copy as text</string>
+    <string name="buttonSwapListAndRacePanel">Swap views</string>
     <string name="settingsTelemetrySource">Telemetry source</string>
     <string name="telemetrySourceSimulation">Simulation</string>
     <string name="telemetrySourceSimulationHint">Set the speed by using the slider in the race view</string>
