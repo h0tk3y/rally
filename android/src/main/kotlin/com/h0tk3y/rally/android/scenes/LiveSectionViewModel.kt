@@ -1,33 +1,10 @@
 package com.h0tk3y.rally.android.scenes
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.h0tk3y.rally.CommentLine
-import com.h0tk3y.rally.DefaultModifierValidator
-import com.h0tk3y.rally.DistanceKm
-import com.h0tk3y.rally.InputRoadmapParser
-import com.h0tk3y.rally.InputToTextSerializer
-import com.h0tk3y.rally.LineNumber
-import com.h0tk3y.rally.OdoDistanceCalculator
-import com.h0tk3y.rally.PositionLine
-import com.h0tk3y.rally.PositionLineModifier
-import com.h0tk3y.rally.PositionLineModifier.AddSynthetic
-import com.h0tk3y.rally.PositionLineModifier.AstroTime
-import com.h0tk3y.rally.PositionLineModifier.EndAvg
-import com.h0tk3y.rally.PositionLineModifier.EndAvgSpeed
-import com.h0tk3y.rally.PositionLineModifier.OdoDistance
-import com.h0tk3y.rally.PositionLineModifier.SetAvg
-import com.h0tk3y.rally.PositionLineModifier.SetAvgSpeed
-import com.h0tk3y.rally.PositionLineModifier.ThenAvgSpeed
-import com.h0tk3y.rally.RallyTimesIntervalsCalculator
-import com.h0tk3y.rally.RallyTimesResult
-import com.h0tk3y.rally.RallyTimesResultFailure
-import com.h0tk3y.rally.RoadmapInputLine
-import com.h0tk3y.rally.SpeedKmh
-import com.h0tk3y.rally.SubsMatch
-import com.h0tk3y.rally.SubsMatcher
-import com.h0tk3y.rally.TimeDayHrMinSec
-import com.h0tk3y.rally.TimeHr
+import com.h0tk3y.rally.*
+import com.h0tk3y.rally.PositionLineModifier.*
 import com.h0tk3y.rally.android.LoadState
 import com.h0tk3y.rally.android.PreferenceRepository
 import com.h0tk3y.rally.android.db.DatabaseOperations
@@ -38,42 +15,16 @@ import com.h0tk3y.rally.android.racecervice.TelemetryPublicState
 import com.h0tk3y.rally.android.views.GridKey
 import com.h0tk3y.rally.android.views.StartOption
 import com.h0tk3y.rally.db.Section
-import com.h0tk3y.rally.isEndAvg
-import com.h0tk3y.rally.isSetAvg
-import com.h0tk3y.rally.isThenAvg
 import com.h0tk3y.rally.model.RaceEventKind
 import com.h0tk3y.rally.model.RaceEventKind.RACE_START
 import com.h0tk3y.rally.model.RaceEventKind.SECTION_START
 import com.h0tk3y.rally.model.RaceModel
 import com.h0tk3y.rally.model.RaceState
 import com.h0tk3y.rally.model.duration
-import com.h0tk3y.rally.modifier
-import com.h0tk3y.rally.preprocessRoadmap
-import com.h0tk3y.rally.roundTo3Digits
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.combineTransform
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.future.await
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
-import kotlinx.datetime.LocalDateTime
-import kotlinx.datetime.LocalTime
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.atStartOfDayIn
-import kotlinx.datetime.atTime
-import kotlinx.datetime.toInstant
-import kotlinx.datetime.toLocalDateTime
+import kotlinx.datetime.*
 import java.util.concurrent.CompletableFuture
 import kotlin.math.sign
 import kotlin.time.Clock
@@ -89,7 +40,7 @@ interface RaceServiceHolder<S : CommonRaceService> {
 
 interface CommonSectionViewModel {
     val instant: StateFlow<Instant>
-    
+
     val viewModelScope: CoroutineScope
 
     val section: StateFlow<LoadState<Section>>
@@ -114,8 +65,10 @@ interface CommonSectionViewModel {
     val timeAllowance: Flow<TimeAllowance?>
 }
 
-abstract class StatefulSectionViewModel : ViewModel(), CommonSectionViewModel {
-    
+abstract class StatefulSectionViewModel(
+    private val coroutineDispatcher: CoroutineDispatcher
+) : ViewModel(), CommonSectionViewModel {
+
     protected val _instant: MutableStateFlow<Instant> = MutableStateFlow(Clock.System.now())
     protected val _section: MutableStateFlow<LoadState<Section>> = MutableStateFlow(LoadState.EMPTY)
     protected val _inputPositions: MutableStateFlow<List<RoadmapInputLine>> = MutableStateFlow(emptyList())
@@ -154,18 +107,18 @@ abstract class StatefulSectionViewModel : ViewModel(), CommonSectionViewModel {
 
     protected open fun onSectionUpdate(section: LoadState<Section>) = Unit
 
-    suspend fun extracted() {
-        _section.collectLatest { onSectionUpdate(it) }
-    }
+    protected fun launchDispatchable(action: suspend CoroutineScope.() -> Unit) = viewModelScope.launch(coroutineDispatcher, block = action)
 
     init {
-        viewModelScope.launch {
+        launchDispatchable {
             _subInitComplete.await()
 
-            viewModelScope.launch {
-                extracted()
+            launch {
+                _section.collectLatest<LoadState<Section>> { 
+                    onSectionUpdate(it) 
+                }
             }
-            viewModelScope.launch {
+            launch {
                 _inputPositions.collectLatest {
                     _preprocessedPositions.value = maybePreprocess(it)
                     // sanitizeSelection()
@@ -173,15 +126,15 @@ abstract class StatefulSectionViewModel : ViewModel(), CommonSectionViewModel {
                     _subsMatching.value = SubsMatcher().matchSubs(it.filterIsInstance<PositionLine>())
                 }
             }
-            viewModelScope.launch {
+            launch {
                 _selectedLineIndex.collectLatest {
                     onLineNumberChange()
                 }
             }
-            viewModelScope.launch {
+            launch {
                 combineTransform(_preprocessedPositions, calibration) { a, b -> emit(a to b) }.collectLatest { (it, calibrationFactor) ->
                     val lines = it.filterIsInstance<PositionLine>()
-                    launch {
+                    this@launch.launch {
                         val odo = OdoDistanceCalculator.calculateOdoDistances(lines, calibrationFactor)
                         _odoValues.value = odo
 
@@ -219,7 +172,7 @@ interface EditableSectionViewModel : CommonSectionViewModel, EditorControls {
     val editorFocus: StateFlow<EditorFocus>
     fun deletePosition(line: RoadmapInputLine)
     fun maybeCreateItemAtDistance(distanceKm: DistanceKm, forceCreateIfExists: Boolean, addModifiers: List<PositionLineModifier> = emptyList()): PositionLine
-    
+
     val soundFlow: SharedFlow<SoundEvent>
 }
 
@@ -267,7 +220,8 @@ class LiveSectionViewModel(
     private val sectionId: Long,
     private val database: DatabaseOperations,
     private val prefs: PreferenceRepository,
-) : StatefulSectionViewModel(), EditableSectionViewModel, RaceModelControls, RaceServiceHolder<PrimaryRaceService> {
+    coroutineDispatcher: CoroutineDispatcher
+) : StatefulSectionViewModel(coroutineDispatcher), EditableSectionViewModel, RaceModelControls, RaceServiceHolder<PrimaryRaceService> {
     private val parser = InputRoadmapParser(DefaultModifierValidator())
 
     private val _raceCurrentLineNumber: MutableStateFlow<LineNumber> = MutableStateFlow(LineNumber(1, 0))
@@ -297,7 +251,8 @@ class LiveSectionViewModel(
     override val raceUiVisible: StateFlow<Boolean> = _raceUiVisible.asStateFlow()
     override val telemetryState: StateFlow<TelemetryPublicState> = _telemetryState.asStateFlow()
     override val timeAllowance: Flow<TimeAllowance?> = prefs.userPreferencesFlow.map { it.allowance }
-    override val speedLimitPercent: Flow<String?> = prefs.userPreferencesFlow.map { it.speedLimitPercent }
+    private val _speedLimitPercent = MutableStateFlow<String?>(null)
+    override val speedLimitPercent: StateFlow<String?> = _speedLimitPercent.asStateFlow()
 
     private var service: PrimaryRaceService? = null
 
@@ -305,12 +260,18 @@ class LiveSectionViewModel(
     private var serviceConnector: () -> Unit = { error("no connector") }
     private var serviceDisconnector: () -> Unit = { error("no disconnector") }
 
-    private var soundFeedback: Boolean = false 
-    
+    private var soundFeedback: Boolean = false
+
     override val calibration: Flow<Double> = prefs.userPreferencesFlow.map { it.calibration }
 
     override fun onSectionUpdate(section: LoadState<Section>) {
-        _inputPositions.value = positionLines(section)
+        // Keep the current positions on a parse error rather than replacing them with a placeholder that could get saved
+        _inputPositions.value = try {
+            positionLines(section)
+        } catch (e: IllegalStateException) {
+            Log.e("LiveSectionViewModel", "Failed to parse section positions", e)
+            return
+        }
     }
 
     override fun hideRaceUi() {
@@ -333,31 +294,33 @@ class LiveSectionViewModel(
     init {
         subInitComplete()
 
-        viewModelScope.launch {
-            prefs.userPreferencesFlow.collectLatest {
-                soundFeedback = it.soundFeedback
+        launchDispatchable {
+            launch {
+                prefs.userPreferencesFlow.collectLatest {
+                    soundFeedback = it.soundFeedback
+                }
             }
-        }
-        viewModelScope.launch {
-            while (isActive) {
-                _instant.value = Clock.System.now()
-                delay(200.milliseconds)
+            launch {
+                while (isActive) {
+                    _instant.value = Clock.System.now()
+                    delay(200.milliseconds)
+                }
             }
-        }
-        viewModelScope.launch {
-            _inputPositions.collectLatest {
-                _preprocessedPositions.value = maybePreprocess(it)
-                _subsMatching.value = SubsMatcher().matchSubs(it.filterIsInstance<PositionLine>())
+            launch {
+                _inputPositions.collectLatest {
+                    _preprocessedPositions.value = maybePreprocess(it)
+                    _subsMatching.value = SubsMatcher().matchSubs(it.filterIsInstance<PositionLine>())
+                }
             }
-        }
-        viewModelScope.launch {
-            _editorFocus.collectLatest {
-                updateEditorConstraints()
+            launch {
+                _editorFocus.collectLatest {
+                    updateEditorConstraints()
+                }
             }
-        }
-        viewModelScope.launch {
-            database.selectSectionById(sectionId).collect {
-                _section.value = it
+            launch {
+                database.selectSectionById(sectionId).collect {
+                    _section.value = it
+                }
             }
         }
     }
@@ -369,7 +332,7 @@ class LiveSectionViewModel(
     override fun setRaceServiceDisconnector(disconnector: () -> Unit) {
         serviceDisconnector = disconnector
     }
-    
+
     private fun positionLines(it: LoadState<Section>) = if (it is LoadState.Loaded) {
         val result = parser.parseRoadmap(it.value.serializedPositions.reader()).filterIsInstance<PositionLine>()
         result.ifEmpty {
@@ -388,8 +351,9 @@ class LiveSectionViewModel(
 
     override fun onServiceConnected(raceService: PrimaryRaceService) {
         service = raceService
+        _raceUiVisible.value = true
 
-        serviceRelatedJob = viewModelScope.launch {
+        serviceRelatedJob = launchDispatchable {
             launch {
                 val raceStateFlow = raceService.raceState
                 raceStateFlow.collectLatest { newState ->
@@ -402,6 +366,14 @@ class LiveSectionViewModel(
             launch {
                 raceService.rememberSpeedLimit.collectLatest {
                     _rememberSpeed.value = it
+                }
+            }
+            launch {
+                raceService.speedLimitPercent.collectLatest {
+                    if (_speedLimitPercent.value != it) {
+                        _speedLimitPercent.value = it
+                        updateEditorConstraints()
+                    }
                 }
             }
             launch {
@@ -451,7 +423,7 @@ class LiveSectionViewModel(
     private fun handleRaceStatesDelta(old: RaceUiState, new: RaceUiState) {
         if (old is RaceUiState.RaceGoing && new is RaceUiState.RaceGoing && !old.raceModel.distanceGoingUp && !new.raceModel.distanceGoingUp &&
             new.raceModel.currentDistance >= new.raceModel.startAtDistance
-            ) {
+        ) {
             val range = listOf(old.raceModel.currentDistance, new.raceModel.currentDistance).sorted().let { (from, to) -> from..to }
             val removeThenAvgFrom = currentItems.filterIsInstance<PositionLine>().filter { it.atKm in range && it.modifier<ThenAvgSpeed>() != null }
             removeThenAvgFrom.forEach { item ->
@@ -479,10 +451,10 @@ class LiveSectionViewModel(
     }
 
     override fun startRace(startOption: StartOption) {
-        viewModelScope.launch {
+        launchDispatchable {
             if (soundFeedback) _soundFlow.emit(SoundEvent.BEEP_START)
         }
-        
+
         service?.run {
             val nowToSecond = with(TimeZone.currentSystemDefault()) {
                 val nowExact = Clock.System.now().toLocalDateTime()
@@ -548,7 +520,7 @@ class LiveSectionViewModel(
                                 it != currentItems.firstOrNull() &&
                                 it == currentItems.lastOrNull { d -> d is PositionLine && d.atKm == it.atKm }
                     }
-                    ?.takeIf { PositionLineModifier.IsSynthetic !in it.modifiers }
+                    ?.takeIf { IsSynthetic !in it.modifiers }
                     ?.takeIf { startModifiersToAdd.none { m -> m is SetAvg } || it.modifiers.none { m -> m is EndAvg } }
                     ?.let { addModifiersToItem(it, startModifiersToAdd) }
                     ?: maybeCreateItemAtDistanceFromModel(
@@ -628,6 +600,18 @@ class LiveSectionViewModel(
         val currentEditorState = _editorState.value
         val isEnabled = !currentEditorState.isEnabled
         _editorState.value = currentEditorState.copy(isEnabled = isEnabled)
+        if (!isEnabled) {
+            _editorFocus.value = _editorFocus.value.copy(rawText = null, selectAll = false)
+        } else {
+            val item = currentItem
+            val currentFocus = _editorFocus.value
+            val text = item?.let { itemText(it, currentFocus.kind) }.orEmpty()
+            val newFocus = currentFocus.copy(
+                cursor = reasonableEditorStartPosition(text),
+                rawText = null
+            )
+            updateFocus(sanitizeFocus(newFocus))
+        }
         sanitizeSelection()
     }
 
@@ -639,19 +623,17 @@ class LiveSectionViewModel(
     }
 
     override fun finishRace() {
-        viewModelScope.launch {
+        launchDispatchable {
             if (soundFeedback) _soundFlow.emit(SoundEvent.BEEP_FINISH)
         }
-        
+
         val currentState = _raceState.value
         if (currentState is RaceUiState.RaceGoing) {
-            val addEndAvg = currentItems.filterIsInstance<PositionLine>().fold(0) { acc, it ->
-                acc + (if (it.modifier<SetAvg>() != null) 1 else 0) + (if (it.modifier<EndAvg>() != null) -1 else 0)
-            } >= 1
+            val finishDistance = currentState.raceModel.currentDistance.roundTo3Digits()
             maybeCreateItemAtDistanceFromModel(
-                currentState.raceModel.currentDistance.roundTo3Digits(),
+                finishDistance,
                 true,
-                if (addEndAvg) listOf(EndAvgSpeed(null)) else emptyList()
+                if (shouldEndStretchAtFinish(finishDistance)) listOf(EndAvgSpeed(null)) else emptyList()
             )
             restoreStartAtime(currentState.raceModelOfGoingAtSection)
             service?.finishRace(currentState.raceModel)
@@ -666,14 +648,46 @@ class LiveSectionViewModel(
         }
     }
 
+    /**
+     * Whether the position added at the race finish should end a stretch with an `endavg`.
+     *
+     * The race start opens a stretch with a `setavg`, but the roadmap may already end that stretch (when the race started at a
+     * typed `setavg` that has a typed `endavg`), and the finish may even be before the race start. An `endavg` at the finish
+     * ends the innermost open stretch, so every later position becomes one stretch less deep. Add it only if a stretch is open
+     * at the finish and every later position is at least two stretches deep: then no later position falls outside all
+     * stretches, and no later `endavg` is left without a stretch to end.
+     */
+    private fun shouldEndStretchAtFinish(finishDistance: DistanceKm): Boolean {
+        val positions = currentItems.filterIsInstance<PositionLine>()
+        val finishIndex = insertionIndex(positions, finishDistance)
+        val depths = stretchDepthsBefore(positions)
+        return depths[finishIndex] >= 1 && (finishIndex until positions.size).all { depths[it] >= 2 }
+    }
+
+    /** For each position, how many stretches are open just before it; the last item is the number open after the last position. */
+    private fun stretchDepthsBefore(positions: List<PositionLine>): IntArray {
+        val depths = IntArray(positions.size + 1)
+        positions.forEachIndexed { index, position ->
+            val depth = depths[index]
+            depths[index + 1] = when {
+                position.isThenAvg -> maxOf(depth, 1)
+                position.isSetAvg -> depth + 1
+                position.isEndAvg -> maxOf(depth - 1, 0)
+                else -> depth
+            }
+        }
+        return depths
+    }
+
     override fun undoFinishRace() {
         val currentState = _raceState.value
         if (currentState is RaceUiState.Going && currentState.raceModelAtFinish != null) {
-            val findLast = currentItems.filterIsInstance<PositionLine>().findLast {
-                it.atKm == currentState.raceModelAtFinish.currentDistance.roundTo3Digits() && it.modifier<EndAvgSpeed>() != null
-            }
-            if (findLast != null) {
-                deletePosition(findLast)
+            // The finish added the last position at its distance, with an `endavg` or with no marks:
+            val finishPosition = currentItems.filterIsInstance<PositionLine>().findLast {
+                it.atKm == currentState.raceModelAtFinish.currentDistance.roundTo3Digits()
+            }?.takeIf { it.modifiers.all { modifier -> modifier is EndAvgSpeed } }
+            if (finishPosition != null) {
+                deletePosition(finishPosition)
             }
             restoreStartAtime(currentState.raceModelAtFinish)
             database.insertEvent(
@@ -698,10 +712,10 @@ class LiveSectionViewModel(
     }
 
     override fun stopRace() {
-        viewModelScope.launch {
+        launchDispatchable {
             if (soundFeedback) _soundFlow.emit(SoundEvent.BEEP_FINISH)
         }
-        
+
         service?.stopRace()
         val raceModelAtStop = (service?.raceState?.value as? RaceState.Stopped)?.raceModelAtStop
         database.insertEvent(
@@ -731,12 +745,12 @@ class LiveSectionViewModel(
 
     override fun setGoingForward(isGoingForward: Boolean) {
         service?.setDistanceGoingUp(isGoingForward)
-        
+
         if (!isGoingForward) {
-            viewModelScope.launch { 
+            launchDispatchable {
                 while (service?.raceState?.value?.let { it is RaceState.MovingWithRaceModel && !(it.raceModel.distanceGoingUp) } == true) {
                     if (soundFeedback) _soundFlow.emit(SoundEvent.BEEP_REVERSE)
-                    delay(3000L)
+                    delay(3000L.milliseconds)
                 }
             }
         }
@@ -759,11 +773,21 @@ class LiveSectionViewModel(
         _raceState.value = RaceUiState.NoRaceServiceConnection
     }
 
+    private fun fieldText(item: PositionLine, kind: DataKind): String? {
+        val focus = _editorFocus.value
+        return if (focus.kind == kind && focus.rawText != null) {
+            focus.rawText
+        } else {
+            itemText(item, kind)
+        }
+    }
+
     override fun selectLine(index: LineNumber, field: DataKind?) {
         val items = currentItems
 
         val item = items.find { it.lineNumber == index } ?: items.find { it.lineNumber.number == index.subNumber }
         val lineNumber = item?.lineNumber ?: LineNumber(1, 0)
+        val oldLineNumber = _selectedLineIndex.value
         _selectedLineIndex.value = lineNumber
 
         updateEditorConstraints()
@@ -775,13 +799,17 @@ class LiveSectionViewModel(
                     currentFocus.kind
                 ) != null
             ) currentFocus.kind else DataKind.Distance
-            val newFocus = currentFocus.copy(
-                cursor = reasonableEditorStartPosition(itemText(item, newKind).orEmpty()),
-                kind = newKind
-            )
-            updateFocus(sanitizeFocus(newFocus))
-        }
 
+            val isSameLineAndField = oldLineNumber == lineNumber && currentFocus.kind == newKind
+            if (!isSameLineAndField) {
+                val newFocus = currentFocus.copy(
+                    cursor = reasonableEditorStartPosition(itemText(item, newKind).orEmpty()),
+                    kind = newKind,
+                    rawText = null
+                )
+                updateFocus(sanitizeFocus(newFocus))
+            }
+        }
     }
 
     override fun moveCursor(indexDelta: Int) {
@@ -791,8 +819,14 @@ class LiveSectionViewModel(
     }
 
     override fun keyPress(key: GridKey) {
+        if (_editorFocus.value.selectAll) {
+            if (keyPressWithFieldSelected(key)) return
+            _editorFocus.value = _editorFocus.value.copy(selectAll = false)
+            if (key == GridKey.LEFT || key == GridKey.RIGHT) return
+        }
         when (key) {
-            GridKey.SETAVG, GridKey.THENAVG, GridKey.ENDAVG, GridKey.SYNTH, GridKey.ATIME, GridKey.ODO -> focusOrSwitchModifier(key)
+            GridKey.SETAVG, GridKey.THENAVG, GridKey.ENDAVG, GridKey.ATIME, GridKey.PERCENT -> focusOrSwitchModifier(key)
+            GridKey.APPLY_LAST_PERCENT -> applyLastPercent()
             GridKey.N_1, GridKey.N_2, GridKey.N_3, GridKey.N_4, GridKey.N_5, GridKey.N_6, GridKey.N_7, GridKey.N_8, GridKey.N_9, GridKey.N_0 -> enterCharacter(
                 key.name.last()
             )
@@ -804,10 +838,28 @@ class LiveSectionViewModel(
             GridKey.DEL -> deleteCharacter()
             GridKey.LEFT -> moveCursorOrSwitchField(-1)
             GridKey.RIGHT -> moveCursorOrSwitchField(1)
-            GridKey.ADD_BELOW -> addItemBelow()
-            GridKey.ADD_ABOVE -> addItemAbove()
+            GridKey.ADD -> addItem()
             GridKey.REMOVE -> currentItem?.let(::deletePositionViaEditor)
         }
+    }
+
+    /**
+     * Handles a key that replaces the whole selected distance text: a digit starts a new value, a dot starts a fraction,
+     * and DEL clears the field. Returns false if the key should instead be handled as usual.
+     */
+    private fun keyPressWithFieldSelected(key: GridKey): Boolean {
+        val focus = _editorFocus.value
+        val item = currentItem ?: return false
+        if (focus.kind != DataKind.Distance) return false
+        val (newText, newCursor) = when (key) {
+            GridKey.N_1, GridKey.N_2, GridKey.N_3, GridKey.N_4, GridKey.N_5, GridKey.N_6, GridKey.N_7, GridKey.N_8, GridKey.N_9, GridKey.N_0 ->
+                "${key.name.last()}.0" to 1
+            GridKey.DOT -> if (_editorState.value.canEnterDot) "0.0" to 2 else return false
+            GridKey.DEL -> "0.0" to 1
+            else -> return false
+        }
+        updateCurrentText(item, focus.copy(selectAll = false), newText, newCursor)
+        return true
     }
 
     override fun deletePositionViaEditor(line: RoadmapInputLine) {
@@ -842,24 +894,37 @@ class LiveSectionViewModel(
         }
     }
 
-    override fun addItemAbove() {
-        createNewItem(0)?.let { viewModelScope.launch { selectLine(it, DataKind.Distance) } }
-    }
-
-    override fun addItemBelow() {
-        createNewItem(1)?.let { viewModelScope.launch { selectLine(it, DataKind.Distance) } }
+    override fun addItem() {
+        createNewItem()?.let {
+            launchDispatchable {
+                selectLine(it, DataKind.Distance)
+                val text = currentItem?.let { item -> itemText(item, DataKind.Distance) } ?: return@launchDispatchable
+                _editorFocus.value = _editorFocus.value.copy(cursor = text.length, rawText = null, selectAll = true)
+            }
+        }
     }
 
     override fun setSpeedLimitPercent(value: String?) {
-        viewModelScope.launch {
-            prefs.saveSpeedLimitPercent(value)
+        _speedLimitPercent.value = value
+        if (_raceState.value !is RaceUiState.RaceGoing) {
+            val currentRemember = _rememberSpeed.value
+            if (currentRemember != null) {
+                val percentDouble = value?.toDoubleOrNull()
+                _rememberSpeed.value = if (percentDouble != null && percentDouble != 100.0) {
+                    SpeedWithPercentage(PlainSpeedKmh(currentRemember.baseSpeedKmh), percentDouble)
+                } else {
+                    PlainSpeedKmh(currentRemember.baseSpeedKmh)
+                }
+            }
         }
+        service?.setSpeedLimitPercent(value)
+        updateEditorConstraints()
     }
 
     override fun deleteCharacter() {
         currentItem?.let { item ->
             val editorFocus = _editorFocus.value
-            val currentText = itemText(item, editorFocus.kind)
+            val currentText = fieldText(item, editorFocus.kind)
 
             if (currentText != null) {
                 val cursor = editorFocus.cursor
@@ -872,15 +937,20 @@ class LiveSectionViewModel(
                             updateCurrentText(
                                 item,
                                 editorFocus,
-                                currentText.take(takeChars) + '0' + (if (isAfterColon) ":" else "") + currentText.drop(dropChars)
+                                currentText.take(takeChars) + '0' + (if (isAfterColon) ":" else "") + currentText.drop(dropChars),
+                                if (isAfterColon) cursor - 2 else cursor - 1
                             )
                         }
-                        moveCursor(if (currentText.getOrNull(cursor - 1) == ':') -2 else -1)
                     }
 
                     currentText.indexOf('.') == 1 && cursor == 1 -> {
-                        val newText = "0" + currentText.drop(1)
-                        updateCurrentText(item, editorFocus, newText)
+                        val newText = if (editorFocus.kind == DataKind.AverageSpeed || editorFocus.kind == DataKind.SpeedPercentage) "" else "0" + currentText.drop(1)
+                        updateCurrentText(item, editorFocus, newText, if (newText.isEmpty()) 0 else cursor)
+                    }
+
+                    // Keep single trailing zero after dot: e.g. "1.0|" when deleting ends up as "1.|0"
+                    currentText.indexOf('.') != -1 && currentText.substring(currentText.indexOf('.') + 1) == "0" && cursor == currentText.indexOf('.') + 2 -> {
+                        updateCurrentText(item, editorFocus, currentText, cursor - 1)
                     }
 
                     // TODO: this is non-intuitive
@@ -889,14 +959,14 @@ class LiveSectionViewModel(
                     }
 
                     else -> {
-                        val newText = if (editorFocus.cursor > 0) {
-                            currentText.take(cursor - 1) + currentText.drop(cursor)
-                        } else currentText
-                        if (newText != currentText) {
-                            val realText = updateCurrentText(item, editorFocus, newText)
-                            if (realText != "0") {
-                                moveCursor(-1)
+                        if (cursor > 0) {
+                            val textWithoutChar = currentText.take(cursor - 1) + currentText.drop(cursor)
+                            val (newText, newCursor) = if (textWithoutChar.endsWith('.')) {
+                                (textWithoutChar + "0") to (cursor - 1)
+                            } else {
+                                textWithoutChar to (cursor - 1)
                             }
+                            updateCurrentText(item, editorFocus, newText, newCursor)
                         }
                     }
                 }
@@ -907,41 +977,67 @@ class LiveSectionViewModel(
     private fun enterCharacter(char: Char) {
         currentItem?.let { item ->
             val editorFocus = _editorFocus.value
-            val currentText = itemText(item, editorFocus.kind)
-            if (currentText != null) {
-                val cursor = editorFocus.cursor
-                val newText = when {
-                    // ATIME:
-                    editorFocus.kind == DataKind.AstroTime -> fixTimeAfterEntered(currentText.take(cursor) + char + currentText.drop(cursor + 1))
+            val currentText = fieldText(item, editorFocus.kind) ?: return@let
+            val cursor = editorFocus.cursor
 
-                    // Others:
-                    char.isDigit() -> currentText.take(cursor) + char + currentText.drop(cursor)
-                    char == '.' -> currentText.take(cursor).replace(".", "") + char + currentText.drop(cursor)
-                        .replace(".", "")
+            if (editorFocus.kind == DataKind.AstroTime) {
+                val newText = fixTimeAfterEntered(currentText.take(cursor) + char + currentText.drop(cursor + 1))
+                val newCursor = if (char.isDigit() && currentText.getOrNull(cursor + 1) == ':') cursor + 2 else cursor + 1
+                updateCurrentText(item, editorFocus, newText, newCursor)
+                return
+            }
 
-                    else -> currentText
-                }
-                val newCursor = when {
-                    // ATIME:
-                    char.isDigit() && currentText.getOrNull(cursor + 1) == ':' -> cursor + 2
-                    editorFocus.kind == DataKind.AstroTime -> cursor + 1
+            val dotIndex = currentText.indexOf('.')
 
-                    // Others:
-                    char.isDigit() && cursor == 1 && currentText.startsWith("0.") -> cursor
-                    char.isDigit() && currentText.indexOf('.')
-                        .let { it != -1 && cursor < it } && currentText.startsWith("0") ->
-                        cursor
-
-                    char == '.' && currentText.getOrNull(cursor) == '.' -> cursor + 1
-                    char == '.' && currentText.indexOf('.').let { it != -1 && cursor < it } -> cursor + 1
-                    char == '.' && currentText.indexOf('.').let { it != -1 && cursor > it } -> cursor
-                    else -> if (sanitizeText(newText, editorFocus.kind) != currentText) cursor + 1 else cursor
-                }
-                updateCurrentText(item, editorFocus, newText)
-                if (newCursor != cursor) {
-                    moveCursor(newCursor - cursor)
+            // Exception 1: do not introduce a leading zero in the integral part
+            if (char == '0') {
+                val inIntegralPart = dotIndex == -1 || cursor <= dotIndex
+                if (inIntegralPart && (cursor == 0 && currentText.isNotEmpty() || currentText.startsWith("0"))) {
+                    return
                 }
             }
+
+            // Exception 2: entering '0' between dot and existing single trailing zero
+            if (char == '0' && dotIndex != -1 && currentText.substring(dotIndex + 1) == "0" && cursor == dotIndex + 1) {
+                updateCurrentText(item, editorFocus, currentText, cursor + 1)
+                return
+            }
+
+            if (char.isDigit() && cursor == currentText.length && dotIndex != -1 && currentText.substringAfter('.').length >= 3) {
+                return
+            }
+
+            val candidateText = when {
+                char.isDigit() -> when {
+                    currentText == "0" -> "$char"
+                    currentText.startsWith("0.") && cursor == 1 -> "$char" + currentText.drop(1)
+                    dotIndex != -1 && currentText.substring(dotIndex + 1) == "0" && cursor == dotIndex + 1 ->
+                        currentText.take(cursor) + char + currentText.drop(cursor + 1)
+                    else -> currentText.take(cursor) + char + currentText.drop(cursor)
+                }
+                char == '.' -> {
+                    val candidate = currentText.take(cursor).replace(".", "") + char + currentText.drop(cursor).replace(".", "")
+                    if (candidate.contains('.') && candidate.substringAfter('.', "").length > 3) {
+                        candidate.substringBefore('.') + "." + candidate.substringAfter('.').take(3)
+                    } else candidate
+                }
+                else -> currentText
+            }
+
+            val newText = if (char.isDigit() && candidateText.contains('.') && candidateText.substringAfter('.', "").length > 3) {
+                candidateText.substringBefore('.') + "." + candidateText.substringAfter('.').take(3)
+            } else {
+                candidateText
+            }
+
+            val newCursor = when {
+                char.isDigit() && currentText == "0" -> 1
+                char.isDigit() && currentText.startsWith("0.") && cursor == 1 -> 1
+                char == '.' && dotIndex != -1 && cursor > dotIndex -> cursor
+                else -> cursor + 1
+            }
+
+            updateCurrentText(item, editorFocus, newText, newCursor)
         }
     }
 
@@ -956,10 +1052,13 @@ class LiveSectionViewModel(
         get() = currentItems.find { it.lineNumber == _selectedLineIndex.value } as? PositionLine
 
     private fun updateFocus(editorFocus: EditorFocus) {
+        val maxCursor = (editorFocus.rawText ?: currentItem?.let { itemText(it, editorFocus.kind) })?.length ?: editorFocus.cursor
+        val clampedCursor = editorFocus.cursor.coerceIn(0, maxCursor)
         val focusWithSanitizedCursor = if (editorFocus.kind == DataKind.AstroTime) {
-            if (editorFocus.cursor == 2 || editorFocus.cursor == 5) editorFocus.copy(cursor = editorFocus.cursor + 1) else editorFocus
-        } else editorFocus
-        _editorFocus.value = focusWithSanitizedCursor
+            if (clampedCursor == 2 || clampedCursor == 5) editorFocus.copy(cursor = clampedCursor + 1) else editorFocus.copy(cursor = clampedCursor)
+        } else editorFocus.copy(cursor = clampedCursor)
+        // Any focus change other than the one made by adding an item drops the selection
+        _editorFocus.value = focusWithSanitizedCursor.copy(selectAll = false)
     }
 
     private fun maybePreprocess(positions: List<RoadmapInputLine>): List<RoadmapInputLine> =
@@ -969,19 +1068,19 @@ class LiveSectionViewModel(
         val current = _editorFocus.value
 
         currentItem?.let { item ->
-            val currentText = itemText(item, current.kind)
+            val currentText = fieldText(item, current.kind)
             val fields = presentFields(item)
             val currentFieldIndex = fields.indexOf(current.kind)
             if (currentFieldIndex != -1) {
                 when {
                     indexDelta < 0 && current.cursor == 0 && currentFieldIndex > 0 -> {
                         val newField = fields[currentFieldIndex - 1]
-                        updateFocus(current.copy(reasonableEditorStartPosition(itemText(item, newField)!!), newField))
+                        updateFocus(current.copy(cursor = reasonableEditorStartPosition(itemText(item, newField)!!), kind = newField, rawText = null))
                     }
 
-                    indexDelta > 0 && current.cursor == currentText?.length && currentFieldIndex < fields.size -> {
+                    indexDelta > 0 && current.cursor == currentText?.length && currentFieldIndex < fields.size - 1 -> {
                         val newField = fields[currentFieldIndex + 1]
-                        updateFocus(current.copy(reasonableEditorStartPosition(itemText(item, newField)!!), newField))
+                        updateFocus(current.copy(cursor = reasonableEditorStartPosition(itemText(item, newField)!!), kind = newField, rawText = null))
                     }
 
                     current.kind == DataKind.AstroTime -> {
@@ -1008,17 +1107,18 @@ class LiveSectionViewModel(
     private fun sanitizeFocus(editorFocus: EditorFocus): EditorFocus =
         when (val item = currentItem) {
             null -> {
-                EditorFocus(0, DataKind.Distance)
+                EditorFocus(0, DataKind.Distance, null)
             }
 
             else -> {
                 val newKind = if (itemText(item, editorFocus.kind) == null) DataKind.Distance else editorFocus.kind
-                val text = checkNotNull(itemText(item, newKind))
+                val text = if (editorFocus.kind == newKind && editorFocus.rawText != null) editorFocus.rawText else checkNotNull(itemText(item, newKind))
                 val position =
                     if (editorFocus.kind == newKind)
                         editorFocus.cursor.coerceIn(0, text.length)
                     else reasonableEditorStartPosition(text)
-                EditorFocus(position, newKind)
+                val rawText = if (editorFocus.kind == newKind) editorFocus.rawText else null
+                EditorFocus(position, newKind, rawText)
             }
         }
 
@@ -1045,12 +1145,10 @@ class LiveSectionViewModel(
         var canEnterDot = current.canEnterDot
 
         currentItem?.let { item ->
+            val curText = fieldText(item, focus.kind)
             canMoveLeft = focus.cursor != 0 || hasPreviousField(item, focus)
-            canMoveRight = focus.cursor != itemText(item, focus.kind)?.length || hasNextField(item, focus)
-            canEnterDigits = itemText(
-                item,
-                focus.kind
-            )?.let { focus.cursor != it.length || it.indexOf('.') == -1 || it.substringAfterLast(".").length < 3 }
+            canMoveRight = focus.cursor != curText?.length || hasNextField(item, focus)
+            canEnterDigits = curText?.let { focus.cursor != it.length || it.indexOf('.') == -1 || it.substringAfterLast(".").length < 3 }
                 ?: canEnterDigits
 
             if (focus.kind == DataKind.AstroTime) {
@@ -1066,10 +1164,11 @@ class LiveSectionViewModel(
 
             canEnterDot =
                 focus.kind == DataKind.Distance ||
-                        focus.kind == DataKind.OdoDistance ||
                         focus.kind == DataKind.AverageSpeed ||
-                        focus.kind == DataKind.SyntheticInterval
+                        focus.kind == DataKind.SpeedPercentage
         }
+
+        val canSetPercent = currentItem?.modifier<SetAvg>() != null
 
         _editorState.value =
             current.copy(
@@ -1080,7 +1179,9 @@ class LiveSectionViewModel(
                 canMoveLeft = canMoveLeft,
                 canMoveRight = canMoveRight,
                 canEnterDigits = canEnterDigits,
-                maxDigit = maxDigit
+                maxDigit = maxDigit,
+                canSetPercent = canSetPercent,
+                lastEnteredPercent = _speedLimitPercent.value
             )
     }
 
@@ -1097,78 +1198,104 @@ class LiveSectionViewModel(
                 GridKey.SETAVG -> item.modifier<SetAvgSpeed>()
                 GridKey.THENAVG -> item.modifier<ThenAvgSpeed>()
                 GridKey.ENDAVG -> item.modifier<EndAvgSpeed>()
-                GridKey.SYNTH -> item.modifier<AddSynthetic>()
                 GridKey.ATIME -> item.modifier<AstroTime>()
-                GridKey.ODO -> item.modifier<OdoDistance>()
+                GridKey.PERCENT -> item.modifier<SetAvg>()
                 else -> return
             }
 
             fun moveFocusToModifier(line: RoadmapInputLine) {
                 val focusTarget = when (key) {
                     GridKey.SETAVG, GridKey.THENAVG -> DataKind.AverageSpeed
-                    GridKey.SYNTH -> DataKind.SyntheticCount
+                    GridKey.PERCENT -> DataKind.SpeedPercentage
                     GridKey.ATIME -> DataKind.AstroTime
-                    GridKey.ODO -> DataKind.OdoDistance
                     else -> null
                 }
-                if (focusTarget != null) {
+                if (focusTarget != null && itemText(line, focusTarget) != null) {
                     val itemText = itemText(line, focusTarget)!!
-                    updateFocus(EditorFocus(reasonableEditorStartPosition(itemText), focusTarget))
+                    updateFocus(EditorFocus(reasonableEditorStartPosition(itemText), focusTarget, null))
                 } else {
-                    updateFocus(sanitizeFocus(focus))
+                    updateFocus(sanitizeFocus(focus.copy(rawText = null)))
                 }
             }
 
             if (modifier != null) {
-                val dataToRemove = when (key) {
-                    GridKey.SETAVG -> DataKind.AverageSpeed.takeIf(focus.kind::equals)?.let(::listOf)
-                    GridKey.THENAVG -> DataKind.AverageSpeed.takeIf(focus.kind::equals)?.let(::listOf)
-                    GridKey.ENDAVG -> listOf()
-                    GridKey.SYNTH -> listOf(DataKind.SyntheticInterval, DataKind.SyntheticCount).takeIf { focus.kind in it }
-                    GridKey.ATIME -> DataKind.AstroTime.takeIf(focus.kind::equals)?.let(::listOf)
-                    GridKey.ODO -> DataKind.OdoDistance.takeIf(focus.kind::equals)?.let(::listOf)
-                    else -> null
-                }
-                if (dataToRemove != null) {
-                    val newItem = item.copy(modifiers = item.modifiers.filterNot { it == modifier })
-                    updateInputPositions(currentItems.toMutableList().apply { set(indexOf(item), newItem) })
-                    if (focus.kind in dataToRemove) {
-                        updateFocus(sanitizeFocus(focus.copy(kind = presentFields(item).takeWhile { it !in dataToRemove }.last())))
+                if (key == GridKey.PERCENT) {
+                    val setAvg = modifier as SetAvg
+                    if (setAvg.setavg is SpeedWithPercentage) {
+                        if (focus.kind == DataKind.SpeedPercentage) {
+                            val plainSpeed = PlainSpeedKmh(setAvg.setavg.baseSpeedKmh)
+                            val newItem = addModifiersToItem(item, listOf(setAvg.copyWithSpeed(plainSpeed)))
+                            val speedText = itemText(newItem, DataKind.AverageSpeed) ?: ""
+                            updateFocus(EditorFocus(reasonableEditorStartPosition(speedText), DataKind.AverageSpeed, null))
+                        } else {
+                            moveFocusToModifier(item)
+                        }
+                    } else {
+                        val speedWithPercent = SpeedWithPercentage(setAvg.setavg, 100.0)
+                        val newItem = addModifiersToItem(item, listOf(setAvg.copyWithSpeed(speedWithPercent)))
+                        updateFocus(EditorFocus(0, DataKind.SpeedPercentage, ""))
                     }
                 } else {
-                    moveFocusToModifier(item)
+                    val dataToRemove = when (key) {
+                        GridKey.SETAVG -> listOfNotNull(DataKind.AverageSpeed, DataKind.SpeedPercentage.takeIf { it in presentFields(item) }).takeIf { focus.kind in it }
+                        GridKey.THENAVG -> listOfNotNull(DataKind.AverageSpeed, DataKind.SpeedPercentage.takeIf { it in presentFields(item) }).takeIf { focus.kind in it }
+                        GridKey.ENDAVG -> listOf()
+                        GridKey.ATIME -> DataKind.AstroTime.takeIf(focus.kind::equals)?.let(::listOf)
+                        else -> null
+                    }
+                    if (dataToRemove != null) {
+                        val newItem = item.copy(modifiers = item.modifiers.filterNot { it == modifier })
+                        updateInputPositions(currentItems.toMutableList().apply { set(indexOf(item), newItem) })
+                        if (focus.kind in dataToRemove) {
+                            updateFocus(sanitizeFocus(focus.copy(kind = presentFields(item).takeWhile { it !in dataToRemove }.last(), rawText = null)))
+                        }
+                    } else {
+                        moveFocusToModifier(item)
+                    }
                 }
             } else {
                 val existingAvg = item.modifier<SetAvg>()?.setavg
                 val modifierToAdd = when (key) {
-                    GridKey.ODO -> OdoDistance(item.atKm)
                     GridKey.SETAVG -> SetAvgSpeed(existingAvg ?: SpeedKmh(0.0))
                     GridKey.THENAVG -> ThenAvgSpeed(existingAvg ?: SpeedKmh(0.0))
                     GridKey.ATIME -> AstroTime(TimeDayHrMinSec(0, 0, 0, 0))
-
                     GridKey.ENDAVG -> EndAvgSpeed(null)
-                    GridKey.SYNTH -> AddSynthetic(DistanceKm(0.1), 10)
                     else -> null
                 }
                 if (modifierToAdd != null) {
                     val newItem = addModifiersToItem(item, listOf(modifierToAdd))
-                    moveFocusToModifier(newItem)
+                    if (existingAvg == null && (key == GridKey.SETAVG || key == GridKey.THENAVG)) {
+                        updateFocus(EditorFocus(0, DataKind.AverageSpeed, ""))
+                    } else {
+                        moveFocusToModifier(newItem)
+                    }
                 }
             }
         }
+    }
+
+    private fun applyLastPercent() {
+        val item = currentItem ?: return
+        val existingAvg = item.modifier<SetAvg>() ?: return
+        val percent = _speedLimitPercent.value?.toDoubleOrNull() ?: return
+        val newSpeed = SpeedWithPercentage(existingAvg.setavg.baseSpeed, percent)
+        val newItem = addModifiersToItem(item, listOf(existingAvg.copyWithSpeed(newSpeed)))
+        val itemText = itemText(newItem, DataKind.SpeedPercentage) ?: ""
+        updateFocus(EditorFocus(reasonableEditorStartPosition(itemText), DataKind.SpeedPercentage, null))
     }
 
     private fun addModifiersToItem(
         item: PositionLine,
         modifiersToAdd: List<PositionLineModifier>
     ): PositionLine {
-        val indexOfItem = _inputPositions.value.indexOf(item)
+        val indexOfItem = _inputPositions.value.indexOfFirst { (it as? PositionLine)?.lineNumber == item.lineNumber }
+        if (indexOfItem == -1) return item
         return updateInputPositionAt(
             _inputPositions.value[indexOfItem].lineNumber,
             item.copy(modifiers = addOrReplaceModifiers(item.modifiers, modifiersToAdd))
         )
     }
-    
+
     private fun recalculateLineNumbers(lines: Collection<RoadmapInputLine>) =
         lines.mapIndexed { index, roadmapInputLine ->
             val lineNumber = LineNumber(index + 1, 0)
@@ -1178,16 +1305,21 @@ class LiveSectionViewModel(
             }
         }
 
-    private fun createNewItem(positionRelativeToCurrent: Int): LineNumber? {
+    private fun createNewItem(): LineNumber? {
         val items = currentItems
         val selectedIndex = items.indexOfFirst { it.lineNumber == _selectedLineIndex.value }
         if (selectedIndex != -1) {
+            val newItemIndex = selectedIndex + 1
+            // Positions are reordered by distance, so start from the distance of the position above to stay in place
+            val distance = items.take(newItemIndex).filterIsInstance<PositionLine>().lastOrNull()?.atKm ?: DistanceKm(0.0)
             val positions = recalculateLineNumbers(
-                items.take(selectedIndex + positionRelativeToCurrent) +
-                        PositionLine(DistanceKm(0.0), LineNumber(1, 0), emptyList()) +
-                        items.drop(selectedIndex + positionRelativeToCurrent)
+                buildList {
+                    addAll(items.take(newItemIndex))
+                    add(PositionLine(distance, LineNumber(1, 0), emptyList()))
+                    addAll(items.drop(newItemIndex))
+                }
             )
-            val item = positions[selectedIndex + positionRelativeToCurrent]
+            val item = positions[newItemIndex]
             updateInputPositions(positions)
             return item.lineNumber
         }
@@ -1205,13 +1337,17 @@ class LiveSectionViewModel(
 
     override fun maybeCreateItemAtDistance(distanceKm: DistanceKm, forceCreateIfExists: Boolean, addModifiers: List<PositionLineModifier>): PositionLine {
         if (_raceState.value is RaceUiState.HasRaceModel && _raceUiVisible.value) {
-            viewModelScope.launch {
+            launchDispatchable {
                 if (soundFeedback) _soundFlow.emit(SoundEvent.BEEP_UP)
             }
         }
 
         return maybeCreateItemAtDistanceFromModel(distanceKm, forceCreateIfExists, addModifiers)
     }
+
+    /** Where a new position at [distance] goes: after all the positions at that distance. */
+    private fun insertionIndex(items: List<RoadmapInputLine>, distance: DistanceKm): Int =
+        items.indexOfFirst { it is PositionLine && it.atKm > distance }.takeIf { it != -1 } ?: items.size
 
     private fun maybeCreateItemAtDistanceFromModel(
         distanceKm: DistanceKm,
@@ -1228,7 +1364,7 @@ class LiveSectionViewModel(
             }
         }
 
-        val indexToInsert = items.indexOfFirst { it is PositionLine && it.atKm > roundedDistance }.takeIf { it != -1 } ?: items.size
+        val indexToInsert = insertionIndex(items, roundedDistance)
 
         val shouldSelectLine = indexToInsert == items.indexOfFirst { it.lineNumber == selectedLineIndex.value } + 1
 
@@ -1277,38 +1413,58 @@ class LiveSectionViewModel(
         return result
     }
 
-    private fun sanitizeText(original: String, dataKind: DataKind) = when (dataKind) {
-        DataKind.Distance, DataKind.OdoDistance, DataKind.AverageSpeed, DataKind.SyntheticInterval -> original.toDouble3Digits().toString()
-
-        DataKind.SyntheticCount -> (original.toIntOrNull()?.coerceAtMost(1000) ?: "0").toString()
-        DataKind.AstroTime -> original
+    private fun SetAvg.copyWithSpeed(newSpeed: SpeedKmh): SetAvg = when (this) {
+        is SetAvgSpeed -> copy(setavg = newSpeed)
+        is ThenAvgSpeed -> copy(setavg = newSpeed)
     }
 
-    private fun updateCurrentText(item: PositionLine, editorFocus: EditorFocus, newText: String): String {
-        val indexOfCurrentItem = currentItems.indexOf(item)
+    private val SpeedKmh.baseSpeed: SpeedKmh
+        get() = when (this) {
+            is SpeedWithPercentage -> baseSpeed
+            else -> this
+        }
+
+    private fun computeRawText(kind: DataKind, newText: String, canonicalText: String?): String? = when {
+        (kind == DataKind.SpeedPercentage || kind == DataKind.AverageSpeed) && newText.isEmpty() -> ""
+        newText != canonicalText && (newText.endsWith('.') || (newText.contains('.') && newText.endsWith('0'))) -> {
+            if (newText.contains('.') && newText.substringAfter('.').length > 3) null else newText
+        }
+        else -> null
+    }
+
+    internal fun updateCurrentText(item: PositionLine, editorFocus: EditorFocus, newText: String, newCursor: Int = editorFocus.cursor): String {
         val modifiers = item.modifiers
-        val sanitizedText = sanitizeText(newText, editorFocus.kind)
         val newItem = when (editorFocus.kind) {
-            DataKind.Distance -> item.copy(atKm = DistanceKm(sanitizedText.toDouble()))
-            DataKind.OdoDistance -> item.copy(modifiers = modifiers.map {
-                if (it is OdoDistance) it.copy(distanceKm = DistanceKm(sanitizedText.toDouble3Digits())) else it
-            })
+            DataKind.Distance -> {
+                val dist = newText.toDouble3DigitsOrDefault(0.0)
+                item.copy(atKm = DistanceKm(dist))
+            }
 
-            DataKind.AverageSpeed -> item.copy(modifiers = modifiers.map {
-                when (it) {
-                    is SetAvgSpeed -> it.copy(SpeedKmh(sanitizedText.toDouble()))
-                    is ThenAvgSpeed -> it.copy(SpeedKmh(sanitizedText.toDouble()))
-                    else -> it
-                }
-            })
+            DataKind.AverageSpeed -> {
+                val speed = newText.toDouble3DigitsOrDefault(0.0)
+                item.copy(modifiers = modifiers.map { modifier ->
+                    if (modifier is SetAvg) {
+                        val newSpeed = when (val current = modifier.setavg) {
+                            is SpeedWithPercentage -> current.copy(baseSpeed = PlainSpeedKmh(speed))
+                            else -> PlainSpeedKmh(speed)
+                        }
+                        modifier.copyWithSpeed(newSpeed)
+                    } else modifier
+                })
+            }
 
-            DataKind.SyntheticInterval -> item.copy(modifiers = modifiers.map {
-                if (it is AddSynthetic) it.copy(interval = DistanceKm(sanitizedText.toDouble3Digits())) else it
-            })
-
-            DataKind.SyntheticCount -> item.copy(modifiers = modifiers.map {
-                if (it is AddSynthetic) it.copy(count = sanitizedText.toInt()) else it
-            })
+            DataKind.SpeedPercentage -> {
+                val newPercentVal = newText.toDouble3DigitsOrDefault(100.0)
+                val formattedPercent = if (newText.isEmpty() || newText == ".") null else newPercentVal.formatPercentage()
+                _speedLimitPercent.value = formattedPercent
+                service?.setSpeedLimitPercent(formattedPercent)
+                item.copy(modifiers = modifiers.map { modifier ->
+                    if (modifier is SetAvg) {
+                        val newSpeed = SpeedWithPercentage(modifier.setavg.baseSpeed, newPercentVal)
+                        modifier.copyWithSpeed(newSpeed)
+                    } else modifier
+                })
+            }
 
             DataKind.AstroTime -> item.copy(modifiers = modifiers.map {
                 run {
@@ -1317,8 +1473,41 @@ class LiveSectionViewModel(
             })
 
         }
-        updateInputPositions(currentItems.toMutableList().apply { set(indexOfCurrentItem, newItem) })
-        return sanitizedText
+
+        val canonicalText = itemText(newItem, editorFocus.kind)
+        val rawText = computeRawText(editorFocus.kind, newText, canonicalText)
+
+        val allPositions = _inputPositions.value
+        val currentPosIndex = allPositions.indexOfFirst { it.lineNumber == item.lineNumber }
+        if (currentPosIndex != -1) {
+            val (newPositions, newLineSelection) = if (editorFocus.kind == DataKind.Distance) {
+                val remaining = allPositions.filterIndexed { index, _ -> index != currentPosIndex }
+                val targetDistance = newItem.atKm
+                val indexToInsert = remaining.indices.firstOrNull { i ->
+                    val it = remaining[i]
+                    it is PositionLine && (it.atKm > targetDistance || (it.atKm == targetDistance && i >= currentPosIndex))
+                } ?: remaining.size
+                val updated = recalculateLineNumbers(
+                    buildList {
+                        addAll(remaining.take(indexToInsert))
+                        add(newItem)
+                        addAll(remaining.drop(indexToInsert))
+                    }
+                )
+                val resultingItem = updated[indexToInsert] as PositionLine
+                updated to resultingItem.lineNumber
+            } else {
+                val allPositions = _inputPositions.value
+                allPositions.toMutableList().apply { set(currentPosIndex, newItem) } to item.lineNumber
+            }
+            _selectedLineIndex.value = newLineSelection
+            updateInputPositions(newPositions)
+        }
+
+        updateFocus(editorFocus.copy(cursor = newCursor, rawText = rawText))
+        updateEditorConstraints()
+
+        return newText
     }
 
     private fun sanitizeSelection() {
@@ -1341,7 +1530,8 @@ class LiveSectionViewModel(
     }
 }
 
-class StreamedSectionViewModel : StatefulSectionViewModel(), RaceServiceHolder<StreamedRaceService> {
+class StreamedSectionViewModel(coroutineDispatcher: CoroutineDispatcher) : StatefulSectionViewModel(coroutineDispatcher),
+    RaceServiceHolder<StreamedRaceService> {
     override val viewModelScope: CoroutineScope
         get() = (this as ViewModel).viewModelScope
 
@@ -1360,7 +1550,7 @@ class StreamedSectionViewModel : StatefulSectionViewModel(), RaceServiceHolder<S
 
     private val _timeAllowance = MutableStateFlow<TimeAllowance?>(null)
     override val timeAllowance: Flow<TimeAllowance?> get() = _timeAllowance
-    
+
     private var service: StreamedRaceService? = null
 
     private var serviceRelatedJob: Job? = null
@@ -1383,50 +1573,55 @@ class StreamedSectionViewModel : StatefulSectionViewModel(), RaceServiceHolder<S
         service = raceService
         _raceUiVisible.value = true
         serviceRelatedJob?.cancel()
-        serviceRelatedJob = viewModelScope.launch {
-            viewModelScope.launch {
+        serviceRelatedJob = launchDispatchable {
+            launch {
                 service?.telemetryPublicState?.collectLatest { teleState ->
                     _telemetryState.value = teleState
                 }
             }
-            viewModelScope.launch {
+            launch {
                 service?.section?.collectLatest {
                     _section.value = it?.let { LoadState.Loaded(it) } ?: LoadState.EMPTY
                 }
             }
-            viewModelScope.launch {
+            launch {
                 service?.positions?.collectLatest {
                     _inputPositions.value = it.orEmpty()
                     _preprocessedPositions.value = it.orEmpty()
                 }
             }
-            viewModelScope.launch {
+            launch {
                 service?.instant?.collectLatest {
                     _instant.value = it
                 }
             }
-            viewModelScope.launch {
+            launch {
                 service?.currentLine?.collectLatest {
                     _selectedLineIndex.value = it
                 }
             }
-            viewModelScope.launch {
+            launch {
                 service?.currentRaceLine?.collectLatest {
                     _raceCurrentLineIndex.value = it
                 }
             }
-            viewModelScope.launch {
+            launch {
                 service?.raceState?.collectLatest {
                     _raceState.value = raceStateToUiState(it)
-                }
-                delay(1000L)
-                if (isActive) {
-                    _telemetryState.value = TelemetryPublicState.ReceivesStream(isDelayed = true)
+                    delay(1000L.milliseconds)
+                    if (this@launch.isActive) {
+                        _telemetryState.value = TelemetryPublicState.ReceivesStream(isDelayed = true)
+                    }
                 }
             }
-            viewModelScope.launch {
+            launch {
                 service?.rememberSpeedLimit?.collectLatest {
                     _rememberSpeed.value = it
+                }
+            }
+            launch {
+                service?.speedLimitPercent?.collectLatest {
+                    _speedLimitPercent.value = it
                 }
             }
         }

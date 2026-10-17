@@ -52,6 +52,11 @@
     <string name="telemetrySourceSimulationHint">Set the speed by using the slider in the race view</string>
     <string name="telemetrySourceObd">OBD over Bluetooth</string>
     <string name="telemetrySourceObdHint">Connect to an OBD (ELM327) unit over Bluetooth</string>
+    <string name="telemetrySourceOutgauge">OutGauge</string>
+    <string name="telemetrySourceOutgaugeHint">Receive telemetry over UDP from simulators</string>
+    <string name="settingsOutgaugePort">UDP port</string>
+    <string name="invalidPortShouldBeBetween1024And65535">Invalid port, should be between 1024 and 65535</string>
+    <string name="settingsOutgaugeInstruction">Configure your simulator (e.g. BeamNG Options > Other > OutGauge support) with this device\'s IP address and the port above.</string>
     <string name="settingsBtMac">Bluetooth MAC address</string>
     <string name="settingsSendDataToAnotherDevice">Send data to the driver\'s device</string>
     <string name="settingsSendDataToAnotherDeviceHint">Enter the other device\'s IP to send data to it. The other device must be on the same Wi-Fi network.\nOn the other device, open \'Driver HUD\' from the menu on the section list.</string>
@@ -59,7 +64,7 @@
     <string name="settingsCalibration">Calibration</string>
     <string name="settingsCalibrationHint">Distance measured by the odometer divided by the roadmap distance:</string>
     <string name="settingsCalibrationFactor">Calibration factor</string>
-    <string name="invalidNumberShouldBeBetween01and10">Invalid number, should be between 0.1 and 10.0</string>
+    <string name="invalidNumberShouldBeBetween001and10">Invalid number, should be between 0.01 and 10.0</string>
     <string name="calibrateFromRouteHint">You can calibrate from the real distance by going over the ODO check route in Race Mode and opening Settings after that.</string>
     <string name="settingsCalibrateByOdoCheckRoute">Calibrate by ODO check route:</string>
     <string name="settingsExactOdoCheckDistance">Exact ODO check distance</string>
@@ -79,6 +84,10 @@
     <string name="telemetryObdNoMac">OBD: no MAC!</string>
     <string name="telemetryObdOk" translatable="false">OBD ✔</string>
     <string name="telemetrySimulationOk">Simulation ✔</string>
+    <string name="telemetryOutgaugeOk" translatable="false">OutGauge ✔</string>
+    <string name="telemetryOutgaugeWaiting">OutGauge: waiting…</string>
+    <string name="telemetryOutgaugeDelayed">OutGauge: delayed</string>
+    <string name="telemetryOutgaugeError">OutGauge: error</string>
     <string name="telemetryData">"Data "</string>
     <string name="telemetryDataDelay" translatable="false">\???</string>
     <string name="telemetryDataIncompatible">Data: incompatible version</string>
@@ -97,7 +106,8 @@
     <string name="raceGoingInAnotherSection">Race going in another section</string>
     <string name="raceNotStarted">Race not started</string>
     <string name="stoppedTimeDistancePrefix">"Stopped: "</string>
-    <string name="raceStatusHint">"Race status: "</string>
+    <string name="raceStatusRaceGoing">Race status: race going</string>
+    <string name="raceStatusSectionGoing">Race status: section going</string>
     <string name="allowanceLetter">A</string>
     <string name="switchDirectionHint">Switch direction</string>
     <string name="buttonMinus01" translatable="false">-0.1</string>
@@ -130,10 +140,7 @@
     <string name="noNetworkFoundPleaseConnectToWiFi">No network found, please connect to Wi-Fi</string>
     <string name="labelSetavg">setavg%1$s</string>
     <string name="labelThenAvg">thenavg%1$s</string>
-    <string name="labelSynth">synth</string>
-    <string name="labelEach">each</string>
     <string name="labelAtime">atime</string>
-    <string name="labelOdo">odo</string>
     <string name="labelEndavg">endavg</string>
     <string name="errOutsideIntervals">outside intervals</string>
     <string name="errNoSetavg">no setavg for this position</string>
@@ -144,11 +151,8 @@
     <string name="keySetavg">SET</string>
     <string name="keyThen">THEN</string>
     <string name="keyEndavg">END</string>
-    <string name="keySynth">SYNTH</string>
     <string name="keyAtime">ATIME</string>
-    <string name="keyOdo">ODO</string>
-    <string name="keyAddBelow">ADD▼</string>
-    <string name="keyAddAbove">ADD▲</string>
+    <string name="keyAdd">ADD</string>
     <string name="keyRemove">DEL ╳</string>
     <string name="notificationGoing">: Going</string>
     <string name="notificationInRace">: In race</string>

@@ -18,14 +18,14 @@ object InputToTextSerializer {
                     append(roadmapInputLine.modifiers.joinToString(prefix = " ", separator = " ") { modifier ->
                         when (modifier) {
                             is OdoDistance -> "odo ${modifier.distanceKm.valueKm.strRound3()}"
-                            is SetAvgSpeed -> "setavg ${modifier.setavg.valueKmh.strRound3()}"
+                            is SetAvgSpeed -> "setavg ${formatSpeed(modifier.setavg)}"
                             is EndAvgSpeed -> "endavg" +
                                 if (modifier.endavg != null) {
-                                    " " + modifier.endavg.valueKmh.strRound3()
+                                    " " + formatSpeed(modifier.endavg)
                                 } else ""
                             is AstroTime -> "atime ${modifier.timeOfDay.timeStr()}"
 
-                            is ThenAvgSpeed -> "thenavg " + modifier.setavg.valueKmh.strRound3()
+                            is ThenAvgSpeed -> "thenavg " + formatSpeed(modifier.setavg)
                             is Here -> "here " + modifier.atTime.toMinSec()
                             is AddSynthetic -> "s ${modifier.interval.valueKm.strRound3()} ${modifier.count}"
                             is IsSynthetic -> error("synthetic positions should not appear in the inputs")
@@ -36,4 +36,9 @@ object InputToTextSerializer {
                 }
             }
         }
+}
+
+private fun formatSpeed(speed: SpeedKmh): String = when (speed) {
+    is SpeedWithPercentage -> "${speed.baseSpeed.valueKmh.strRound3()};${speed.percentage.formatPercentage()}%"
+    is PlainSpeedKmh -> speed.valueKmh.strRound3()
 }
