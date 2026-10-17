@@ -51,14 +51,14 @@ You can also change the roadmap by hand with the app's editor. This is for fixin
 | **Time of day** | The real time on the rally clock at a position, for example 10:00:00. The app calls it `atime` ("astronomical time"). |
 | **Race mode** | The mode you use in the car. A panel (the **race panel**) appears below the list with the clock, the distance and how early or late you are. |
 | **Section timer** | In race mode, a clock that times the whole section at its overall average speed. You start it from the row of buttons called **Go**. |
-| **Race timer** | In race mode, a clock that times a regularity, where each set average speed counts. You start it from the row of buttons called **Race**. |
+| **Race timer** | In race mode, a clock that times a regularity, where each set average speed counts. You start it from the row of buttons called **Race**, or, while the section timer runs, from the row called **Start race:**. |
 | **Distance source** | Where the app gets the distance and speed: GPS, a reader in the car, a driving game, or a test slider. |
 
 ---
 
 ## 3. Quick start
 
-**Some time before the rally:** if you use a reader in the car (OBD), calibrate it on an odometer check route (see [Calibration](#122-calibration)). With GPS you can skip this.
+**Before the rally, usually the day before:** if you use a reader in the car (OBD), calibrate it on the calibration route that the organisers publish in advance (see [Calibration](#122-calibration)). With GPS you can skip this.
 
 **When you get the road book, right before the start:**
 
@@ -68,9 +68,9 @@ You can also change the roadmap by hand with the app's editor. This is for fixin
 **In the car:**
 
 3. Before the start, tap **Race mode**. Allow everything the phone asks.
-4. Tap the start position (0.0) in the list. In the **Go** row of the race panel, tap **On 10:00:00** (the start time you typed). The clock counts down to the start and then runs.
+4. Tap the start position (0.0) in the list. In the **Go** row of the race panel, tap **On 10:00:00** (the start time you typed). The clock counts down to the start and then runs. (If you left the start time empty, there is no **On…** button: tap **Now** at the second you start.)
 5. Drive. Watch the clock, the distance and the early/late value. Correct the distance at known points with **-0.1** and **+0.1**, or with the phone's volume buttons.
-6. **A regularity.** Before it starts, tap the **v** button at the top of the race panel and tap its set speed. At the start point, tap **Now from …** in the **Start race:** row. When the set speed changes, tap the new speed in the row of speed buttons. At the end of the regularity, tap **Finish race**.
+6. **A regularity.** Before it starts, tap the **v** button at the top of the race panel and tap its set speed. At the start point, tap the first button of the **Start race:** row, **Now from …** with your current distance (two decimals). When the set speed changes, tap the new speed in the row of speed buttons. At the end of the regularity, tap **Finish race**.
 7. At the end of the section, tap **Stop**.
 
 The app writes the regularity into the roadmap as you go. See [How race mode builds your roadmap](#64-how-race-mode-builds-your-roadmap).
@@ -122,7 +122,7 @@ Tap **Save**. The new section has two positions:
 
 The app then opens the section.
 
-**How to cut the rally into sections.** A section can hold only one time of day. Make one section for each part of the road book that starts at a given time, for example from one time control to the next. A regularity inside that part does not need its own section: you record it in race mode.
+**How to cut the rally into sections.** A section can hold only one time of day. Make one section for each part of the road book that starts at a given time, for example from one time control to the next. A regularity inside that part does not need its own section, even if it has its own start time: you record it in race mode (see [A regularity inside a liaison](#75-a-regularity-inside-a-liaison)).
 
 ### 4.2 Import a section
 
@@ -223,7 +223,7 @@ The app has two timers:
 - The **section timer** (started with **Go**) times the **whole section** at its overall average speed (section length ÷ section time). Use it for a liaison with a target time. The panel shows a stopwatch icon.
 - The **race timer** (started with **Race**) times a **regularity**, where each set average speed and each speed change counts. The panel shows a flag icon.
 
-Both timers use the **phone's clock**. Before the rally, set the phone's time to automatic and compare it with the official rally clock.
+Both timers use the **phone's clock**. Before the rally, set the phone's time to automatic and compare it with the official rally clock. The app cannot correct a difference. If the phone's clock is off by a second or more, do not use the **On…** buttons: tap **Now** at the official start second instead.
 
 A race timer can run inside the section timer: a regularity inside a liaison. When the race timer finishes, the section timer keeps running. If you start a race timer while no section timer runs, the app starts the section timer at the same moment.
 
@@ -237,13 +237,15 @@ The section you created holds only its start and its end. As you drive, race mod
 |---|---|
 | **Now** in the Go or Race row | The start time as the time of day (`atime`) of the start position. A section has only one time of day, so this replaces the one you typed. |
 | **On 10:00:00** | Nothing new: it uses the time of day that the selected position already has, and keeps it. (You see the **On…** buttons only when the selected position has a time of day.) |
-| A **Race** start | A `setavg` with the race speed on the start position, and the start time. Sometimes the app adds a new position at the start point for this. |
+| A **Race** start | A `setavg` with the race speed on the start position. Sometimes the app adds a new position at the start point for this. (A start with **Now** also writes the start time, as above.) |
 | A speed button during a race | A new position at your distance, with `thenavg` and that speed. |
 | **Finish race** | A new position at your distance, with an `endavg` that ends the race's stretch, unless the roadmap already ends it. Then the app gives the section start its start time back. |
 | **Undo finish race** | It removes the position that **Finish race** added. |
 | **Add passed position** | A new position at your distance, with no marks. |
 
 **Undo stop** changes nothing in the roadmap.
+
+**While the race runs**, the regularity has no end yet, so the app treats it as going on to the end of the section. Until you tap **Finish race**, the times, the ➠ speeds and even a `🚫late by` warning after the race start can look wrong. They are right again after the finish.
 
 So after a regularity inside a liaison, the roadmap holds an inner stretch: `setavg` at the regularity start, `thenavg` at each speed change, `endavg` at its end. The app then calculates the times for the rest of the liaison from it (see [Inner stretches](#83-inner-stretches)).
 
@@ -296,6 +298,8 @@ The **Start race:** row (or **Next race:** after a race) starts a race timer:
 | **On 10:00:00 from 12.345** | You see this if the selected position has a time of day. Starts the race at that time, from the selected position (its distance, with three decimals). |
 | **On 10:00:00 from 12.345, keep ODO** | The same, but your distance does not change. |
 | **Now from 12.345** | You see this if the selected position has no time of day and its distance differs from the app's distance. Starts a race now, from the selected position (its distance, with three decimals), and sets your distance to it. If the two distances are the same, the app shows only **Now from 12.34**, which then does the same thing. |
+
+In the car, use the **first** button, **Now from 12.34**, at the start point of a regularity. The other buttons start the race from the selected row: if the section start (0.0) is still selected, **On 10:00:00 from 0.000** would start the race from the section start.
 
 Below them:
 
@@ -353,8 +357,10 @@ It does not show this value if the roadmap has errors.
 The measured distance is never perfect. Correct it at known points, for example at a road-book point with an exact distance:
 
 - **-0.1** and **+0.1** change the distance by 100 m.
-- The phone's **volume buttons** change it by 10 m (up adds, down subtracts). They work only while a timer runs.
+- The phone's **volume buttons** change it by 10 m (up adds, down subtracts). They work only while the race panel is open and a timer runs.
 - **Tap the distance** to type the exact value. Tap **✓** to use it, or **✕** to cancel. If a position is selected, the button **Set to position 12.345** sets the distance to that position.
+
+**Distances inside a regularity.** The app counts the distance from the start of the section, also during a regularity. If the road book gives the points inside a regularity from the regularity start, add the distance where the regularity started. You see it in the list, on the row where the race started (with `setavg`). For example, if the regularity started at 15.20 and the road book says 3.45, the app's distance at that point is 18.65.
 
 **Going backwards.** If you miss a turn and drive back, tap the **↶** button (Switch direction). It turns red, and the distance now goes down as you drive. Tap it again when you drive forward again. While you drive back in a race, the app removes every `thenavg` mark at the points you drive back over (but not before the start of the race). When you drive forward again, tap the speed buttons again at the speed changes. If sounds are on, the app beeps every 3 seconds while the distance goes backwards.
 
@@ -371,7 +377,7 @@ More fields in that row:
 - **The "/h →" field and its button**: type any speed, then tap the round button next to it. It also uses the percentage.
 - **The "=/h →" field and its button**: type an exact speed. This one does not use the percentage.
 
-If you tap the wrong speed, tap the right one straight after: it adds another position with the right speed. Between the two taps the app used the wrong speed, so the times are a little off; the sooner you correct it, the smaller the error. Later, you can delete the wrong position in the editor (see [Fixing mistakes](#101-when-to-use-the-editor)).
+If you tap the wrong speed, tap the right one straight after: it adds another position with the right speed. Between the two taps the app used the wrong speed, so the times are a little off; the sooner you correct it, the smaller the error. Later, you can delete the wrong position in the editor (see [When to use the editor](#101-when-to-use-the-editor)).
 
 **The "v" button** at the top of the panel opens the same row when no race timer runs. There, a speed is only **remembered**: the next race timer starts with it as its `setavg`. Use it to set the speed of a regularity before it starts. **Clear** forgets it. The button shows the remembered speed (for example **60**), and the percentage next to it if it is not 100%.
 
@@ -398,9 +404,9 @@ Turn sounds on in Settings (**Play sounds on race mode actions**). The app then 
 
 ## 7. A rally day with the app
 
-### 7.1 Some time before the rally
+### 7.1 Before the rally
 
-- If you use a reader in the car (OBD), calibrate it: drive an odometer check route, for example the one the organisers give, and set the calibration factor (see [Calibration](#122-calibration)). The factor stays in Settings until you change it.
+- If you use a reader in the car (OBD), calibrate it, usually the day before: the organisers publish the calibration route in advance. Drive it and set the calibration factor (see [Calibration](#122-calibration)). The factor stays in Settings until you change it.
 - Learn the app with the **Simulation** distance source (see [Measuring the distance](#11-measuring-the-distance)), or with a driving game (**OutGauge**).
 - If the driver uses a second phone, set it up (see [The driver's screen](#13-the-drivers-screen-driver-hud)).
 
@@ -423,17 +429,16 @@ Everything else (where each regularity starts and ends, and where its speed chan
 
 ### 7.4 At the start
 
-Select the start position (0.0). Tap **On 10:00:00** in the **Go** row. The clock counts down to the start. If the marshal gives you a different minute, tap **Now** in the Go row at the moment you start instead.
+Select the start position (0.0). Tap **On 10:00:00** in the **Go** row. The clock counts down to the start. If the marshal gives you a different minute, tap **Stop** (this also works during the countdown), and then tap **Now** in the Go row at the moment you start.
 
 ### 7.5 A regularity inside a liaison
 
 1. Before the regularity, tap the **v** button and tap its set speed.
-2. At the start point of the regularity, tap **Now from …** in the **Start race:** row. (If you selected the start point in the list and the app's distance is not exactly there, use the **Now from …** button with three decimals: it also sets your distance to that point.)
+2. At the start point of the regularity, tap the first button of the **Start race:** row, **Now from …** with your current distance. If the regularity has its own start time, tap it at that exact second. Then correct the distance to the start point, if needed.
 3. At each change of the set speed, tap the new speed.
 4. At the end of the regularity, tap **Finish race**. The section timer keeps running for the rest of the liaison. From here, drive by the section timer: as fast as you can, while its early/late value is not red.
 5. At the end of the liaison, tap **Stop**.
 
-If the regularity has its own start time, it is easiest to make it a separate section with that start time, and start it with **On 10:20:00** in the **Race** row.
 
 ### 7.6 Moving to the next section
 
@@ -960,8 +965,8 @@ There is no undo for a start. After the section timer starts, tap **Stop**, sele
 Race mode forgets the timers when the phone closes the app. To continue:
 
 1. Open the **Event log** to find the time of day when the timer you need started.
-2. In the editor, give the start position of that timer this time of day with **ATIME** (see [Editing positions](#10-editing-positions-advanced)).
-3. Turn race mode on, select that start position, and tap **On 10:00:00** in the same row as before. The clock is right again, but your distance is now the start distance.
+2. In the editor, give the start position of that timer this time of day with **ATIME** (see [Editing positions](#10-editing-positions-advanced)). For a race, this is the row at the race start distance with `setavg`: the app always writes one there when a race starts.
+3. Turn race mode on, select that start position, and tap **On 10:00:00** in the **Go** row (for the section timer) or the **Race** row (for a race). The clock is right again, but your distance is now the start distance. (The app forgets the remembered speed too, so a restored race uses the `setavg` on its start row.)
 4. Tap the distance in the race panel, and type your real distance (for example from the last road-book point you passed).
 
 If you were in a regularity inside a liaison, the app can bring back only one timer correctly. Restore the race timer: starting it also starts the section timer, but from the regularity start, so the section timer is not right for the rest of the liaison.
