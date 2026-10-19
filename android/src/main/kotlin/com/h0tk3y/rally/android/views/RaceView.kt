@@ -293,6 +293,7 @@ private fun TelemetryStatus(
             TelemetryPublicState.IncompatibleStream -> stringResource(R.string.telemetryDataIncompatible)
 
             TelemetryPublicState.WaitingForStream -> stringResource(R.string.telemetryDataWaiting)
+            TelemetryPublicState.StreamLinkLost -> stringResource(R.string.telemetryDataLinkLost)
 
             is TelemetryPublicState.GpsGood -> stringResource(R.string.telemetryGpsGood) + satsString(telemetryPublicState.sats)
             is TelemetryPublicState.GpsProblematic -> stringResource(R.string.telemetryGpsProblematic) + satsString(telemetryPublicState.sats)
@@ -320,6 +321,7 @@ private fun TelemetryStatus(
             TelemetryPublicState.BtNoTargetMacAddress,
             TelemetryPublicState.NotInitialized,
             TelemetryPublicState.WaitingForStream,
+            TelemetryPublicState.StreamLinkLost,
             is TelemetryPublicState.GpsNoPosition,
             is TelemetryPublicState.GpsProblematic,
             is TelemetryPublicState.GpsWaiting,

@@ -92,6 +92,7 @@
     <string name="telemetryOutgaugeError">OutGauge: ошибка</string>
     <string name="telemetryData">Данные</string>
     <string name="telemetryDataWaiting">Данные: ожидание</string>
+    <string name="telemetryDataLinkLost">Данные: связь потеряна</string>
     <string name="notConnectedToRaceService">Гоночный режим не работает</string>
     <string name="finishedTimeDistancePrefix">"Финиш: "</string>
     <string name="raceGoingInAnotherSection">Идёт гонка по другой секции</string>
