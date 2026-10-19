@@ -158,7 +158,7 @@
     <string name="settingsSpeedButtonsHint">Скорости в км/ч для кнопок на панели гонки: целые числа от 1 до 999 через пробел, запятую или точку с запятой, например: 20 40, 60; 80. Дробные скорости и точки не допускаются.</string>
     <string name="settingsSpeedButtonsField">Скорости, км/ч</string>
     <string name="settingsSpeedButtonsDefault">По умолчанию</string>
-    <string name="settingsSpeedButtonsPreview">Кнопки: %1$s</string>
+    <string name="settingsSpeedButtonsSaved">Сохранено: %1$s</string>
     <string name="speedButtonsErrorEmpty">Введите хотя бы одну скорость</string>
     <string name="speedButtonsErrorNotAWholeNumber">«%1$s» — не целое число</string>
     <string name="speedButtonsErrorOutOfRange">%1$s — вне допустимых пределов: скорость должна быть от 1 до %2$d</string>
