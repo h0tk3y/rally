@@ -319,10 +319,9 @@ def race_panel():
     speed = s.find(rx=r"v=.*")
     start = s.row(s.find(text=S("preLabelStartRace")))
     stop = s.find(text=S("raceButtonStop"), button=True)
-    sim = s.row(s.find(text=S("simulateSpeedPrefix")))
     marks_ = [mark(1, toolbar), mark(2, clock), mark(3, allowance, False), mark(4, early), mark(5, dist | delta),
-              mark(6, correction), mark(7, speed), mark(8, start), mark(9, stop, False), mark(10, sim)]
-    save(render(s, band(s, toolbar, sim), marks_, "panel"), "race-panel", 50)
+              mark(6, correction), mark(7, speed), mark(8, start), mark(9, stop, False)]
+    save(render(s, band(s, toolbar, stop), marks_, "panel"), "race-panel", 50)  # without the simulation slider
 
 
 def race_panel_regularity():
@@ -455,14 +454,21 @@ def section_times():
 
 
 def race_states():
-    cells = []
+    """Four states of the race panel, without the simulation slider: it is only there for practice."""
+    crops = []
     for i, (name, cap) in enumerate((("06-race-not-started", CAPTIONS["not_started"]), ("06-section-timer", CAPTIONS["section_runs"]),
                                      ("06-regularity", CAPTIONS["regularity_runs"]), ("06-stopped", CAPTIONS["stopped"]))):
         s = Screen(name)
         toolbar = s.find(desc=S("eventLog"), button=True)
         sim = s.row(s.find(text=S("simulateSpeedPrefix")))
-        c = render(s, band(s, toolbar, sim), [], f"state-{i}")
-        mg(c, "-background", "white", "-gravity", "south", "-extent", "1080x1000", c)
+        above = [n["box"] for n in s.nodes if (n["text"] or n["desc"] or n["click"]) and toolbar.y0 <= n["box"].y0
+                 and n["box"].y1 <= sim.y0 and n["box"].x1 - n["box"].x0 < 1000]
+        crops.append((render(s, band(s, toolbar, union(*above)), [], f"state-{i}"), cap))
+    height = max(int(subprocess.run(["magick", "identify", "-format", "%h", c], capture_output=True, text=True).stdout)
+                 for c, _ in crops)
+    cells = []
+    for i, (c, cap) in enumerate(crops):
+        mg(c, "-background", "white", "-gravity", "south", "-extent", f"1080x{height}", c)
         cells.append(border(caption(c, cap, t(f"state-c-{i}")), t(f"state-b-{i}")))
     mg(cells[0], cells[1], "+append", t("states-1"))
     mg(cells[2], cells[3], "+append", t("states-2"))
