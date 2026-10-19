@@ -1,4 +1,4 @@
-# <img src="images/icon.png" width="40" height="40" alt=""> h0tk3y's Rally Tool: user guide
+# <img src="images/icon.png" width="28" height="28" alt=""> h0tk3y's Rally Tool: user guide
 
 *[Русская версия](user-guide.ru.md)*
 
@@ -220,7 +220,7 @@ To hide the panel without stopping, use **Hide race panel** in the menu. To end 
 
 <img src="images/race-panel.png" width="540" alt="The race panel while the section timer runs, with its parts marked">
 
-The buttons <img src="images/badges/6.png" height="20" alt="6"> are described in [Correcting the distance](#67-correcting-the-distance), <img src="images/badges/8.png" height="20" alt="8"> and <img src="images/badges/9.png" height="20" alt="9"> in [The race states](#66-the-race-states), and the slider <img src="images/badges/10.png" height="20" alt="10"> in [Measuring the distance](#9-measuring-the-distance).
+The buttons <img src="images/badges/6.png" height="20" alt="6"> are described in [Correcting the distance](#67-correcting-the-distance), <img src="images/badges/8.png" height="20" alt="8"> and <img src="images/badges/9.png" height="20" alt="9"> in [The race states](#66-the-race-states).
 
 **The toolbar** <img src="images/badges/1.png" height="20" alt="1">. A row of small buttons: the **Event log** (a clock with an arrow), the distance source (for example **GPS ✔**), the **v** button and **Add passed position** (a pin with a plus). On a phone held upright it is at the top of the race panel; on a tablet, or with the phone turned sideways, it is at the bottom, with bigger buttons:
 
@@ -263,7 +263,7 @@ It does not show this value if the roadmap has errors.
 
 ### 6.4 The distance from the selected position
 
-Next to your current distance, a smaller number <img src="images/badges/5.png" height="20" alt="5"> shows how far you are from the **selected position**: `+0.125` means 125 m past it. It always counts from the position selected in the list, so select the row you want to measure from.
+Next to your current distance, a smaller number shows how far you are (<img src="images/badges/5.png" height="20" alt="5"> in the picture in [What the race panel shows](#63-what-the-race-panel-shows)) from the **selected position**: `+0.125` means 125 m past it. It always counts from the position selected in the list, so select the row you want to measure from.
 
 The last passed position is marked green if you select some other line. However, if it is selected, **the selection follows the car**. Then each time you pass a position, or add one with **Add passed position** or a speed button, the selection moves to it.
 
