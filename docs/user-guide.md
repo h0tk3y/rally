@@ -1,4 +1,4 @@
-# <img src="images/icon.png" width="28" height="28" alt=""> h0tk3y's Rally Tool: user guide
+# <img src="images/icon.png" width="32" height="32" alt=""> h0tk3y's Rally Tool: user guide
 
 *[Русская версия](user-guide.ru.md)*
 
