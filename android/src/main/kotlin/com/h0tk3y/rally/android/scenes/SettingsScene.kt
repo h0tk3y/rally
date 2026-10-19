@@ -36,6 +36,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.BluetoothSearching
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -66,6 +67,7 @@ import com.h0tk3y.rally.android.util.openDontKillMyApp
 import com.h0tk3y.rally.android.util.IpAddressDisplay
 import com.h0tk3y.rally.strRound3
 import com.h0tk3y.rally.strRound5
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
@@ -114,14 +116,13 @@ private fun LazyItemScope.TelemetrySource(
     calibrateByCurrentDistance: Double?
 ) {
     val telemetrySource by model.currentTelemetrySource.collectAsState(TelemetrySource.BT_OBD)
-    val btMac by model.currentMacSelection.collectAsState(null)
     val context = LocalContext.current
     val hasGps = remember(context) { context.hasGpsHardware() }
 
     /** Asks for the source's permissions right when the user picks it, rather than later when the race mode starts */
     fun selectSource(source: TelemetrySource) {
         model.setTelemetrySource(source)
-        telemetryAccess.runWhenReady(source, btDeviceSelected = !btMac.isNullOrEmpty()) { }
+        telemetryAccess.runWhenReady(source) { }
     }
 
     Text(stringResource(R.string.settingsTelemetrySource), style = MaterialTheme.typography.h6, modifier = Modifier.padding(16.dp))
@@ -162,14 +163,18 @@ private fun LazyItemScope.TelemetrySource(
     }
     if (isObd) {
         run {
-            var text by rememberSaveable(btMac) { mutableStateOf(btMac ?: "") }
+            // Not keyed by the saved value: it lags behind the typing and would reset the field mid-word
+            var text by rememberSaveable { mutableStateOf<String?>(null) }
+            if (text == null) {
+                LaunchedEffect(Unit) { text = model.currentMacSelection.first().orEmpty() }
+            }
             Row {
                 Spacer(Modifier.width(48.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         OutlinedTextField(
                             modifier = Modifier.weight(1f),
-                            value = text,
+                            value = text.orEmpty(),
                             onValueChange = {
                                 text = it
                                 model.viewModelScope.launch {
@@ -181,8 +186,8 @@ private fun LazyItemScope.TelemetrySource(
 
                         IconButton(onClick = {
                             // Connecting to the picked adapter needs the permission, so ask for it before picking
-                            telemetryAccess.runWhenReady(TelemetrySource.BT_OBD, btDeviceSelected = true) {
-                                model.pickAndSetBluetoothDevice(context)
+                            telemetryAccess.runWhenReady(TelemetrySource.BT_OBD) {
+                                model.pickAndSetBluetoothDevice(context) { picked -> text = picked.orEmpty() }
                             }
                         }) {
                             Icon(Icons.AutoMirrored.Rounded.BluetoothSearching, contentDescription = null)
@@ -548,7 +553,7 @@ class SettingsViewModel(
         }
     }
 
-    fun pickAndSetBluetoothDevice(context: Context) {
+    fun pickAndSetBluetoothDevice(context: Context, onPicked: (String?) -> Unit) {
         viewModelScope.launch {
             val bluetoothReceiver: BroadcastReceiver = object : BroadcastReceiver() {
                 override fun onReceive(context: Context, intent: Intent) {
@@ -556,6 +561,7 @@ class SettingsViewModel(
                         context.unregisterReceiver(this)
                         val device = IntentCompat.getParcelableExtra(intent, BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
                         setBtMac(device?.address)
+                        onPicked(device?.address)
                     }
                 }
             }

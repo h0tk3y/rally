@@ -231,6 +231,25 @@ fun SectionScene(
     val goToSettings = { onGoToSettings((raceState as? RaceUiState.HasRaceModel)?.raceModel?.currentDistance?.valueKm) }
 
     TelemetryAccessDialogHost(telemetryAccess, onChangeSource = goToSettings)
+
+    val explainTelemetryProblem: (TelemetryPublicState) -> Unit = { state ->
+        if (model is RaceModelControls) {
+            coroutineScope.launch {
+                telemetryAccess.explain(model.telemetrySource.first(), state)
+            }
+        }
+    }
+
+    // A permission can go missing after the race mode has started, e.g. when the user sets up an OBD adapter in the settings.
+    // The status in the race panel is easy to miss, so explain it once per screen.
+    var explainedMissingPermission by rememberSaveable { mutableStateOf(false) }
+    val isMissingPermission = telemetryState == TelemetryPublicState.BtNoPermissions || telemetryState == TelemetryPublicState.GpsNoPermissions
+    if (isMissingPermission && raceUiVisible && !explainedMissingPermission) {
+        LaunchedEffect(Unit) {
+            explainedMissingPermission = true
+            explainTelemetryProblem(telemetryState)
+        }
+    }
     if (showBatteryHint) {
         BatteryOptimizationHintDialog(
             onOpenSettings = {
@@ -245,8 +264,7 @@ fun SectionScene(
     val launchServiceAfterObtainingPermission: () -> Unit = {
         if (model is RaceModelControls) {
             coroutineScope.launch {
-                val setup = model.telemetrySourceSetup.first()
-                telemetryAccess.runWhenReady(setup.source, setup.btDeviceSelected) {
+                telemetryAccess.runWhenReady(model.telemetrySource.first()) {
                     model.enterRaceMode()
                     if (model is LiveSectionViewModel) {
                         coroutineScope.launch {
@@ -584,14 +602,7 @@ fun SectionScene(
                 goToSettings = {
                     if (model is RaceModelControls) goToSettings()
                 },
-                onTelemetryAccessProblem = { state ->
-                    if (model is RaceModelControls) {
-                        coroutineScope.launch {
-                            val setup = model.telemetrySourceSetup.first()
-                            telemetryAccess.explain(setup.source, setup.btDeviceSelected, state)
-                        }
-                    }
-                },
+                onTelemetryAccessProblem = explainTelemetryProblem,
                 modifier = keyboardModifier,
                 addPositionMaybeWithSpeed = { speed ->
                     val currentRaceState = raceState

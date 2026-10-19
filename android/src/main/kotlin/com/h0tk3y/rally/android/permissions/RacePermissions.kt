@@ -18,16 +18,12 @@ data class RacePermissionSet(val required: List<String>, val optional: List<Stri
     val all: List<String> get() = required + optional
 }
 
-/**
- * @param btDeviceSelected for [TelemetrySource.BT_OBD], whether an adapter is set up. Until then, there is nothing to connect to,
- *   so the Bluetooth permission is not required yet; it is requested when the user picks an adapter.
- */
-fun racePermissions(source: TelemetrySource, btDeviceSelected: Boolean, sdkInt: Int = Build.VERSION.SDK_INT): RacePermissionSet {
+fun racePermissions(source: TelemetrySource, sdkInt: Int = Build.VERSION.SDK_INT): RacePermissionSet {
     val required = when (source) {
         // Since Android 12, fine location must be requested together with coarse location, or the request is ignored.
         // The user can still grant just the approximate location, which is not enough for measuring the distance.
         TelemetrySource.GPS -> listOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
-        TelemetrySource.BT_OBD -> bluetoothConnectPermissions(sdkInt).takeIf { btDeviceSelected }.orEmpty()
+        TelemetrySource.BT_OBD -> bluetoothConnectPermissions(sdkInt)
         TelemetrySource.SIMULATION, TelemetrySource.OUTGAUGE -> emptyList()
     }
     return RacePermissionSet(required, notificationPermissions(sdkInt))
@@ -53,8 +49,6 @@ fun raceServiceType(source: TelemetrySource, fineLocationGranted: Boolean): Int 
         ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
     else
         ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
-
-data class TelemetrySourceSetup(val source: TelemetrySource, val btDeviceSelected: Boolean)
 
 fun Context.isGranted(permission: String): Boolean =
     ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED

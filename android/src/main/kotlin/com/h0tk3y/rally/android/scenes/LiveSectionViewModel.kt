@@ -7,8 +7,8 @@ import com.h0tk3y.rally.*
 import com.h0tk3y.rally.PositionLineModifier.*
 import com.h0tk3y.rally.android.LoadState
 import com.h0tk3y.rally.android.PreferenceRepository
+import com.h0tk3y.rally.android.TelemetrySource
 import com.h0tk3y.rally.android.db.DatabaseOperations
-import com.h0tk3y.rally.android.permissions.TelemetrySourceSetup
 import com.h0tk3y.rally.android.racecervice.CommonRaceService
 import com.h0tk3y.rally.android.racecervice.PrimaryRaceService
 import com.h0tk3y.rally.android.racecervice.StreamedRaceService
@@ -154,9 +154,9 @@ abstract class StatefulSectionViewModel(
 
 interface RaceModelControls {
     /** The telemetry source of the race service; the race mode should only be entered when the source has its permissions */
-    val telemetrySourceSetup: Flow<TelemetrySourceSetup>
+    val telemetrySource: Flow<TelemetrySource>
 
-    /** Enters the race mode, starting the race service if needed. Check the permissions of [telemetrySourceSetup] first. */
+    /** Enters the race mode, starting the race service if needed. Check the permissions of [telemetrySource] first. */
     fun enterRaceMode()
 
     /** Retries the telemetry source if it was blocked by a missing permission that might have been granted now */
@@ -631,8 +631,8 @@ class LiveSectionViewModel(
         sanitizeSelection()
     }
 
-    override val telemetrySourceSetup: Flow<TelemetrySourceSetup> = prefs.userPreferencesFlow
-        .map { TelemetrySourceSetup(it.telemetrySource, btDeviceSelected = !it.btMac.isNullOrEmpty()) }
+    override val telemetrySource: Flow<TelemetrySource> = prefs.userPreferencesFlow
+        .map { it.telemetrySource }
         .distinctUntilChanged()
 
     override fun recheckTelemetryAccess() {
