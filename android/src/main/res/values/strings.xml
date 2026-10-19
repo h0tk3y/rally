@@ -12,9 +12,9 @@
     <string name="saveButton">Save</string>
     <string name="distance">Distance:</string>
     <string name="kmUnit">km</string>
-    <string name="timeHhMmSs">Time HH:MM(:SS)</string>
+    <string name="timeHhMmSs">Time HH-MM(-SS)</string>
     <string name="averageSpeedHint">Average speed:</string>
-    <string name="startAtHhMmSs">Start at HH:MM(:SS)</string>
+    <string name="startAtHhMmSs">Start at HH-MM(-SS)</string>
     <string name="showMenu">Show menu</string>
     <string name="driverHud">Driver HUD</string>
     <string name="settings">Settings</string>

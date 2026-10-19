@@ -77,4 +77,12 @@ class StageDataInputValidationTest {
         assertFalse(isInvalidTimeInput(defaultTimeText))
         assertFalse(isInvalidSpeedInput(defaultSpeedText))
     }
+
+    @Test
+    fun `dash-separated placeholder time is parsed as a positive one-hour time, not a negative value`() {
+        assertEquals("01-00", defaultTimeText)
+        assertEquals(TimeDayHrMinSec(0, 1, 0, 0), parseTimeInput(defaultTimeText))
+        assertFalse(isInvalidTimeInput(defaultTimeText))
+        assertTrue(isValidStageDataInput(distance = "", time = defaultTimeText, speed = "", startTime = "09-30"))
+    }
 }
