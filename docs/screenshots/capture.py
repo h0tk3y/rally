@@ -237,7 +237,8 @@ def reset_data(hms, tc1=TC1_NEW, tc2=TC2_OK):
     if "app.db" not in sh(f"run-as {PKG} ls databases 2>/dev/null"):
         launch()  # on a fresh device, the first launch creates the database
     sh("am", "force-stop", PKG)
-    seed = os.path.join(HERE, "tmp", "seed.sql")
+    # One file per device: capture_all.py seeds several emulators at the same time
+    seed = os.path.join(HERE, "tmp", f"seed-{os.environ['ANDROID_SERIAL']}.sql")
     os.makedirs(os.path.dirname(seed), exist_ok=True)
     open(seed, "w").write(seed_sql(tc1, tc2))
     adb("push", seed, "/data/local/tmp/seed.sql")
@@ -304,8 +305,10 @@ def configure_for_race():
     tap(S("telemetrySourceSimulation"))
     sh("input", "swipe", "540", "1800", "540", "900", "300"); wait(0.8)
     tap(S("allowanceT10Down"))
-    last = len(edit_texts()) - 1
-    clear(last); fill(last, "127.0.0.1")
+    # The address field is the one around its label; the speed buttons field comes after it
+    label = next(n for n in nodes() if n["text"] == S("settingsTheOtherDeviceIpAddress"))
+    address = next(i for i, n in enumerate(edit_texts()) if n["b"][1] <= label["b"][1] < n["b"][3])
+    clear(address); fill(address, "127.0.0.1")
     back_to_list()
     sh("touch", RACE_CONFIG_MARKER)
 
