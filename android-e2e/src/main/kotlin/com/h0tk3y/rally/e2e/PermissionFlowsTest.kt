@@ -20,7 +20,6 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
-import org.junit.Ignore
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -76,11 +75,9 @@ class PermissionFlowsTest {
     }
 
     /**
-     * Android suggests no rationale for the fine location right after the user picks the approximate one, so the app takes it
-     * for a permanent denial and offers the app settings, even though the system would still show the dialog to upgrade
-     * to the precise location.
+     * Android suggests no rationale for the fine location right after the user picks the approximate one, but it still shows
+     * the dialog to upgrade to the precise location, so this must not be taken for a permanent denial.
      */
-    @Ignore("Bug: the approximate location picked on the first request is treated as a permanent denial")
     @Test
     fun approximateLocationOnTheFirstRequestIsExplained() {
         app.tapRaceMode()
