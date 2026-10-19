@@ -44,14 +44,34 @@ def adb(*a, binary=False):
     return r.stdout if binary else r.stdout.decode(errors="replace")
 
 
-def nodes():
+PKG = "com.h0tk3y.rally.debug"
+MODE = "com.h0tk3y.rally.debug.SCREENSHOT_MODE"  # the debug app's screenshot mode, see ScreenshotMode.kt
+
+
+def dump_xml():
+    """The UI tree as `uiautomator dump` XML. The debug app writes its own in well under a second; `uiautomator dump`
+    takes about two, because it waits for a screen that never settles while the race clock runs. It is the fallback
+    for screens that are not the app's, such as the launcher."""
+    for attempt in range(5):  # the app may be busy for a moment, for example while a screen opens
+        if attempt:
+            time.sleep(0.3)
+        xml = adb("shell", f"run-as {PKG} rm -f cache/ui.xml; am broadcast -a {MODE} --es dump ui.xml >/dev/null; "
+                           f"run-as {PKG} cat cache/ui.xml 2>/dev/null")
+        if "<hierarchy" in xml and "<node" in xml:
+            return xml
     adb("shell", "uiautomator", "dump", "/data/local/tmp/ui.xml")
-    xml = adb("shell", "cat", "/data/local/tmp/ui.xml")
+    return adb("shell", "cat", "/data/local/tmp/ui.xml")
+
+
+def nodes():
+    xml = dump_xml()
     res = []
     for m in re.finditer(r'<node [^>]*>', xml):
         n = m.group(0)
         g = lambda k: (re.search(k + r'="([^"]*)"', n) or [None, ""])[1]
         b = list(map(int, re.findall(r'\d+', g("bounds"))))
+        if b[2] <= b[0] or b[3] <= b[1]:
+            continue  # off the screen: the app gives such elements empty bounds
         res.append(dict(text=g("text"), desc=g("content-desc"), cls=g("class").split(".")[-1],
                         click=g("clickable") == "true", b=b))
     return res

@@ -31,6 +31,9 @@ TC1_NEW = "0.0 setavg 48 atime 10:12:00\n40.0"  # as created from the road book
 TC1_PASSED = "0.0 setavg 48 atime 10:12:00\n3.15\n7.8\n40.0"  # two road-book points added on the way
 TC1_DRIVEN = ("0.0 setavg 48 atime 10:12:00\n3.15\n7.8\n12.4 setavg 36\n17.3 thenavg 40\n21.05 thenavg 30\n"
               "24.85 endavg\n28.4\n33.75\n40.0")  # after the regularity and the rest of the section
+TC1_HERO = ("0.0 setavg 48 atime 10:12:00\n1.45\n3.15\n5.2\n6.35\n7.8\n9.1\n10.6\n11.75\n40.0")  # many road-book points
+TC2_OK = "0.0 setavg 50 atime 11:20:00\n36.8"
+TC2_BROKEN = "0.0 setavg 50 atime 11:20:00\n18.4 endavg\n25.0\n36.8"  # an error: positions after the stretch ended
 KEY_UP, KEY_DOWN = (131, 1755), (405, 1755)  # the editor's ▲ and ▼ keys have no text to find them by
 
 
@@ -42,15 +45,16 @@ def wait(s):
     time.sleep(s)
 
 
-def tap(text, idx=0):
-    for _ in range(4):  # the screen may still be changing (a keyboard, an animation)
-        ms = match(text)
+def tap(text, idx=0, exact=False):
+    """Taps an element by its text or description; without `exact`, a partial match counts if nothing matches fully."""
+    for _ in range(10):  # the screen may still be changing (a keyboard, an animation)
+        ms = [n for n in nodes() if text in (n["text"], n["desc"])] if exact else match(text)
         if ms:
             break
-        wait(0.7)
+        wait(0.4)
     else:
         sys.exit(f"not found on screen: {text!r}")
-    tap_node(ms[idx]); wait(0.8)
+    tap_node(ms[idx]); wait(0.15)  # animations are off (setup_device), so the screen settles quickly
 
 
 def xy(x, y):
@@ -79,8 +83,10 @@ def hide_keyboard():
 def shot(name):
     """Saves the screen to raw/<name>.png and its UI tree to raw/<name>.xml (annotate.py finds the elements in it)."""
     os.makedirs(ui.OUT, exist_ok=True)
-    adb("shell", "uiautomator", "dump", "/data/local/tmp/ui.xml")
-    open(os.path.join(ui.OUT, name + ".xml"), "w").write(adb("shell", "cat", "/data/local/tmp/ui.xml"))
+    xml = ui.dump_xml()
+    if "<node" not in xml:
+        sys.exit(f"{name}: empty UI tree")
+    open(os.path.join(ui.OUT, name + ".xml"), "w").write(xml)
     open(os.path.join(ui.OUT, name + ".png"), "wb").write(adb("exec-out", "screencap", "-p", binary=True))
     print("captured", name)
 
@@ -104,14 +110,14 @@ def edit_texts():
 
 
 def fill(idx, text):
-    """Types into the idx-th text field, one character at a time (fast input loses characters)."""
-    tap_node(edit_texts()[idx]); wait(0.8)
+    """Types into the idx-th text field, one character at a time (fast input loses characters in filtered fields)."""
+    tap_node(edit_texts()[idx]); wait(0.4)
     for k, word in enumerate(text.split(" ")):
         if k:
-            sh("input", "text", "%s"); wait(0.3)
+            sh("input", "text", "%s"); wait(0.1)
         for ch in word:
-            sh("input", "text", ch); wait(0.3)
-    wait(0.5)
+            sh("input", "text", ch); wait(0.1)
+    wait(0.2)
 
 
 def clear(idx):
@@ -136,42 +142,104 @@ def goto(distance, hms):
     tap(S("buttonApplyOdo"))
 
 
+def screenshot_mode(**extras):
+    """Sends the debug app's screenshot-mode broadcast: on=True hides the simulation slider and shows OBD ✔."""
+    args = ["am", "broadcast", "-a", ui.MODE]
+    for k, v in extras.items():
+        args += ["--ez", k, "true" if v else "false"] if isinstance(v, bool) else ["--ei", k, str(v)]
+    sh(*args)
+
+
 def slider(kmh):
-    """Sets the Simulation speed slider (0–100 km/h)."""
-    label = match(S("simulateSpeedPrefix"))[-1]["b"]
-    value = [n for n in nodes() if re.fullmatch(r"\d+" + S("perHourSuffix"), n["text"]) and abs(n["b"][1] - label[1]) < 20][0]["b"]
-    x0, x1 = label[2] + 47, value[0] - 48
-    y = (label[1] + label[3]) // 2
-    xy(int(x0 + (x1 - x0) * kmh / 100), y)
+    """Sets the simulated speed, as the hidden simulation slider would."""
+    screenshot_mode(speed=kmh)
 
 
-def swipe_speed_row():
-    """Scrolls the row of speeds sideways, inside the row, to the round speed buttons."""
-    field = match("=" + S("perHourSuffix") + " →")[0]["b"]
+def swipe_speed_row(fraction=1.0, backwards=False):
+    """Scrolls the row of speeds sideways, by default all the way to the round speed buttons. The swipe starts on the
+    leftmost visible speed field: on a tablet the list is at the same height, and a swipe there would select a row."""
+    fields = [n for n in nodes() if re.fullmatch(r"\d+%|=?" + re.escape(S("perHourSuffix")) + " →", n["text"])]
+    field = min(fields, key=lambda n: n["b"][0])["b"]
     y = (field[1] + field[3]) // 2
     right = max(n["b"][2] for n in nodes() if n["b"][1] <= y <= n["b"][3] and n["b"][0] >= field[0])
-    sh("input", "swipe", str(right - 60), str(y), str(field[0] + 60), str(y), "500"); wait(0.8)
+    distance = int((right - field[0] - 120) * fraction)
+    x0, x1 = (right - 60, right - 60 - distance) if not backwards else (field[0] + 60, field[0] + 60 + distance)
+    sh("input", "swipe", str(x0), str(y), str(x1), str(y), "500"); wait(0.8)
+
+
+SWIPE_SLOP = 16  # pixels of a swipe that go into the touch slop before the row starts to move
+
+
+def scroll_speed_row(delta, tries=4):
+    """Scrolls the row of speeds left by `delta` pixels (right if negative), with slow swipes that do not fling,
+    measuring the "100%"-or-"80%" percentage field after each one."""
+    def percent_x():
+        return [n["b"] for n in nodes() if re.fullmatch(r"\d+%", n["text"]) and n["cls"] == "EditText"][0]
+    target = percent_x()[0] - delta
+    for _ in range(tries):
+        x0, y0, x1, y1 = percent_x()
+        rest = x0 - target
+        if abs(rest) <= 1:
+            return
+        y = (y0 + y1) // 2
+        length = rest + (SWIPE_SLOP if rest > 0 else -SWIPE_SLOP)
+        start = x1 + 500  # on the round buttons: touching a text field would focus it
+        sh("input", "swipe", str(start), str(y), str(start - length), str(y), "1500"); wait(0.5)
+
+
+def tidy_speed_row():
+    """Scrolls the row of speeds so that the percentage field shows near the left and no button is cut off at either
+    end: the edges of the row fall into gaps between the elements."""
+    ns = nodes()
+    percent = [n["b"] for n in ns if re.fullmatch(r"\d+%", n["text"]) and n["cls"] == "EditText"][0]
+    band = [n["b"] for n in ns if n["b"][1] <= (percent[1] + percent[3]) // 2 <= n["b"][3]]
+    viewport = max((b for b in band if b[0] > percent[0] - 400), key=lambda b: b[2] - b[0])  # the row itself
+    left, right = viewport[0], viewport[2]
+    items = [b for b in band if b != viewport and b[2] - b[0] < 400 and b[0] >= left - 1000]
+    def clean(d):
+        shifted = [(b[0] - d, b[2] - d) for b in items]
+        straddles = any(a - 8 < edge < z + 8 for a, z in shifted for edge in (left, right))  # 8 px for swipe errors
+        return not straddles and percent[0] - d >= left
+    candidates = [d for d in range(-400, 401) if clean(d)]
+    if candidates:
+        scroll_speed_row(min(candidates, key=lambda d: percent[0] - d - left))  # the percentage nearest the left
+
+
+def speed_row_to_end(tries=5):
+    """Flings the row of speeds to its end, where its last button, 110, sits at the right edge."""
+    for _ in range(tries):
+        ns = nodes()
+        last = [n["b"] for n in ns if n["text"] == "110"]
+        button = [n["b"] for n in ns if re.fullmatch(r"\d{2,3}", n["text"]) and n["b"][2] - n["b"][0] < 120][0]
+        y = (button[1] + button[3]) // 2
+        screen = max(n["b"][2] for n in ns if n["b"][0] == 0)  # the app's width: off-screen buttons reach beyond it
+        right = max(n["b"][2] for n in ns if n["b"][1] <= y <= n["b"][3] and n["b"][2] <= screen)
+        if last and last[0][2] <= right:
+            return
+        sh("input", "swipe", str(right - 60), str(y), str(right - 560), str(y), "100"); wait(0.8)
 
 
 def launch():
-    sh("am", "start", "-W", "--activity-clear-task", "-n", PKG + "/com.h0tk3y.rally.android.MainActivity"); wait(2.5)
+    sh("am", "start", "-W", "--activity-clear-task", "-n", PKG + "/com.h0tk3y.rally.android.MainActivity"); wait(1)
+    screenshot_mode(on=True)  # the mode lives in the app's process, so turn it on after each start
 
 
-def seed_sql(tc1):
+def seed_sql(tc1, tc2=TC2_OK):
     q = lambda v: v.replace("'", "''")
     rows = [(SECTIONS["cal"], "0.0 setavg 60\n10.0"), (SECTIONS["tc0"], "0.0 setavg 45 atime 09:30:00\n22.5"),
-            (SECTIONS["tc1"], tc1), (SECTIONS["tc2"], "0.0 setavg 50 atime 11:20:00\n36.8")]
+            (SECTIONS["tc1"], tc1), (SECTIONS["tc2"], tc2)]
     return ("INSERT INTO Section(name, serializedPositions) VALUES\n" +
             ",\n".join(f"('{q(n)}', '{q(p)}')" for n, p in rows) + ";\n")
 
 
-def reset_data(hms, tc1=TC1_NEW):
+def reset_data(hms, tc1=TC1_NEW, tc2=TC2_OK):
     """Kills the app, so that race mode forgets its timers, and replaces all sections and events."""
-    launch()  # on a fresh device, the first launch creates the database
+    if "app.db" not in sh(f"run-as {PKG} ls databases 2>/dev/null"):
+        launch()  # on a fresh device, the first launch creates the database
     sh("am", "force-stop", PKG)
     seed = os.path.join(HERE, "tmp", "seed.sql")
     os.makedirs(os.path.dirname(seed), exist_ok=True)
-    open(seed, "w").write(seed_sql(tc1))
+    open(seed, "w").write(seed_sql(tc1, tc2))
     adb("push", seed, "/data/local/tmp/seed.sql")
     sh("chmod", "644", "/data/local/tmp/seed.sql")
     sh(f"run-as {PKG} sh -c 'sqlite3 databases/app.db \"DELETE FROM Event; DELETE FROM Section; "
@@ -182,7 +250,7 @@ def reset_data(hms, tc1=TC1_NEW):
         tap(S("cancel"))
 
 
-def build_and_install():
+def build_apk():
     """Builds the debug app without the "DEBUG" prefix in the title, so it looks like the release."""
     f = os.path.join(ROOT, "android/src/debug/res/values/strings.xml")
     original = open(f).read()
@@ -191,12 +259,21 @@ def build_and_install():
         subprocess.run(["./gradlew", ":android:assembleDebug", "-q"], cwd=ROOT, check=True)
     finally:
         open(f, "w").write(original)
+
+
+def build_and_install():
+    build_apk()
     adb("install", "-r", os.path.join(ROOT, "android/build/outputs/apk/debug/android-debug.apk"))
 
 
 def setup_device(font_scale="0.85"):
-    adb("root"); wait(2); adb("wait-for-device")
-    sh("settings", "put", "system", "font_scale", font_scale)  # 0.85 keeps long labels from clipping on the phone
+    if sh("getprop", "debug.rally.screenshots").strip() == f"{ui.LOCALE}-{font_scale}-noanim":
+        return  # already set up since the last boot (demo mode and these settings last until a reboot)
+    if sh("id", "-u").strip() != "0":  # restarting adbd as root takes a couple of seconds: only when needed
+        adb("root"); wait(2); adb("wait-for-device")
+    sh("settings", "put", "system", "font_scale", font_scale)
+    for scale in ("window_animation_scale", "transition_animation_scale", "animator_duration_scale"):
+        sh("settings", "put", "global", scale, "0")  # no animations: a tap's result shows at once (Compose follows these)  # 0.85 keeps long labels from clipping on the phone
     sh("settings", "put", "global", "auto_time", "0")
     sh("settings", "put", "system", "accelerometer_rotation", "0")
     sh("settings", "put", "system", "user_rotation", "0")
@@ -211,12 +288,18 @@ def setup_device(font_scale="0.85"):
     sh("dumpsys", "deviceidle", "whitelist", "+" + PKG)  # exempt from battery optimization: no one-time battery hint
     for p in ["ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION", "BLUETOOTH_CONNECT", "BLUETOOTH_SCAN", "POST_NOTIFICATIONS"]:
         sh("pm", "grant", PKG, "android.permission." + p)
+    sh("setprop", "debug.rally.screenshots", f"{ui.LOCALE}-{font_scale}-noanim")
 
 
 # Steps used by several series --------------------------------------------------------------------------------------
 
+RACE_CONFIG_MARKER = "/data/local/tmp/rally-race-config"  # the settings survive reset_data, so set them once
+
+
 def configure_for_race():
     """From the section list: Simulation as the distance source, an allowance, and this device as the driver's device."""
+    if sh("ls", RACE_CONFIG_MARKER).strip() == RACE_CONFIG_MARKER:
+        return
     tap(S("showMenu")); tap(S("settings")); wait(1)
     tap(S("telemetrySourceSimulation"))
     sh("input", "swipe", "540", "1800", "540", "900", "300"); wait(0.8)
@@ -224,6 +307,7 @@ def configure_for_race():
     last = len(edit_texts()) - 1
     clear(last); fill(last, "127.0.0.1")
     back_to_list()
+    sh("touch", RACE_CONFIG_MARKER)
 
 
 def open_race(hms, tc1):
@@ -253,13 +337,14 @@ def remember_speed(kmh):
 
 def series_settings():
     reset_data("10:05:00")
+    sh("rm", "-f", RACE_CONFIG_MARKER)  # this series changes the source; configure_for_race() sets it back
     tap(S("showMenu")); tap(S("settings")); wait(1)
     tap(S("telemetrySourceObd"))
     clear(0); fill(0, "00:1D:A5:68:98:8B")
     clear(1); fill(1, "1.018"); hide_keyboard(); tap(S("saveButton"))
-    back(); tap(S("showMenu")); tap(S("settings")); wait(1)  # reopen, so that no field has the focus
+    back_to_list(); tap(S("showMenu")); tap(S("settings")); wait(1)  # reopen, so that no field has the focus
     shot("10-settings-obd")
-    back()
+    back_to_list()
     configure_for_race()  # leave the device ready for the race series
 
 
@@ -309,9 +394,9 @@ def series_regularity():
     goto(14.0, "10:30:02"); wait(2)
     shot("06-regularity")
     swipe_speed_row()
-    goto(17.3, "10:35:32"); tap("40")
+    goto(17.3, "10:35:32"); tap("40", exact=True)
     slider(38)
-    goto(21.05, "10:41:10"); tap("30")
+    goto(21.05, "10:41:10"); tap("30", exact=True)
     slider(27)
     goto(24.85, "10:48:46")
     tap(S("raceButtonFinishRace")); wait(1)
@@ -365,9 +450,9 @@ def series_end():
 
 
 def series_hero():
-    """On the tablet, just after a regularity full of road-book points: speed changes by button and by a percentage of
-    the speed limit, and the section timer running on."""
-    open_race("10:27:00", TC1_PASSED)
+    """On the tablet: a regularity in progress, full of road-book points, with a speed change by a percentage of the
+    speed limit just entered and an earlier position selected. The speed fields are captured on the way."""
+    open_race("10:27:00", TC1_HERO)
     start_section()
     slider(53)
     remember_speed(36)
@@ -380,23 +465,28 @@ def series_hero():
     swipe_speed_row()
     goto(14.6, "10:31:02"); tap(S("buttonAddPassedPosition"))
     goto(16.1, "10:33:32"); tap(S("buttonAddPassedPosition"))
-    goto(17.3, "10:35:32"); tap("40")  # 40 km/h from here
+    goto(17.3, "10:35:32"); tap("40", exact=True)  # 40 km/h from here
+    goto(18.3, "10:37:02"); tap(S("buttonAddPassedPosition"))
     goto(19.2, "10:38:23"); tap(S("buttonAddPassedPosition"))
-    goto(21.05, "10:41:10"); tap("30")  # 30 km/h from here
+    goto(20.1, "10:39:44"); tap(S("buttonAddPassedPosition"))
+    goto(21.05, "10:41:10"); tap("30", exact=True)  # 30 km/h from here
     goto(22.6, "10:44:16"); tap(S("buttonAddPassedPosition"))
     # The road book: 80% of the speed limit from here; the sign says 50, so 40 km/h.
     goto(23.4, "10:45:52")
     tap("100%"); sh("input", "text", "80"); hide_keyboard()
-    tap("50")
-    goto(24.85, "10:48:02")
-    tap(S("raceButtonFinishRace")); wait(1)
-    slider(60)
-    goto(26.3, "10:49:32"); wait(2)
+    speed_row_to_end()  # typing scrolled the row back to the field
+    tap("50", exact=True)
+    slider(41)
+    goto(23.9, "10:46:37")
+    wait(1)  # a tap right after the distance edit only closes the keyboard
+    tap("19.2")  # an earlier position, not the last passed one (that would make the selection follow the car)
+    speed_row_to_end()  # the last button, 110, at the right edge: nothing cut off there
+    wait(1)
     shot("00-hero")
 
 
 def series_editor():
-    reset_data("11:05:00", TC1_DRIVEN)
+    reset_data("11:05:00", TC1_DRIVEN, TC2_BROKEN)
     tap(SECTIONS["tc1"]); wait(1)
     tap(S("buttonEdit")); wait(0.6)
     for _ in range(5):
@@ -404,12 +494,10 @@ def series_editor():
     shot("16-editor")
     tap(S("buttonCalculate"))
     back_to_list()
-    # An error: ADD after the last position gives a position at 0.0 after 36.8.
+    # An error, seeded: TC2 → TC3 has positions after its only stretch has ended.
     tap(SECTIONS["tc2"]); wait(1)
-    tap(S("buttonEdit")); wait(0.6)
-    xy(*KEY_DOWN); tap(S("keyAdd")); tap(S("buttonCalculate")); wait(1)
     shot("15-error")
-    back()
+    back_to_list()
 
 
 DEVICES = {  # the emulators, see README.md; override with RALLY_PHONE and RALLY_TABLET
