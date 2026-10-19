@@ -36,6 +36,7 @@ import com.h0tk3y.rally.android.db.DatabaseOperations
 import com.h0tk3y.rally.db.Event
 import com.h0tk3y.rally.db.Section
 import com.h0tk3y.rally.model.RaceEventKind
+import com.h0tk3y.rally.model.formatEarlyLate
 import com.h0tk3y.rally.strRound3
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -46,6 +47,7 @@ import kotlinx.datetime.format
 import kotlinx.datetime.format.char
 import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 
 @Composable
 fun SectionEventLogScene(
@@ -82,8 +84,7 @@ fun SectionEventLogScene(
                 when (val currentEvents = events) {
                     is LoadState.Loaded -> {
                         itemsIndexed(currentEvents.value) { index, item ->
-                            val duration = item.sinceTimestamp?.minus(item.timestamp)?.times(-1)
-                            val durationText = duration?.formatToHms()?.let { " ($it)" }.orEmpty()
+                            val durationText = eventDetailsText(item)
 
                             Row(Modifier.padding(8.dp), verticalAlignment = CenterVertically) {
                                 Icon(
@@ -156,6 +157,17 @@ class SectionEventLogViewModel(val sectionId: Long, val database: DatabaseOperat
             }
         }
     }
+}
+
+/**
+ * The details shown after the event name: the time since the start of what the event finishes, and for a regularity finish,
+ * how early or late it was, as the race panel shows it.
+ */
+internal fun eventDetailsText(event: Event): String {
+    val duration = event.sinceTimestamp?.minus(event.timestamp)?.times(-1)
+    val earlyLate = event.earlyLateMillis?.takeIf { event.kind == RaceEventKind.RACE_FINISH }?.milliseconds
+    val details = listOfNotNull(duration?.formatToHms(), earlyLate?.let(::formatEarlyLate))
+    return if (details.isEmpty()) "" else details.joinToString(" / ", prefix = " (", postfix = ")")
 }
 
 fun Duration.formatToHms(): String {
