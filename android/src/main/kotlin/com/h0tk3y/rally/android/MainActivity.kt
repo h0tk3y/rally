@@ -25,7 +25,7 @@ class MainActivity : ComponentActivity() {
         
         super.onCreate(savedInstanceState)
         val database = Database(DatabaseDriverFactory(this))
-        val repo = PreferenceRepository(dataStore)
+        val repo = preferenceRepository()
 
         setContent {
             AppTheme {

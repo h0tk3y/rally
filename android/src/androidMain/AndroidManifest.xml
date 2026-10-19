@@ -11,6 +11,9 @@
         android:name="android.permission.INTERNET"/>
     <uses-permission
         android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Lets the services use the connectedDevice foreground service type without any runtime permission (Android 14+) -->
+    <uses-permission
+        android:name="android.permission.CHANGE_NETWORK_STATE" />
     <uses-permission
         android:name="android.permission.BLUETOOTH"
         android:maxSdkVersion="30" />
@@ -36,11 +39,13 @@
         <service
             android:name=".android.racecervice.LocalRaceService"
             android:enabled="true"
-            android:foregroundServiceType="location" />
+            android:exported="false"
+            android:foregroundServiceType="location|connectedDevice" />
 
         <service
             android:name=".android.racecervice.TcpStreamedRaceService"
             android:enabled="true"
+            android:exported="false"
             android:foregroundServiceType="connectedDevice" />
 
         <activity

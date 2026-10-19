@@ -83,6 +83,7 @@ import com.h0tk3y.rally.SpeedWithPercentage
 import com.h0tk3y.rally.TimeDistanceLocalizer
 import com.h0tk3y.rally.TimeHr
 import com.h0tk3y.rally.TimeMinSec
+import com.h0tk3y.rally.android.permissions.accessProblemSource
 import com.h0tk3y.rally.android.racecervice.TelemetryPublicState
 import com.h0tk3y.rally.android.scenes.RaceModelControls
 import com.h0tk3y.rally.android.scenes.RaceUiState
@@ -118,6 +119,7 @@ fun RaceView(
     navigateToSection: (Long) -> Unit,
     goToEventLog: (() -> Unit)?,
     goToSettings: (() -> Unit)?,
+    onTelemetryAccessProblem: (TelemetryPublicState) -> Unit,
     modifier: Modifier,
     addPositionMaybeWithSpeed: (SpeedKmh?) -> Unit,
     allowance: TimeAllowance?,
@@ -143,6 +145,7 @@ fun RaceView(
                     onAddPositionAtCurrentDistance = { addPositionMaybeWithSpeed(null) },
                     onGoToEventLog = goToEventLog,
                     onGoToSettings = goToSettings,
+                    onTelemetryAccessProblem = onTelemetryAccessProblem,
                     switchRememberedSpeedControls = {
                         if (canRememberSpeed) showRememberedSpeedControls = !showRememberedSpeedControls
                     },
@@ -201,6 +204,7 @@ private fun MoreRaceControls(
     onAddPositionAtCurrentDistance: () -> Unit,
     onGoToEventLog: (() -> Unit)?,
     onGoToSettings: (() -> Unit)?,
+    onTelemetryAccessProblem: (TelemetryPublicState) -> Unit,
     switchRememberedSpeedControls: () -> Unit,
     rememberSpeed: SpeedKmh?,
     isBigUi: Boolean
@@ -214,7 +218,7 @@ private fun MoreRaceControls(
                 Icon(Icons.Rounded.History, contentDescription = stringResource(R.string.eventLog))
             }
         }
-        TelemetryStatus(telemetryState, onGoToSettings ?: { })
+        TelemetryStatus(telemetryState, onGoToSettings ?: { }, onTelemetryAccessProblem)
         Spacer(Modifier.weight(1f))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             SpeedLimitLikeButton(
@@ -261,9 +265,13 @@ private fun RaceViewElement(modifier: Modifier = Modifier, content: @Composable 
 @Composable
 private fun TelemetryStatus(
     telemetryPublicState: TelemetryPublicState,
-    goToSettings: () -> Unit
+    goToSettings: () -> Unit,
+    onAccessProblem: (TelemetryPublicState) -> Unit
 ) {
-    RaceViewElement(Modifier.clickable(onClick = { goToSettings() })) {
+    val onClick = {
+        if (telemetryPublicState.accessProblemSource() != null) onAccessProblem(telemetryPublicState) else goToSettings()
+    }
+    RaceViewElement(Modifier.clickable(onClick = onClick)) {
         val text = when (telemetryPublicState) {
             TelemetryPublicState.NotInitialized -> stringResource(R.string.telemetryNotInitialized)
             TelemetryPublicState.BtConnecting -> stringResource(R.string.telemetryObdConnecting)
@@ -291,6 +299,8 @@ private fun TelemetryStatus(
             is TelemetryPublicState.GpsNoPosition -> stringResource(R.string.telemetryGpsNoPosition) + satsString(telemetryPublicState.sats)
             is TelemetryPublicState.GpsWaiting -> stringResource(R.string.telemetryGpsWaiting) + satsString(telemetryPublicState.sats)
             TelemetryPublicState.GpsNoPermissions -> stringResource(R.string.telemetryGpsNoPermission)
+            TelemetryPublicState.GpsNoHardware -> stringResource(R.string.telemetryGpsNoHardware)
+            TelemetryPublicState.GpsLocationDisabled -> stringResource(R.string.telemetryGpsLocationDisabled)
         }
         val color = when (telemetryPublicState) {
             is TelemetryPublicState.ReceivesStream -> {
@@ -314,6 +324,8 @@ private fun TelemetryStatus(
             is TelemetryPublicState.GpsProblematic,
             is TelemetryPublicState.GpsWaiting,
             TelemetryPublicState.GpsNoPermissions,
+            TelemetryPublicState.GpsNoHardware,
+            TelemetryPublicState.GpsLocationDisabled,
             TelemetryPublicState.IncompatibleStream,
             TelemetryPublicState.BtReconnecting -> LocalCustomColorsPalette.current.warning
 

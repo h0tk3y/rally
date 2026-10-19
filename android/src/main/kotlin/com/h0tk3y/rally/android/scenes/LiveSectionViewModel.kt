@@ -8,6 +8,7 @@ import com.h0tk3y.rally.PositionLineModifier.*
 import com.h0tk3y.rally.android.LoadState
 import com.h0tk3y.rally.android.PreferenceRepository
 import com.h0tk3y.rally.android.db.DatabaseOperations
+import com.h0tk3y.rally.android.permissions.TelemetrySourceSetup
 import com.h0tk3y.rally.android.racecervice.CommonRaceService
 import com.h0tk3y.rally.android.racecervice.PrimaryRaceService
 import com.h0tk3y.rally.android.racecervice.StreamedRaceService
@@ -152,7 +153,14 @@ abstract class StatefulSectionViewModel(
 
 
 interface RaceModelControls {
+    /** The telemetry source of the race service; the race mode should only be entered when the source has its permissions */
+    val telemetrySourceSetup: Flow<TelemetrySourceSetup>
+
+    /** Enters the race mode, starting the race service if needed. Check the permissions of [telemetrySourceSetup] first. */
     fun enterRaceMode()
+
+    /** Retries the telemetry source if it was blocked by a missing permission that might have been granted now */
+    fun recheckTelemetryAccess()
     fun startRace(startOption: StartOption)
     fun finishRace()
     fun undoFinishRace()
@@ -621,6 +629,24 @@ class LiveSectionViewModel(
             updateFocus(sanitizeFocus(newFocus))
         }
         sanitizeSelection()
+    }
+
+    override val telemetrySourceSetup: Flow<TelemetrySourceSetup> = prefs.userPreferencesFlow
+        .map { TelemetrySourceSetup(it.telemetrySource, btDeviceSelected = !it.btMac.isNullOrEmpty()) }
+        .distinctUntilChanged()
+
+    override fun recheckTelemetryAccess() {
+        service?.recheckTelemetryAccess()
+    }
+
+    /**
+     * Whether to explain once that the battery optimization may stop the race service in the background.
+     * Returns `true` only the first time, unless the app is already exempt from the optimization.
+     */
+    suspend fun consumeBatteryHint(isIgnoringBatteryOptimizations: Boolean): Boolean {
+        if (isIgnoringBatteryOptimizations || prefs.userPreferencesFlow.first().batteryHintShown) return false
+        prefs.saveBatteryHintShown()
+        return true
     }
 
     override fun enterRaceMode() {
