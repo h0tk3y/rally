@@ -1,4 +1,4 @@
-# <img src="docs/images/icon.png" width="32" height="32" alt=""> h0tk3y's Rally Tool
+# <img src="docs/images/icon.png" width="28" height="28" alt=""> h0tk3y's Rally Tool
 
 An Android app for the co-driver in TSD (time–speed–distance) regularity rallies.
 
