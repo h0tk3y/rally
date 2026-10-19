@@ -60,6 +60,10 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.viewModelScope
 import com.h0tk3y.rally.R
 import com.h0tk3y.rally.android.PreferenceRepository
+import com.h0tk3y.rally.android.SpeedButtons
+import com.h0tk3y.rally.android.SpeedButtonsParseResult
+import com.h0tk3y.rally.android.encodeSpeedButtons
+import com.h0tk3y.rally.android.parseSpeedButtonsInput
 import com.h0tk3y.rally.android.TelemetrySource
 import com.h0tk3y.rally.android.permissions.AccessPurpose
 import com.h0tk3y.rally.android.permissions.TelemetryAccessController
@@ -114,6 +118,7 @@ fun SettingsScene(
                 item { TelemetrySource(model, telemetryAccess, calibrateByCurrentDistance) }
                 item { Allowance(model) }
                 item { SoundFeedback(model) }
+                item { SpeedButtonsSetting(model) }
                 item { BackgroundReliability() }
             }
         }
@@ -468,6 +473,72 @@ fun SoundFeedback(
 }
 
 @Composable
+private fun SpeedButtonsSetting(model: SettingsViewModel) {
+    // Not keyed by the saved value: it lags behind the typing and would reset the field mid-word (e.g. drop a trailing comma).
+    // When the settings are opened again, the field shows the saved list, so a rejected input is not shown again.
+    var text by rememberSaveable { mutableStateOf<String?>(null) }
+    if (text == null) {
+        LaunchedEffect(Unit) { text = encodeSpeedButtons(model.speedButtons.first()) }
+    }
+    val savedSpeeds by model.speedButtons.collectAsState(null)
+    val currentText = text ?: return
+    val result = parseSpeedButtonsInput(currentText)
+
+    fun onChange(newText: String) {
+        text = newText
+        // Only a valid list is saved; the race panel keeps the last valid one meanwhile
+        (parseSpeedButtonsInput(newText) as? SpeedButtonsParseResult.Valid)?.let { model.setSpeedButtons(it.speeds) }
+    }
+
+    Column(
+        Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(stringResource(R.string.settingsSpeedButtons))
+        Text(style = MaterialTheme.typography.caption, text = stringResource(R.string.settingsSpeedButtonsHint))
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(
+                modifier = Modifier.weight(1f),
+                value = currentText,
+                singleLine = true,
+                onValueChange = ::onChange,
+                isError = result is SpeedButtonsParseResult.Invalid,
+                label = { Text(stringResource(R.string.settingsSpeedButtonsField)) }
+            )
+            TextButton(
+                enabled = result != SpeedButtonsParseResult.Valid(SpeedButtons.DEFAULT),
+                onClick = { onChange(encodeSpeedButtons(SpeedButtons.DEFAULT)) }
+            ) {
+                Text(stringResource(R.string.settingsSpeedButtonsDefault))
+            }
+        }
+        when (result) {
+            is SpeedButtonsParseResult.Valid -> Text(
+                style = MaterialTheme.typography.caption,
+                text = stringResource(R.string.settingsSpeedButtonsPreview, encodeSpeedButtons(result.speeds))
+            )
+
+            is SpeedButtonsParseResult.Invalid -> {
+                val error = when (result) {
+                    SpeedButtonsParseResult.Empty -> stringResource(R.string.speedButtonsErrorEmpty)
+                    is SpeedButtonsParseResult.NotAWholeNumber -> stringResource(R.string.speedButtonsErrorNotAWholeNumber, result.token)
+                    is SpeedButtonsParseResult.OutOfRange -> stringResource(R.string.speedButtonsErrorOutOfRange, result.token, SpeedButtons.MAX_SPEED)
+                    is SpeedButtonsParseResult.TooMany -> stringResource(R.string.speedButtonsErrorTooMany, result.count, SpeedButtons.MAX_COUNT)
+                }
+                Text(text = error, color = MaterialTheme.colors.error, style = MaterialTheme.typography.caption)
+                savedSpeeds?.let {
+                    Text(
+                        text = stringResource(R.string.speedButtonsNotSaved, encodeSpeedButtons(it)),
+                        color = MaterialTheme.colors.error,
+                        style = MaterialTheme.typography.caption
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun BackgroundReliability() {
     val context = LocalContext.current
     var isExempt by remember { mutableStateOf(context.isIgnoringBatteryOptimizations()) }
@@ -522,6 +593,7 @@ class SettingsViewModel(
     val currentAllowance = prefs.userPreferencesFlow.map { it.allowance }
     val currentCalibration = prefs.userPreferencesFlow.map { it.calibration }
     val outgaugePort = prefs.userPreferencesFlow.map { it.outgaugePort }
+    val speedButtons = prefs.userPreferencesFlow.map { it.speedButtons }
 
     fun setTelemetrySource(newTelemetrySource: TelemetrySource) {
         viewModelScope.launch {
@@ -562,6 +634,12 @@ class SettingsViewModel(
     fun setOutgaugePort(port: Int) {
         viewModelScope.launch {
             prefs.saveOutgaugePort(port)
+        }
+    }
+
+    fun setSpeedButtons(speeds: List<Int>) {
+        viewModelScope.launch {
+            prefs.saveSpeedButtons(speeds)
         }
     }
 

@@ -7,6 +7,7 @@ import com.h0tk3y.rally.*
 import com.h0tk3y.rally.PositionLineModifier.*
 import com.h0tk3y.rally.android.LoadState
 import com.h0tk3y.rally.android.PreferenceRepository
+import com.h0tk3y.rally.android.SpeedButtons
 import com.h0tk3y.rally.android.TelemetrySource
 import com.h0tk3y.rally.android.db.DatabaseOperations
 import com.h0tk3y.rally.android.racecervice.CommonRaceService
@@ -175,6 +176,9 @@ interface RaceModelControls {
     fun leaveRaceMode(forceStop: Boolean)
     fun hideRaceUi()
     fun setSpeedLimitPercent(value: String?)
+
+    /** The speeds of the speed buttons in the race panel, from the settings; never empty */
+    val speedButtons: StateFlow<List<Int>>
 }
 
 /**
@@ -283,6 +287,8 @@ class LiveSectionViewModel(
     override val timeAllowance: Flow<TimeAllowance?> = prefs.userPreferencesFlow.map { it.allowance }
     private val _speedLimitPercent = MutableStateFlow<String?>(null)
     override val speedLimitPercent: StateFlow<String?> = _speedLimitPercent.asStateFlow()
+    private val _speedButtons = MutableStateFlow(SpeedButtons.DEFAULT)
+    override val speedButtons: StateFlow<List<Int>> = _speedButtons.asStateFlow()
 
     private var service: PrimaryRaceService? = null
 
@@ -328,6 +334,7 @@ class LiveSectionViewModel(
             launch {
                 prefs.userPreferencesFlow.collectLatest {
                     soundFeedback = it.soundFeedback
+                    _speedButtons.value = it.speedButtons.ifEmpty { SpeedButtons.DEFAULT }
                 }
             }
             launch {

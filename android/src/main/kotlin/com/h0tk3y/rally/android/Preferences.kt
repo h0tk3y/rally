@@ -31,6 +31,7 @@ private object PreferencesKeys {
     val OUTGAUGE_PORT = intPreferencesKey("outgaugePort")
     val HUD_SWAP_PANELS = booleanPreferencesKey("hudSwapPanels")
     val BATTERY_HINT_SHOWN = booleanPreferencesKey("batteryHintShown")
+    val SPEED_BUTTONS = stringPreferencesKey("speedButtons")
 }
 
 data class UserPreferences(
@@ -43,7 +44,9 @@ data class UserPreferences(
     val soundFeedback: Boolean,
     val outgaugePort: Int = 4444,
     val hudSwapPanels: Boolean = false,
-    val batteryHintShown: Boolean = false
+    val batteryHintShown: Boolean = false,
+    /** Never empty: a missing or unreadable stored value gives [SpeedButtons.DEFAULT] */
+    val speedButtons: List<Int> = SpeedButtons.DEFAULT
 )
 
 enum class TelemetrySource {
@@ -115,6 +118,15 @@ class PreferenceRepository(
         }
     }
 
+    /** Saves only a list that [parseSpeedButtonsInput] accepts; anything else is ignored rather than stored */
+    suspend fun saveSpeedButtons(speeds: List<Int>) {
+        val encoded = encodeSpeedButtons(speeds)
+        if (decodeStoredSpeedButtons(encoded) != speeds) return
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.SPEED_BUTTONS] = encoded
+        }
+    }
+
     suspend fun saveBatteryHintShown() {
         dataStore.edit { preferences ->
             preferences[PreferencesKeys.BATTERY_HINT_SHOWN] = true
@@ -137,6 +149,8 @@ private fun mapUserPreferences(preferences: Preferences, defaultTelemetrySource:
     val outgaugePort = preferences[PreferencesKeys.OUTGAUGE_PORT] ?: 4444
     val hudSwapPanels = preferences[PreferencesKeys.HUD_SWAP_PANELS] ?: false
     val batteryHintShown = preferences[PreferencesKeys.BATTERY_HINT_SHOWN] ?: false
+    // A value of another type under this key (e.g. restored from an edited backup) throws on the cast, so fall back to the default too
+    val speedButtons = decodeStoredSpeedButtons(runCatching { preferences[PreferencesKeys.SPEED_BUTTONS] }.getOrNull())
     return UserPreferences(
         timeAllowance,
         calibration,
@@ -147,6 +161,7 @@ private fun mapUserPreferences(preferences: Preferences, defaultTelemetrySource:
         soundFeedback,
         outgaugePort,
         hudSwapPanels,
-        batteryHintShown
+        batteryHintShown,
+        speedButtons
     )
 }
