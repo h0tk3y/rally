@@ -180,7 +180,7 @@ private fun importTextFromData(distanceKm: DistanceKm, speedKmh: SpeedKmh, start
 
 // Placeholder values used for empty fields; they must pass the validation below
 internal const val defaultDistanceText = "60.0"
-internal const val defaultTimeText = "01:00"
+internal const val defaultTimeText = "01-00"
 internal const val defaultSpeedText = "60"
 
 @Composable
