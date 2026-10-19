@@ -41,4 +41,40 @@ class StageDataInputValidationTest {
         assertFalse(isValidStageDataInput(distance = "", time = "", speed = "abc", startTime = ""))
         assertTrue(isValidStageDataInput(distance = "12.5", time = "0:15", speed = "50", startTime = ""))
     }
+
+    @Test
+    fun `zero and negative distance or speed are invalid`() {
+        for (text in listOf("0", "0.0", "-0", "-5", "-0.1", "NaN", "Infinity")) {
+            assertTrue(isInvalidDistanceInput(text), "distance $text")
+            assertTrue(isInvalidSpeedInput(text), "speed $text")
+        }
+        assertFalse(isInvalidDistanceInput("0.1"))
+        assertFalse(isInvalidSpeedInput("0.1"))
+    }
+
+    @Test
+    fun `zero time is invalid and negative time cannot be entered`() {
+        for (text in listOf("0:00", "00:00:00", "0.0", "0-0")) {
+            assertTrue(isInvalidTimeInput(text), "time $text")
+        }
+        // '-' is a separator, so a leading minus leaves an empty part
+        assertNull(parseTimeInput("-1:00"))
+        assertNull(parseTimeInput("1:-30"))
+        assertTrue(isInvalidTimeInput("-1:00"))
+        assertFalse(isInvalidTimeInput("0:00:01"))
+    }
+
+    @Test
+    fun `midnight is a valid start time`() {
+        assertFalse(isInvalidStartTimeInput("00:00"))
+        assertFalse(isInvalidStartTimeInput("0:00:00"))
+        assertTrue(isInvalidStartTimeInput("-1:00"))
+    }
+
+    @Test
+    fun `placeholder values are valid`() {
+        assertFalse(isInvalidDistanceInput(defaultDistanceText))
+        assertFalse(isInvalidTimeInput(defaultTimeText))
+        assertFalse(isInvalidSpeedInput(defaultSpeedText))
+    }
 }
