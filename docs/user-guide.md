@@ -35,10 +35,11 @@ This guide is for the co-driver in a TSD (time–speed–distance) rally. It exp
    - [7.2 When you get the road book](#72-when-you-get-the-road-book)
    - [7.3 Before the start](#73-before-the-start)
    - [7.4 At the start](#74-at-the-start)
-   - [7.5 A regularity inside a section](#75-a-regularity-inside-a-section)
-   - [7.6 Moving to the next section](#76-moving-to-the-next-section)
-   - [7.7 On the road](#77-on-the-road)
-   - [7.8 After the stage](#78-after-the-stage)
+   - [7.5 A regularity from the start of a section](#75-a-regularity-from-the-start-of-a-section)
+   - [7.6 A regularity inside a section](#76-a-regularity-inside-a-section)
+   - [7.7 Moving to the next section](#77-moving-to-the-next-section)
+   - [7.8 On the road](#78-on-the-road)
+   - [7.9 After the stage](#79-after-the-stage)
 8. [Allowance](#8-allowance)
 9. [Measuring the distance](#9-measuring-the-distance)
 10. [Settings](#10-settings)
@@ -121,8 +122,8 @@ Do this for each section of the rally. That is all you need to prepare.
 3. Before the start, tap **Race mode** and allow everything the app asks (see [Turn race mode on](#61-turn-race-mode-on)).
 4. Tap the start position (0.0) in the list. In the **Go** row of the race panel, tap **On 10:00:00** (the start time you typed). The clock counts down to the start and then runs (see [At the start](#74-at-the-start)). (If you left the start time empty, there is no **On…** button: tap **Now** at the second you start.)
 5. Drive. Watch the clock, the distance and the early/late value (see [What the race panel shows](#63-what-the-race-panel-shows)). Correct the distance at known points with **-0.1** and **+0.1**, or with the device's volume buttons (see [Correcting the distance](#67-correcting-the-distance)).
-6. **A regularity.** Before it starts, tap the **v** button in the race panel and tap its set speed. At the start point, tap the first button of the **Regularity:** row, **Now from …** with your current distance. When the set speed changes, tap the new speed in the row of speed buttons. At the end of the regularity, tap **Finish regularity**. See [A regularity inside a section](#75-a-regularity-inside-a-section) and [Speed buttons](#68-speed-buttons-and-the-v-button).
-7. At the end of the section, tap **Stop**, and go on to the next section (see [Moving to the next section](#76-moving-to-the-next-section)).
+6. **A regularity.** Before it starts, tap the **v** button in the race panel and tap its set speed. At the start point, tap the first button of the **Regularity:** row, **Now from …** with your current distance. When the set speed changes, tap the new speed in the row of speed buttons. At the end of the regularity, tap **Finish regularity**. See [A regularity inside a section](#76-a-regularity-inside-a-section) and [Speed buttons](#68-speed-buttons-and-the-v-button).
+7. At the end of the section, tap **Stop**, and go on to the next section (see [Moving to the next section](#77-moving-to-the-next-section)).
 
 The whole day step by step is in [A rally day with the app](#7-a-rally-day-with-the-app).
 
@@ -312,9 +313,9 @@ It does not show this value if the roadmap has errors.
 
 Next to your current distance, a smaller number shows how far you are (<img src="images/badges/5.png" height="20" alt="5"> in the picture in [What the race panel shows](#63-what-the-race-panel-shows)) from the **selected position**: `+0.125` means 125 m past it. It always counts from the position selected in the list, so select the row you want to measure from.
 
-The last passed position is marked green if you select some other line. However, if it is selected, **the selection follows the car**. Then each time you pass a position, or add one with **Add passed position** or a speed button, the selection moves to it.
+The last passed position is marked green, and the selected row yellow (if they are the same row, it is yellow). If the last passed position is selected, then when you pass the next position, or add one with **Add passed position** or a speed button, the new position becomes selected.
 
-**The selection will not change** if you have selected any other row. Use it to calculate a delta distance by the road book from one of the previous positions.
+If any other row is selected, the selection does not change. Use this to measure the distance by the road book from one of the previous positions.
 
 ### 6.5 The two timers: Go and Regularity
 
@@ -329,7 +330,7 @@ The app has two timers. The panel shows only one of them at a time:
 
 Both timers use the **device's clock**. Before the start, set the device's time by hand from the official rally clock.
 
-**Which one to drive by.** The section timer's early/late value compares you with an even speed over the whole section. On the liaisons between regularities, if the rally gives an allowance, drive by the section timer: as fast as you can, while its early/late value stays within the allowance (not red). In a regularity, drive by the regularity timer.
+The panel shows only the timer that is relevant now: the regularity timer while a regularity runs, and the section timer otherwise.
 
 ### 6.6 The race states
 
@@ -366,11 +367,16 @@ The **Go** row starts the section timer. The **Regularity** row starts the regul
 **The speed of a regularity.** When you start the regularity timer, the app gives the regularity a set average speed. It uses, in this order:
 
 1. the remembered speed: the speed you tapped with the **v** button, or the last speed button you tapped in a regularity (see [Speed buttons](#68-speed-buttons-and-the-v-button));
-2. the `setavg` on the selected position;
+2. the `setavg` on the selected position, if the regularity starts at its distance;
 3. the speed of the roadmap at that point;
 4. 60 km/h.
 
 So before **each** regularity, tap the **v** button and tap its set speed. If the **v** button shows a speed that is wrong for this regularity, it would start with that speed.
+
+> [!TIP]
+> **A regularity from a known point with a known speed.** If you know where a regularity inside a section starts and its speed at the start, you can write the speed down in advance: give the start position a `setavg` with that speed in the editor (see [Editing positions](#15-editing-positions)). In the car, select that position and start the regularity from it with **Now from …** and the position's distance. This is not for a regularity from the start of a section: the `setavg` of the section's start position sets the average speed of the whole section.
+>
+> A remembered speed takes priority and replaces the `setavg` you wrote. So if the **v** button shows a speed, open its row and tap **✕** to clear it before the start.
 
 #### While the section timer runs
 
@@ -455,7 +461,7 @@ If you tap the wrong speed, tap the right one straight after: it adds another po
 
 ### 6.9 Adding a position as you pass it
 
-The **Add passed position** button (a pin with a plus, in the toolbar) adds a position at your current distance. Use it to add each road-book point as you pass it: many of them have no distance in the road book, and the app then shows it. If the selection follows the car, it moves to the new position, and the panel shows how far you have driven since (see [The distance from the selected position](#64-the-distance-from-the-selected-position)). It works while a timer runs, and after **Stop**.
+The **Add passed position** button (a pin with a plus, in the toolbar) adds a position at your current distance. Use it to add each road-book point as you pass it: many of them have no distance in the road book, and the app then shows it. If the last added position is selected, the new position becomes selected, and the panel shows how far you have driven since (see [The distance from the selected position](#64-the-distance-from-the-selected-position)).
 
 ### 6.10 Event log
 
@@ -498,25 +504,35 @@ Everything else (where each regularity starts and ends, and where its speed chan
 - Set the device's time by hand from the official clock.
 - Let the app run without battery limits, and connect the device to power.
 - Turn race mode on, and check the distance source in the toolbar of the race panel (for example **GPS ✔**). See [Measuring the distance](#9-measuring-the-distance).
-- If the driver uses a second device, check that it shows **Data ✔**.
+- If the driver uses a second device, set it up (see [The driver's screen](#11-the-drivers-screen-driver-hud)) and check that it shows **Data ✔**.
 
 ### 7.4 At the start
 
-Select the start position (0.0). Tap **On 10:00:00** in the **Go** row. The clock counts down to the start <img src="images/badges/1.png" height="20" alt="1">. The early/late value <img src="images/badges/2.png" height="20" alt="2"> is red until the start: at this moment you are early.
+Select the start position (0.0). Tap **On 10:00:00** in the **Go** row. The clock counts down to the start <img src="images/badges/1.png" height="20" alt="1">. The early/late value <img src="images/badges/2.png" height="20" alt="2"> is red until the start: you are already at the start line, but it is too early to go, so you are early.
 
 <img src="images/countdown.png" width="540" alt="The clock counting down six seconds to the start">
 
 If the marshal gives you a different minute, tap **Stop** (this also works during the countdown), and then tap **Now** in the Go row at the moment you start.
 
-### 7.5 A regularity inside a section
+### 7.5 A regularity from the start of a section
 
-1. Before the regularity, tap the **v** button and tap its set speed.
+If a regularity starts right at the start of the section, start the regularity timer instead of the section timer. The section timer starts at the same moment.
+
+1. Before the start, tap the **v** button and tap the regularity's set speed. Do not skip this: without a remembered speed, the regularity starts with the `setavg` of the start position, which is the average speed of the whole section (see [The speed of a regularity](#66-the-race-states)).
+2. Select the start position (0.0) and tap **On 10:00:00** in the **Regularity** row, or **Now** at the moment you start.
+3. At each change of the set speed, tap the new speed.
+4. At the end of the regularity, tap **Finish regularity**. The section timer keeps running for the rest of the section. From here, drive by the section timer: as fast as you can, while its early/late value is not red.
+5. At the end of the section, tap **Stop**.
+
+### 7.6 A regularity inside a section
+
+1. Before the regularity, tap the **v** button and tap its set speed. If you wrote the speed on the start position as a `setavg` instead, clear the remembered speed with **✕** (see [The speed of a regularity](#66-the-race-states)).
 2. At the start point of the regularity, tap the first button of the **Regularity:** row, **Now from …** with your current distance. If the regularity has its own start time, tap it at that exact second. Then correct the distance to the start point, if needed.
 3. At each change of the set speed, tap the new speed.
 4. At the end of the regularity, tap **Finish regularity**. The section timer keeps running for the rest of the section. From here, drive by the section timer: as fast as you can, while its early/late value is not red.
 5. At the end of the section, tap **Stop**.
 
-### 7.6 Moving to the next section
+### 7.7 Moving to the next section
 
 Race mode times one section at a time. At the end of a section:
 
@@ -526,13 +542,13 @@ Race mode times one section at a time. At the end of a section:
 
 Do this while you wait at the time control, before your next start time.
 
-### 7.7 On the road
+### 7.8 On the road
 
 - **Known points.** When you pass a point with an exact distance in the road book, correct the distance (see [Correcting the distance](#67-correcting-the-distance)).
-- **Secret checks.** A secret time check can be anywhere on the road. On the liaisons between regularities, if the rally gives an allowance, do not drive faster than the allowance lets you: as long as the early/late value of the section timer is not red, a secret check is safe.
+- **Secret checks.** A secret time check can be anywhere on the road. On the liaisons between regularities, if the rally gives an allowance, do not drive faster than the allowance lets you (see [Allowance](#8-allowance)): as long as the early/late value of the section timer is not red, a secret check is safe.
 - **Mistakes.** For a wrong turn, use **↶** (see [Correcting the distance](#67-correcting-the-distance)). For a wrong speed button, see [Speed buttons](#68-speed-buttons-and-the-v-button). If you tapped **Finish regularity** too early, tap **Undo finish**. If you tapped **Stop** too early, tap **Undo stop**.
 
-### 7.8 After the stage
+### 7.9 After the stage
 
 - Open the **Event log** to see when each timer started and finished, and how long it ran.
 - The section now holds the regularities you drove. You can keep it to look at later, or delete it.
