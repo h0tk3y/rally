@@ -69,9 +69,9 @@ class SpeedButtonsTest {
     }
 
     @Test
-    fun `repeated speeds are kept only at the first place`() {
-        assertEquals(Valid(listOf(60, 20, 40)), parseSpeedButtonsInput("60 20 60 40 20"))
-        assertEquals(Valid(listOf(5)), parseSpeedButtonsInput("5 05 005"))
+    fun `repeated speeds are kept as typed`() {
+        assertEquals(Valid(listOf(40, 60, 40, 80)), parseSpeedButtonsInput("40 60 40 80"))
+        assertEquals(Valid(listOf(5, 5, 5)), parseSpeedButtonsInput("5 05 005"))
     }
 
     @Test
@@ -110,11 +110,22 @@ class SpeedButtonsTest {
     }
 
     @Test
-    fun `too many speeds are invalid but repeats are not counted`() {
+    fun `too many speeds are invalid and repeats are counted`() {
         val max = (1..SpeedButtons.MAX_COUNT).joinToString(" ")
         assertEquals(Valid((1..SpeedButtons.MAX_COUNT).toList()), parseSpeedButtonsInput(max))
-        assertEquals(Valid((1..SpeedButtons.MAX_COUNT).toList()), parseSpeedButtonsInput("$max 1 2 3"))
         assertEquals(TooMany(SpeedButtons.MAX_COUNT + 1), parseSpeedButtonsInput("$max ${SpeedButtons.MAX_COUNT + 1}"))
+        assertEquals(TooMany(SpeedButtons.MAX_COUNT + 1), parseSpeedButtonsInput("$max 1"))
+
+        val repeatedMax = List(SpeedButtons.MAX_COUNT) { listOf(40, 60)[it % 2] }
+        assertEquals(Valid(repeatedMax), parseSpeedButtonsInput(repeatedMax.joinToString(" ")))
+        assertEquals(TooMany(SpeedButtons.MAX_COUNT + 1), parseSpeedButtonsInput(repeatedMax.joinToString(" ") + " 40"))
+    }
+
+    @Test
+    fun `a list with repeats round trips through the stored form`() {
+        val speeds = listOf(40, 60, 40, 80)
+        assertEquals("40 60 40 80", encodeSpeedButtons(speeds))
+        assertEquals(speeds, decodeStoredSpeedButtons(encodeSpeedButtons(speeds)))
     }
 
     @Test
@@ -138,7 +149,7 @@ class SpeedButtonsTest {
     @Test
     fun `a valid stored value is read as is`() {
         assertEquals(listOf(60, 20, 110), decodeStoredSpeedButtons("60 20 110"))
-        assertEquals(listOf(60, 20), decodeStoredSpeedButtons("60 20 60"))
+        assertEquals(listOf(40, 60, 40, 80), decodeStoredSpeedButtons("40 60 40 80"))
     }
 
     private val key = stringPreferencesKey("speedButtons")
@@ -167,10 +178,25 @@ class SpeedButtonsTest {
     }
 
     @Test
+    fun `saved speeds with repeats are read back intact`() = runTest {
+        val repository = repository(emptyPreferences())
+        repository.saveSpeedButtons(listOf(40, 60, 40, 80))
+        assertEquals(listOf(40, 60, 40, 80), repository.userPreferencesFlow.first().speedButtons)
+        val thirty = List(SpeedButtons.MAX_COUNT) { 50 }
+        repository.saveSpeedButtons(thirty)
+        assertEquals(thirty, repository.userPreferencesFlow.first().speedButtons)
+    }
+
+    @Test
+    fun `stored speeds with repeats are not replaced by the default list`() = runTest {
+        assertEquals(listOf(40, 60, 40, 80), repository(mutablePreferencesOf(key to "40 60 40 80")).userPreferencesFlow.first().speedButtons)
+    }
+
+    @Test
     fun `an invalid list is not saved`() = runTest {
         val repository = repository(emptyPreferences())
         repository.saveSpeedButtons(listOf(60, 20))
-        listOf(emptyList(), listOf(0), listOf(1000), listOf(20, 20), (1..SpeedButtons.MAX_COUNT + 1).toList()).forEach {
+        listOf(emptyList(), listOf(0), listOf(1000), List(SpeedButtons.MAX_COUNT + 1) { 20 }, (1..SpeedButtons.MAX_COUNT + 1).toList()).forEach {
             repository.saveSpeedButtons(it)
             assertEquals(listOf(60, 20), repository.userPreferencesFlow.first().speedButtons, "saving $it")
         }
