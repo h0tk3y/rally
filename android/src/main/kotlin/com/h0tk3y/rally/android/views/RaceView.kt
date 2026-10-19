@@ -563,9 +563,10 @@ private fun raceTimeDistanceString(time: Instant, race: RaceModel): String {
     return "${timeString(time, race)} / ${distanceString(race.currentDistance)}"
 }
 
-/** The regularity time and distance at the finish, and how early or late the finish was, if that is known. */
+/** The time at the finish followed by how early or late it was, if that is known, then the distance: `time (±delta) / distance`. */
 private fun finishString(finishedAt: Instant, raceModelAtFinish: RaceModel, earlyLate: Duration?): String =
-    raceTimeDistanceString(finishedAt, raceModelAtFinish) + earlyLate?.let { " / ${formatEarlyLate(it)}" }.orEmpty()
+    timeString(finishedAt, raceModelAtFinish) + earlyLate?.let { " (${formatEarlyLate(it)})" }.orEmpty() +
+        " / " + distanceString(raceModelAtFinish.currentDistance)
 
 private fun timeString(time: Instant, race: RaceModel): String {
     val elapsedOrRemainingHours = TimeHr((time.minus(race.startAtTime).inWholeMilliseconds.toDouble() / 1000 / 3600).absoluteValue).toTimeDayHrMinSec()
