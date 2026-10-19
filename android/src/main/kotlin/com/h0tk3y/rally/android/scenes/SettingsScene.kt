@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
+import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -76,6 +77,7 @@ import com.h0tk3y.rally.android.util.openDontKillMyApp
 import com.h0tk3y.rally.android.util.IpAddressDisplay
 import com.h0tk3y.rally.strRound3
 import com.h0tk3y.rally.strRound5
+import java.io.IOException
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -481,11 +483,14 @@ private fun SpeedButtonsSetting(model: SettingsViewModel) {
         LaunchedEffect(Unit) { text = encodeSpeedButtons(model.speedButtons.first()) }
     }
     val savedSpeeds by model.speedButtons.collectAsState(null)
+    // No "Saved" line for the value the field was filled with, only after the user changes it (or presses "Default")
+    var isEdited by rememberSaveable { mutableStateOf(false) }
     val currentText = text ?: return
     val result = parseSpeedButtonsInput(currentText)
 
     fun onChange(newText: String) {
         text = newText
+        isEdited = true
         // Only a valid list is saved; the race panel keeps the last valid one meanwhile
         (parseSpeedButtonsInput(newText) as? SpeedButtonsParseResult.Valid)?.let { model.setSpeedButtons(it.speeds) }
     }
@@ -513,10 +518,15 @@ private fun SpeedButtonsSetting(model: SettingsViewModel) {
             }
         }
         when (result) {
-            is SpeedButtonsParseResult.Valid -> Text(
-                style = MaterialTheme.typography.caption,
-                text = stringResource(R.string.settingsSpeedButtonsPreview, encodeSpeedButtons(result.speeds))
-            )
+            is SpeedButtonsParseResult.Valid -> {
+                // Checked against the stored value read back, so a save that failed or has not completed yet is not reported as done
+                if (isEdited && savedSpeeds == result.speeds) {
+                    Text(
+                        style = MaterialTheme.typography.caption,
+                        text = stringResource(R.string.settingsSpeedButtonsSaved, encodeSpeedButtons(result.speeds))
+                    )
+                }
+            }
 
             is SpeedButtonsParseResult.Invalid -> {
                 val error = when (result) {
@@ -639,7 +649,12 @@ class SettingsViewModel(
 
     fun setSpeedButtons(speeds: List<Int>) {
         viewModelScope.launch {
-            prefs.saveSpeedButtons(speeds)
+            try {
+                prefs.saveSpeedButtons(speeds)
+            } catch (e: IOException) {
+                // The stored value stays as it was; the settings field does not show it as saved
+                Log.w("SettingsViewModel", "Failed to save the speed buttons", e)
+            }
         }
     }
 
