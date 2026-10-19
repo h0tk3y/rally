@@ -158,7 +158,7 @@ interface RaceServiceControls : CommonRaceService {
     fun setSpeedLimitPercent(percent: String?)
     fun startRace(raceSectionId: Long, startAtDistanceKm: DistanceKm, setDistance: DistanceKm, startAtTime: Instant)
     fun go(raceSectionId: Long, startAtDistanceKm: DistanceKm, setDistance: DistanceKm, startAtTime: Instant)
-    fun finishRace(withRaceModel: RaceModel)
+    fun finishRace(withRaceModel: RaceModel, earlyLate: Duration?)
     fun undoFinishRace()
     fun stopRace()
     fun undoStop()
@@ -469,6 +469,11 @@ class LocalRaceService : PrimaryRaceService, Service() {
             is RaceState.InRace -> current.raceModel
             else -> null
         }
+        val previousFinishEarlyLate = when (val current = _raceState.value) {
+            is RaceState.Going -> current.finishedEarlyLate
+            is RaceState.Stopped -> current.finishedEarlyLate
+            else -> null
+        }
 
         val current = _raceState.value
 
@@ -485,7 +490,8 @@ class LocalRaceService : PrimaryRaceService, Service() {
             newRaceModel,
             previousFinishInstant,
             previousFinishModel,
-            raceModelOfGoing
+            raceModelOfGoing,
+            previousFinishEarlyLate
         )
     }
 
@@ -499,7 +505,7 @@ class LocalRaceService : PrimaryRaceService, Service() {
         )
     }
 
-    override fun finishRace(withRaceModel: RaceModel) {
+    override fun finishRace(withRaceModel: RaceModel, earlyLate: Duration?) {
         _raceState.value = when (val current = _raceState.value) {
             is RaceState.InRace -> RaceState.Going(
                 current.raceSectionId,
@@ -509,7 +515,8 @@ class LocalRaceService : PrimaryRaceService, Service() {
                     instantSpeed = current.raceModel.instantSpeed
                 ),
                 withRaceModel,
-                Clock.System.now()
+                Clock.System.now(),
+                earlyLate
             )
 
             is RaceState.Going,
@@ -540,7 +547,7 @@ class LocalRaceService : PrimaryRaceService, Service() {
 
     override fun stopRace() {
         _raceState.value = when (val current = _raceState.value) {
-            is RaceState.Going -> RaceState.Stopped(current.raceSectionId, current.raceModel, Clock.System.now(), current.finishedAt, current.finishedRaceModel)
+            is RaceState.Going -> RaceState.Stopped(current.raceSectionId, current.raceModel, Clock.System.now(), current.finishedAt, current.finishedRaceModel, current.finishedEarlyLate)
             is RaceState.InRace -> RaceState.Stopped(current.raceSectionId, current.raceModel, Clock.System.now(), null, null)
             RaceState.NotStarted -> current
             is RaceState.Stopped -> current
@@ -549,7 +556,7 @@ class LocalRaceService : PrimaryRaceService, Service() {
 
     override fun undoStop() {
         _raceState.value = when (val current = _raceState.value) {
-            is RaceState.Stopped -> RaceState.Going(current.raceSectionIdAtStop, current.raceModelAtStop, current.finishedModel, current.finishedAt)
+            is RaceState.Stopped -> RaceState.Going(current.raceSectionIdAtStop, current.raceModelAtStop, current.finishedModel, current.finishedAt, current.finishedEarlyLate)
             is RaceState.InRace,
             RaceState.NotStarted,
             is RaceState.Going -> current
@@ -1216,4 +1223,4 @@ private object RaceNotificationUtils {
     private const val TIMER_SERVICE_NOTIFICATION_CHANNEL_ID = "RaceService"
 }
 
-private const val telemetryStreamingVersion = 3L
+private const val telemetryStreamingVersion = 4L

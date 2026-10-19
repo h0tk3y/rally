@@ -82,7 +82,6 @@ import com.h0tk3y.rally.SpeedKmh
 import com.h0tk3y.rally.SpeedWithPercentage
 import com.h0tk3y.rally.TimeDistanceLocalizer
 import com.h0tk3y.rally.TimeHr
-import com.h0tk3y.rally.TimeMinSec
 import com.h0tk3y.rally.android.racecervice.TelemetryPublicState
 import com.h0tk3y.rally.android.scenes.RaceModelControls
 import com.h0tk3y.rally.android.scenes.RaceUiState
@@ -94,6 +93,8 @@ import com.h0tk3y.rally.android.util.KeepScreenOn
 import com.h0tk3y.rally.android.util.VolumeKeyHandler
 import com.h0tk3y.rally.formatPercentage
 import com.h0tk3y.rally.model.RaceModel
+import com.h0tk3y.rally.model.earlyLate
+import com.h0tk3y.rally.model.formatEarlyLate
 import com.h0tk3y.rally.modifier
 import com.h0tk3y.rally.strRound1
 import com.h0tk3y.rally.strRound2Exact
@@ -103,7 +104,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlin.math.absoluteValue
 import kotlin.math.roundToInt
 import kotlin.time.Duration
-import kotlin.time.Duration.Companion.hours
 import kotlin.time.Instant
 
 @Composable
@@ -346,7 +346,7 @@ private fun RaceStatus(
             is RaceUiState.RaceGoing -> {
                 Column {
                     if (race.lastFinishAt != null && race.lastFinishModel != null) {
-                        Text(stringResource(R.string.finishedTimeDistancePrefix) + raceTimeDistanceString(race.lastFinishAt, race.lastFinishModel))
+                        Text(stringResource(R.string.finishedTimeDistancePrefix) + finishString(race.lastFinishAt, race.lastFinishModel, race.lastFinishEarlyLate))
                     }
                     RaceTimeDistance(
                         timeFlow, race, selectedPosition, isSectionTime = false, raceControls, distanceLocalizer, allowance
@@ -358,7 +358,7 @@ private fun RaceStatus(
             is RaceUiState.Going -> {
                 Column {
                     if (race.finishedAt != null && race.raceModelAtFinish != null) {
-                        Text(stringResource(R.string.finishedTimeDistancePrefix) + raceTimeDistanceString(race.finishedAt, race.raceModelAtFinish))
+                        Text(stringResource(R.string.finishedTimeDistancePrefix) + finishString(race.finishedAt, race.raceModelAtFinish, race.finishedEarlyLate))
                     }
                     RaceTimeDistance(
                         timeFlow, race, selectedPosition, isSectionTime = true, raceControls, sectionDistanceLocalizer, allowance
@@ -371,7 +371,7 @@ private fun RaceStatus(
             RaceNotStarted -> Text(stringResource(R.string.raceNotStarted))
             is RaceUiState.Stopped -> Column {
                 if (race.finishedAt != null && race.raceModelAtFinish != null) {
-                    Text(stringResource(R.string.finishedTimeDistancePrefix) + raceTimeDistanceString(race.finishedAt, race.raceModelAtFinish))
+                    Text(stringResource(R.string.finishedTimeDistancePrefix) + finishString(race.finishedAt, race.raceModelAtFinish, race.finishedEarlyLate))
                 }
                 Text(stringResource(R.string.stoppedTimeDistancePrefix) + raceTimeDistanceString(race.stoppedAt, race.raceModel))
             }
@@ -406,25 +406,13 @@ private fun RaceTimeDistance(
                 Text(timeString(time, raceModel), style = LocalCustomTypography.current.raceIndicatorText)
             }
             if (distanceLocalizer != null) {
-                val expectedTime = distanceLocalizer.getExpectedTimeForDistance(raceModel.currentDistance)
-                if (expectedTime != null) {
-                    val delta = time - (raceModel.startAtTime + expectedTime.timeHours.hours)
+                val delta = earlyLate(time, raceModel, distanceLocalizer)
+                if (delta != null) {
                     val deltaSec = delta.inWholeMicroseconds.toDouble() / 1000_000
-                    val timeText = if (deltaSec.absoluteValue < 60.0) {
-                        val sign = if (delta <= Duration.ZERO) "" else "+"
-                        "$sign${deltaSec.strRound1()}"
-                    } else {
-                        val sign = if (delta < Duration.ZERO) "-" else if (delta == Duration.ZERO) "" else "+"
-                        "$sign${
-                            TimeMinSec(
-                                deltaSec.absoluteValue.roundToInt() / 60,
-                                deltaSec.absoluteValue.roundToInt() % 60,
-                                false
-                            )
-                        }"
-                    }
+                    val timeText = formatEarlyLate(delta)
                     val allowedTime = if (isSectionTime) {
                         val allowanceTime = run {
+                            val expectedTime = distanceLocalizer.getExpectedTimeForDistance(raceModel.currentDistance) ?: return@run null
                             val expectedTimeForZero = distanceLocalizer.getExpectedTimeForDistance(DistanceKm.zero) ?: return@run null
                             val timeFromSectionStart = expectedTime - expectedTimeForZero
                             allowance(allowance, timeFromSectionStart)
@@ -560,6 +548,10 @@ private fun GoingSpeed(race: RaceUiState.Going) {
 private fun raceTimeDistanceString(time: Instant, race: RaceModel): String {
     return "${timeString(time, race)} / ${distanceString(race.currentDistance)}"
 }
+
+/** The regularity time and distance at the finish, and how early or late the finish was, if that is known. */
+private fun finishString(finishedAt: Instant, raceModelAtFinish: RaceModel, earlyLate: Duration?): String =
+    raceTimeDistanceString(finishedAt, raceModelAtFinish) + earlyLate?.let { " / ${formatEarlyLate(it)}" }.orEmpty()
 
 private fun timeString(time: Instant, race: RaceModel): String {
     val elapsedOrRemainingHours = TimeHr((time.minus(race.startAtTime).inWholeMilliseconds.toDouble() / 1000 / 3600).absoluteValue).toTimeDayHrMinSec()

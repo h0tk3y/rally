@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
+import kotlin.time.Duration
 import kotlin.time.Instant
 
 class InMemoryDatabaseOperations : DatabaseOperations {
@@ -82,9 +83,20 @@ class InMemoryDatabaseOperations : DatabaseOperations {
         sectionId: Long,
         distanceKm: DistanceKm,
         timestamp: Instant,
-        sinceTimestamp: Instant?
+        sinceTimestamp: Instant?,
+        earlyLate: Duration?
     ) {
-        events.update { it + Event(id = (events.value.maxOfOrNull { event -> event.id } ?: 0) + 1, sectionId, distanceKm.valueKm, kind, timestamp, sinceTimestamp) }
+        events.update {
+            it + Event(
+                id = (events.value.maxOfOrNull { event -> event.id } ?: 0) + 1,
+                sectionId,
+                distanceKm.valueKm,
+                kind,
+                timestamp,
+                sinceTimestamp,
+                earlyLate?.inWholeMilliseconds
+            )
+        }
     }
 
     override fun selectEventsForSection(section: Section): Flow<LoadState<List<Event>>> =
