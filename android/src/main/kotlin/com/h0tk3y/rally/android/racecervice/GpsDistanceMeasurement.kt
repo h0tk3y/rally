@@ -1,22 +1,27 @@
 package com.h0tk3y.rally.android.racecervice
 
-import android.Manifest.permission.ACCESS_FINE_LOCATION
 import android.content.Context
-import android.content.pm.PackageManager.PERMISSION_GRANTED
 import android.location.Location
 import android.location.LocationManager
-import android.os.Build
 import android.os.Bundle
-import androidx.core.app.ActivityCompat
+import android.util.Log
 import androidx.core.content.ContextCompat
 import androidx.core.content.ContextCompat.getSystemService
 import androidx.core.location.GnssStatusCompat
 import androidx.core.location.LocationListenerCompat
 import androidx.core.location.LocationManagerCompat
 import androidx.core.location.LocationRequestCompat
+import com.h0tk3y.rally.android.permissions.hasFineLocation
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.util.concurrent.Executor
+
+enum class GpsStartResult {
+    STARTED, NO_PERMISSION, NO_GPS_HARDWARE
+}
 
 class GpsDistanceMeasurement(
     private val context: Context,
@@ -24,8 +29,13 @@ class GpsDistanceMeasurement(
 ) {
     private val locationManager: LocationManager = getSystemService(context, LocationManager::class.java)
         ?: error("LocationManager is null")
-    
+
     private val executor: Executor = ContextCompat.getMainExecutor(context)
+
+    private val _isProviderEnabled = MutableStateFlow(true)
+
+    /** Whether the user has the location turned on; with it off, the GPS gives no fixes */
+    val isProviderEnabled: StateFlow<Boolean> = _isProviderEnabled.asStateFlow()
 
     private val locationListener = object : LocationListenerCompat {
         override fun onLocationChanged(location: Location) {
@@ -34,8 +44,14 @@ class GpsDistanceMeasurement(
             }
         }
 
-        override fun onProviderEnabled(provider: String) {}
-        override fun onProviderDisabled(provider: String) {}
+        override fun onProviderEnabled(provider: String) {
+            _isProviderEnabled.value = true
+        }
+
+        override fun onProviderDisabled(provider: String) {
+            _isProviderEnabled.value = false
+        }
+
         override fun onStatusChanged(provider: String, status: Int, extras: Bundle?) {}
     }
 
@@ -47,24 +63,43 @@ class GpsDistanceMeasurement(
 
     val distanceAccumulator = DistanceAccumulator()
 
-    fun requestPlatformUpdates(): Boolean {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && ActivityCompat.checkSelfPermission(context, ACCESS_FINE_LOCATION) != PERMISSION_GRANTED)
-            return false
+    fun requestPlatformUpdates(): GpsStartResult {
+        // Wi-Fi-only devices, like many tablets, have no GPS provider, and requesting its updates would throw
+        if (!LocationManagerCompat.hasProvider(locationManager, LocationManager.GPS_PROVIDER))
+            return GpsStartResult.NO_GPS_HARDWARE
+
+        // Approximate location is not enough for the GPS provider, and it is not precise enough to measure the distance anyway
+        if (!context.hasFineLocation())
+            return GpsStartResult.NO_PERMISSION
+
+        _isProviderEnabled.value = LocationManagerCompat.isLocationEnabled(locationManager) &&
+                locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)
 
         val req = LocationRequestCompat.Builder(500)
             .setQuality(LocationRequestCompat.QUALITY_HIGH_ACCURACY)
             .build()
 
-        LocationManagerCompat.requestLocationUpdates(
-            locationManager, LocationManager.GPS_PROVIDER, req, executor, locationListener
-        )
-
-        LocationManagerCompat.registerGnssStatusCallback(locationManager, executor, gnssCallback)
-        return true
+        try {
+            LocationManagerCompat.requestLocationUpdates(
+                locationManager, LocationManager.GPS_PROVIDER, req, executor, locationListener
+            )
+            LocationManagerCompat.registerGnssStatusCallback(locationManager, executor, gnssCallback)
+        } catch (e: SecurityException) {
+            // The permission can be revoked between the check and the request
+            Log.w("raceService", "no permission for GPS updates", e)
+            stopPlatformUpdates()
+            return GpsStartResult.NO_PERMISSION
+        } catch (e: IllegalArgumentException) {
+            Log.w("raceService", "GPS provider is unavailable", e)
+            stopPlatformUpdates()
+            return GpsStartResult.NO_GPS_HARDWARE
+        }
+        return GpsStartResult.STARTED
     }
 
     fun stopPlatformUpdates() {
-        locationManager.removeUpdates(locationListener)
+        // The compat request wraps the listener on older Android versions, so it must be removed through the compat API, too
+        LocationManagerCompat.removeUpdates(locationManager, locationListener)
         LocationManagerCompat.unregisterGnssStatusCallback(locationManager, gnssCallback)
     }
 }

@@ -14,6 +14,7 @@ import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothSocket
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.content.pm.PackageManager.PERMISSION_GRANTED
 import android.os.Binder
 import android.os.Build
@@ -23,6 +24,7 @@ import androidx.annotation.RequiresPermission
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.app.ServiceCompat
 import com.github.pires.obd.commands.protocol.EchoOffCommand
 import com.github.pires.obd.commands.protocol.LineFeedOffCommand
 import com.github.pires.obd.commands.protocol.SelectProtocolCommand
@@ -43,10 +45,11 @@ import com.h0tk3y.rally.SpeedKmh
 import com.h0tk3y.rally.SpeedWithPercentage
 import com.h0tk3y.rally.TimeHr
 import com.h0tk3y.rally.android.MainActivity
-import com.h0tk3y.rally.android.PreferenceRepository
 import com.h0tk3y.rally.android.TelemetrySource
 import com.h0tk3y.rally.android.TelemetrySource.BT_OBD
-import com.h0tk3y.rally.android.dataStore
+import com.h0tk3y.rally.android.permissions.hasFineLocation
+import com.h0tk3y.rally.android.permissions.raceServiceType
+import com.h0tk3y.rally.android.preferenceRepository
 import com.h0tk3y.rally.android.racecervice.RaceNotificationUtils.RACE_NOTIFICATION_ID
 import com.h0tk3y.rally.android.racecervice.SerializationUtils.json
 import com.h0tk3y.rally.db.Section
@@ -57,6 +60,7 @@ import com.h0tk3y.rally.model.interval
 import com.h0tk3y.rally.obd.MySpeedCommand
 import com.h0tk3y.rally.obd.SelectEcuCommand
 import com.h0tk3y.rally.strRound3
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -138,6 +142,8 @@ sealed interface TelemetryPublicState {
     data object BtReconnecting : TelemetryPublicState
 
     data object GpsNoPermissions : TelemetryPublicState
+    data object GpsNoHardware : TelemetryPublicState
+    data object GpsLocationDisabled : TelemetryPublicState
 
     sealed interface GpsHasSats {
         val sats: Int
@@ -222,7 +228,12 @@ class TcpStreamedRaceService : StreamedRaceService, StoppableService, Service() 
     override fun onCreate() {
         super.onCreate()
         RaceNotificationUtils.createNotificationChannel(this, NotificationManagerCompat.from(this))
-        startForeground(RaceNotificationUtils.RECEIVE_STREAM_NOTIFICATION_ID, RaceNotificationUtils.serviceStartNotification(this))
+        if (!RaceNotificationUtils.startForegroundSafely(
+                this, RaceNotificationUtils.RECEIVE_STREAM_NOTIFICATION_ID, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+            )
+        ) {
+            stopSelf()
+        }
     }
 
     inner class LocalBinder : Binder() {
@@ -262,7 +273,7 @@ class TcpStreamedRaceService : StreamedRaceService, StoppableService, Service() 
         stopForeground(STOP_FOREGROUND_REMOVE)
     }
 
-    private val serviceScope = CoroutineScope(SupervisorJob())
+    private val serviceScope = CoroutineScope(SupervisorJob() + loggingExceptionHandler)
 
     private fun receiveJob(): Job = serviceScope.launch {
         launch {
@@ -356,7 +367,13 @@ interface StoppableService {
     fun forceStop()
 }
 
-interface PrimaryRaceService : CommonRaceService, RaceServiceControls, StreamSourceService
+interface PrimaryRaceService : CommonRaceService, RaceServiceControls, StreamSourceService {
+    /**
+     * Retries the telemetry source if it is blocked by a missing permission. Should be called from the UI while it is visible,
+     * because switching the foreground service to the location type is only allowed while the app is in the foreground.
+     */
+    fun recheckTelemetryAccess()
+}
 
 class LocalRaceService : PrimaryRaceService, Service() {
     private val _raceState = MutableStateFlow<RaceState>(RaceState.NotStarted)
@@ -372,7 +389,7 @@ class LocalRaceService : PrimaryRaceService, Service() {
     override val rememberSpeedLimit: StateFlow<SpeedKmh?> = _rememberSpeedLimit
     override val speedLimitPercent: StateFlow<String?> = _speedLimitPercent
 
-    private val prefs by lazy { PreferenceRepository(dataStore).userPreferencesFlow }
+    private val prefs by lazy { preferenceRepository().userPreferencesFlow }
     private val btMac by lazy { prefs.map { it.btMac } }
     private val telemetrySource by lazy { prefs.map { it.telemetrySource } }
     private val outgaugePort by lazy { prefs.map { it.outgaugePort } }
@@ -601,7 +618,34 @@ class LocalRaceService : PrimaryRaceService, Service() {
     override fun onCreate() {
         super.onCreate()
         RaceNotificationUtils.createNotificationChannel(this, NotificationManagerCompat.from(this))
-        startForeground(RACE_NOTIFICATION_ID, RaceNotificationUtils.serviceStartNotification(this))
+        // Start with the type that needs no runtime permissions; switch to the location type once the GPS source is known to be usable
+        if (!promoteToForeground(ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)) {
+            stopSelf()
+        }
+    }
+
+    @Volatile
+    private var foregroundServiceType: Int? = null
+
+    private fun promoteToForeground(type: Int): Boolean {
+        if (foregroundServiceType == type) return true
+        return RaceNotificationUtils.startForegroundSafely(this, RACE_NOTIFICATION_ID, type).also { success ->
+            if (success) foregroundServiceType = type
+        }
+    }
+
+    private val accessCheckEpoch = MutableStateFlow(0)
+
+    override fun recheckTelemetryAccess() {
+        val state = btState.value
+        val isBlocked = when (state) {
+            is TelemetryState.BtTelemetry -> state.connectionState == BtConnectionState.NoPermissions
+            is TelemetryState.GpsTelemetry -> state.gpsState == GpsReceiverState.NoPermissions
+            else -> false
+        }
+        if (isBlocked) {
+            accessCheckEpoch.value++
+        }
     }
 
     override fun stopService(name: Intent?): Boolean {
@@ -646,6 +690,8 @@ class LocalRaceService : PrimaryRaceService, Service() {
 
     private sealed interface GpsReceiverState {
         data object NoPermissions : GpsReceiverState
+        data object NoHardware : GpsReceiverState
+        data object LocationDisabled : GpsReceiverState
         data object NoSatellite : GpsReceiverState
         data object NoLocationData : GpsReceiverState
         data object GoodLocationData : GpsReceiverState
@@ -684,6 +730,8 @@ class LocalRaceService : PrimaryRaceService, Service() {
 
                 is GpsTelemetry -> when (gpsState) {
                     GpsReceiverState.NoPermissions -> TelemetryPublicState.GpsNoPermissions
+                    GpsReceiverState.NoHardware -> TelemetryPublicState.GpsNoHardware
+                    GpsReceiverState.LocationDisabled -> TelemetryPublicState.GpsLocationDisabled
                     GpsReceiverState.NoLocationData -> TelemetryPublicState.GpsNoPosition(sats)
                     GpsReceiverState.GoodLocationData -> TelemetryPublicState.GpsGood(sats)
                     GpsReceiverState.NoSatellite -> TelemetryPublicState.GpsWaiting(sats)
@@ -693,7 +741,7 @@ class LocalRaceService : PrimaryRaceService, Service() {
         }
     }
 
-    private val serviceScope = CoroutineScope(SupervisorJob())
+    private val serviceScope = CoroutineScope(SupervisorJob() + loggingExceptionHandler)
 
     private fun raceJob(): Job = serviceScope.launch {
         launch {
@@ -720,21 +768,21 @@ class LocalRaceService : PrimaryRaceService, Service() {
             raceDataJob?.cancel()
         }
 
-        combine(telemetrySource, btMac, outgaugePort) { source, mac, port ->
-            Triple(source, mac, port)
+        combine(telemetrySource, btMac, outgaugePort, accessCheckEpoch) { source, mac, port, epoch ->
+            TelemetrySetup(
+                source,
+                if (source == BT_OBD) mac else "",
+                if (source == TelemetrySource.OUTGAUGE) port else 0,
+                epoch
+            )
         }
-            .map { (source, mac, port) ->
-                Triple(
-                    source,
-                    if (source == BT_OBD) mac else "",
-                    if (source == TelemetrySource.OUTGAUGE) port else 0
-                )
-            }
             .distinctUntilChanged()
             .onEach { (telemetrySource, newBtMac, newOutgaugePort) ->
                 raceDataJob?.cancel()
                 debugSpeed = SpeedKmh(0.0)
                 debugSpeedJob?.cancel()
+
+                promoteToForeground(raceServiceType(telemetrySource, hasFineLocation()))
 
                 when (telemetrySource) {
                     BT_OBD -> {
@@ -762,8 +810,13 @@ class LocalRaceService : PrimaryRaceService, Service() {
                         val job = serviceScope.launch gpsJob@{
                             btState.value = TelemetryState.GpsTelemetry(GpsReceiverState.NoSatellite, 0)
                             launch {
-                                gpsMeasurement.requestPlatformUpdates()
-                                collectGpsMeasurement(gpsMeasurement, this@gpsJob)
+                                when (gpsMeasurement.requestPlatformUpdates()) {
+                                    GpsStartResult.STARTED -> collectGpsMeasurement(gpsMeasurement, this@gpsJob)
+                                    GpsStartResult.NO_PERMISSION ->
+                                        btState.value = TelemetryState.GpsTelemetry(GpsReceiverState.NoPermissions, 0)
+                                    GpsStartResult.NO_GPS_HARDWARE ->
+                                        btState.value = TelemetryState.GpsTelemetry(GpsReceiverState.NoHardware, 0)
+                                }
                             }
                             launch { startSendTeleJob() }
                         }
@@ -816,6 +869,9 @@ class LocalRaceService : PrimaryRaceService, Service() {
 
             fun updateGpsState(isDelayed: Boolean) {
                 btState.value = when {
+                    !measurement.isProviderEnabled.value ->
+                        TelemetryState.GpsTelemetry(GpsReceiverState.LocationDisabled, sats())
+
                     isDelayed && measurement.distanceAccumulator.lastFixTime.value
                         ?.let { Clock.System.now() - it > 2.seconds } == true ->
                         TelemetryState.GpsTelemetry(GpsReceiverState.NoLocationData, sats())
@@ -1058,7 +1114,9 @@ class LocalRaceService : PrimaryRaceService, Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         startRaceJob()
 
-        return START_STICKY
+        // The race state is only kept in memory, so a restarted service would have nothing to restore.
+        // Also, a restart happens in the background, where the location type of the service would not be allowed. 
+        return START_NOT_STICKY
     }
 
     private fun startRaceJob() {
@@ -1190,6 +1248,22 @@ private object RaceNotificationUtils {
         notificationManager.notify(id, notification)
     }
 
+    /**
+     * Starts the foreground mode or switches it to another [type]. Instead of crashing the app, reports a failure:
+     * Android throws if the type's permissions are missing (e.g. revoked) or if the app is not allowed to start a foreground service now.
+     */
+    fun startForegroundSafely(service: Service, id: Int, type: Int): Boolean =
+        try {
+            ServiceCompat.startForeground(service, id, serviceStartNotification(service), type)
+            true
+        } catch (e: SecurityException) {
+            Log.e("raceService", "cannot start the foreground service with type $type", e)
+            false
+        } catch (e: IllegalStateException) { // ForegroundServiceStartNotAllowedException
+            Log.e("raceService", "not allowed to start the foreground service with type $type", e)
+            false
+        }
+
     fun serviceStartNotification(context: Context): Notification =
         NotificationCompat.Builder(context, TIMER_SERVICE_NOTIFICATION_CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_notify_sync_noanim)
@@ -1217,3 +1291,18 @@ private object RaceNotificationUtils {
 }
 
 private const val telemetryStreamingVersion = 3L
+
+private data class TelemetrySetup(
+    val source: TelemetrySource,
+    val btMac: String?,
+    val outgaugePort: Int,
+    /** Changes when the UI asks to retry a source blocked by a missing permission, so that the source restarts */
+    val accessCheckEpoch: Int
+)
+
+/**
+ * A failure in one of the telemetry sources should not take down the app with the race state in it.
+ */
+private val loggingExceptionHandler = CoroutineExceptionHandler { _, throwable ->
+    Log.e("raceService", "unexpected failure in a service coroutine", throwable)
+}
