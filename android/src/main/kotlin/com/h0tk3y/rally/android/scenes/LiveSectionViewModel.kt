@@ -1660,10 +1660,6 @@ class StreamedSectionViewModel(
             launch {
                 service?.raceState?.collectLatest {
                     _raceState.value = raceStateToUiState(it)
-                    delay(1000L.milliseconds)
-                    if (this@launch.isActive) {
-                        _telemetryState.value = TelemetryPublicState.ReceivesStream(isDelayed = true)
-                    }
                 }
             }
             launch {

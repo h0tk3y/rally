@@ -63,6 +63,7 @@ import com.h0tk3y.rally.strRound3
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.awaitCancellation
@@ -77,6 +78,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -101,6 +103,8 @@ import java.util.zip.GZIPOutputStream
 import kotlin.coroutines.CoroutineContext
 import kotlin.time.Clock
 import kotlin.time.Duration
+import kotlin.time.TimeMark
+import kotlin.time.TimeSource
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
@@ -131,6 +135,8 @@ sealed interface TelemetryPublicState {
 
     data object WaitingForStream : TelemetryPublicState
     data class ReceivesStream(val isDelayed: Boolean) : TelemetryPublicState
+    /** Frames had arrived earlier, then the connection dropped; no frame on a new connection yet. */
+    data object StreamLinkLost : TelemetryPublicState
 
     data object NotInitialized : TelemetryPublicState
     data object IncompatibleStream : TelemetryPublicState
@@ -153,6 +159,35 @@ sealed interface TelemetryPublicState {
     data class GpsProblematic(override val sats: Int) : TelemetryPublicState, GpsHasSats
     data class GpsNoPosition(override val sats: Int) : TelemetryPublicState, GpsHasSats
     data class GpsWaiting(override val sats: Int) : TelemetryPublicState, GpsHasSats
+}
+
+/** The state of the TCP connection from the co-driver's device, as seen by [TcpStreamedRaceService]. */
+internal sealed interface StreamConnectionState {
+    data object NotInitialized : StreamConnectionState
+    data object Incompatible : StreamConnectionState
+    data object Connected : StreamConnectionState
+}
+
+internal val streamDataDelayThreshold: Duration = 1.seconds
+
+/**
+ * Maps the connection state and the time since the last frame received over the current connection to the public state.
+ * [sinceLastFrame] is null when no frame has been received over the current connection yet.
+ * [hadFramesBefore] tells whether any frame has been received in this session (over any connection).
+ */
+internal fun streamedTelemetryPublicState(
+    connectionState: StreamConnectionState,
+    sinceLastFrame: Duration?,
+    hadFramesBefore: Boolean,
+): TelemetryPublicState {
+    val noDataState = if (hadFramesBefore) TelemetryPublicState.StreamLinkLost else TelemetryPublicState.WaitingForStream
+    return when (connectionState) {
+        StreamConnectionState.NotInitialized -> noDataState
+        StreamConnectionState.Incompatible -> TelemetryPublicState.IncompatibleStream
+        StreamConnectionState.Connected ->
+            if (sinceLastFrame == null) noDataState
+            else TelemetryPublicState.ReceivesStream(isDelayed = sinceLastFrame >= streamDataDelayThreshold)
+    }
 }
 
 
@@ -204,20 +239,22 @@ class TcpStreamedRaceService : StreamedRaceService, StoppableService, Service() 
     private val _currentRaceLine = MutableStateFlow<LineNumber?>(null)
     override val currentRaceLine: StateFlow<LineNumber?> get() = _currentRaceLine
 
-    private sealed interface TelemetryState {
-        data object NotInitialized : TelemetryState
-        data object Incompatible : TelemetryState
-        data object Connected : TelemetryState
-    }
+    private val _telemetryState = MutableStateFlow<StreamConnectionState>(StreamConnectionState.NotInitialized)
 
-    private var _telemetryState = MutableStateFlow<TelemetryState>(TelemetryState.NotInitialized)
+    /** When the last frame was received over the current connection; null until the first one arrives. */
+    private val _lastFrameAt = MutableStateFlow<TimeMark?>(null)
 
+    /** Whether any frame has been received during the lifetime of this service, over any connection. */
+    private val _hadFrames = MutableStateFlow(false)
+
+    @OptIn(ExperimentalCoroutinesApi::class)
     override val telemetryPublicState: Flow<TelemetryPublicState>
-        get() = _telemetryState.map {
-            when (it) {
-                TelemetryState.NotInitialized -> TelemetryPublicState.WaitingForStream
-                TelemetryState.Incompatible -> TelemetryPublicState.IncompatibleStream
-                TelemetryState.Connected -> TelemetryPublicState.ReceivesStream(false)
+        get() = combine(_telemetryState, _lastFrameAt, _hadFrames, ::Triple).transformLatest { (connectionState, lastFrameAt, hadFrames) ->
+            emit(streamedTelemetryPublicState(connectionState, lastFrameAt?.elapsedNow(), hadFrames))
+            if (connectionState == StreamConnectionState.Connected && lastFrameAt != null) {
+                // Cancelled by transformLatest if the next frame arrives in time:
+                delay(streamDataDelayThreshold - lastFrameAt.elapsedNow())
+                emit(streamedTelemetryPublicState(connectionState, lastFrameAt.elapsedNow(), hadFrames))
             }
         }
 
@@ -304,7 +341,8 @@ class TcpStreamedRaceService : StreamedRaceService, StoppableService, Service() 
                     serverSocket.accept().apply {
                         soTimeout = 2000
                     }.use { socket ->
-                        _telemetryState.value = TelemetryState.Connected
+                        _lastFrameAt.value = null
+                        _telemetryState.value = StreamConnectionState.Connected
                         DataInputStream(socket.getInputStream()).use { input ->
                             while (isActive) {
                                 val size = input.readInt()
@@ -312,7 +350,7 @@ class TcpStreamedRaceService : StreamedRaceService, StoppableService, Service() 
                                 val buffer = ByteArray(size)
                                 input.readFully(buffer)
                                 if (version != telemetryStreamingVersion) {
-                                    _telemetryState.value = TelemetryState.Incompatible
+                                    _telemetryState.value = StreamConnectionState.Incompatible
                                     Log.d("raceService", "unsupported telemetry version $version, expected $telemetryStreamingVersion")
                                     continue
                                 }
@@ -323,7 +361,7 @@ class TcpStreamedRaceService : StreamedRaceService, StoppableService, Service() 
                     }
                 }
             } catch (e: IOException) {
-                _telemetryState.value = TelemetryState.NotInitialized
+                _telemetryState.value = StreamConnectionState.NotInitialized
                 Log.d("raceService", "network failure in receiver", e)
                 delay(500)
             }
@@ -341,6 +379,8 @@ class TcpStreamedRaceService : StreamedRaceService, StoppableService, Service() 
         _currentRaceLine.value = raceState.currentRaceLine
         _rememberSpeedLimit.value = raceState.rememberSpeed
         _speedLimitPercent.value = raceState.speedLimitPercent
+        _hadFrames.value = true
+        _lastFrameAt.value = TimeSource.Monotonic.markNow()
     }
 
     override fun forceStop() {
