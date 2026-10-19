@@ -27,7 +27,7 @@ class SectionEventLogViewModelTest {
     fun `loads section and events from database and triggers the delete operation`() = runTest(withMain.dispatcher) {
         val sectionId = 1L
         val eventId = 2L
-        val testEvent = Event(eventId, sectionId, 0.0, RaceEventKind.RACE_START, Instant.fromEpochSeconds(0), null)
+        val testEvent = Event(eventId, sectionId, 0.0, RaceEventKind.RACE_START, Instant.fromEpochSeconds(0), null, null)
         val testSection = Section(sectionId, "test", "0.0\n60.0")
 
         val db = mockk<DatabaseOperations> {
