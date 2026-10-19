@@ -176,6 +176,14 @@ interface RaceModelControls {
 }
 
 /**
+ * Explains once that the battery optimization may stop the race service in the background.
+ */
+interface BatteryHintControls {
+    /** Returns `true` only the first time, unless the app is already exempt from the optimization */
+    suspend fun consumeBatteryHint(isIgnoringBatteryOptimizations: Boolean): Boolean
+}
+
+/**
  * Lets the user swap the places of the positions list and the race panel. Only the driver HUD supports this.
  */
 interface PanelSwapControls {
@@ -237,7 +245,8 @@ class LiveSectionViewModel(
     private val database: DatabaseOperations,
     private val prefs: PreferenceRepository,
     coroutineDispatcher: CoroutineDispatcher
-) : StatefulSectionViewModel(coroutineDispatcher), EditableSectionViewModel, RaceModelControls, RaceServiceHolder<PrimaryRaceService> {
+) : StatefulSectionViewModel(coroutineDispatcher), EditableSectionViewModel, RaceModelControls, BatteryHintControls,
+    RaceServiceHolder<PrimaryRaceService> {
     private val parser = InputRoadmapParser(DefaultModifierValidator())
 
     private val _raceCurrentLineNumber: MutableStateFlow<LineNumber> = MutableStateFlow(LineNumber(1, 0))
@@ -639,11 +648,7 @@ class LiveSectionViewModel(
         service?.recheckTelemetryAccess()
     }
 
-    /**
-     * Whether to explain once that the battery optimization may stop the race service in the background.
-     * Returns `true` only the first time, unless the app is already exempt from the optimization.
-     */
-    suspend fun consumeBatteryHint(isIgnoringBatteryOptimizations: Boolean): Boolean {
+    override suspend fun consumeBatteryHint(isIgnoringBatteryOptimizations: Boolean): Boolean {
         if (isIgnoringBatteryOptimizations || prefs.userPreferencesFlow.first().batteryHintShown) return false
         prefs.saveBatteryHintShown()
         return true

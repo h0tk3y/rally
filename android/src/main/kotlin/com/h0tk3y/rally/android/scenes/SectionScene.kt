@@ -74,6 +74,7 @@ import com.h0tk3y.rally.SpeedKmh
 import com.h0tk3y.rally.SubsMatch
 import com.h0tk3y.rally.android.LoadState
 import com.h0tk3y.rally.android.db.SectionInsertOrRenameResult
+import com.h0tk3y.rally.android.permissions.AccessPurpose
 import com.h0tk3y.rally.android.permissions.TelemetryAccessDialogHost
 import com.h0tk3y.rally.android.permissions.rememberTelemetryAccessController
 import com.h0tk3y.rally.android.racecervice.TelemetryPublicState
@@ -226,8 +227,20 @@ fun SectionScene(
 
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
-    val telemetryAccess = rememberTelemetryAccessController(onAccessMaybeGranted = { (model as? RaceModelControls)?.recheckTelemetryAccess() })
     var showBatteryHint by rememberSaveable { mutableStateOf(false) }
+    val telemetryAccess = rememberTelemetryAccessController(
+        onReady = { purpose ->
+            if (purpose == AccessPurpose.ENTER_RACE_MODE && model is RaceModelControls) {
+                model.enterRaceMode()
+                if (model is BatteryHintControls) {
+                    coroutineScope.launch {
+                        showBatteryHint = model.consumeBatteryHint(context.isIgnoringBatteryOptimizations())
+                    }
+                }
+            }
+        },
+        onAccessMaybeGranted = { (model as? RaceModelControls)?.recheckTelemetryAccess() }
+    )
     val goToSettings = { onGoToSettings((raceState as? RaceUiState.HasRaceModel)?.raceModel?.currentDistance?.valueKm) }
 
     TelemetryAccessDialogHost(telemetryAccess, onChangeSource = goToSettings)
@@ -264,16 +277,7 @@ fun SectionScene(
     val launchServiceAfterObtainingPermission: () -> Unit = {
         if (model is RaceModelControls) {
             coroutineScope.launch {
-                telemetryAccess.runWhenReady(model.telemetrySource.first()) {
-                    model.enterRaceMode()
-                    if (model is LiveSectionViewModel) {
-                        coroutineScope.launch {
-                            if (model.consumeBatteryHint(context.isIgnoringBatteryOptimizations())) {
-                                showBatteryHint = true
-                            }
-                        }
-                    }
-                }
+                telemetryAccess.runWhenReady(model.telemetrySource.first(), AccessPurpose.ENTER_RACE_MODE)
             }
         }
     }
@@ -286,7 +290,8 @@ fun SectionScene(
         }
     }
 
-    // Opened from the race panel of another section, or restored after the process was killed; enter the race mode only once
+    // Opened from the race panel of another section. Enter the race mode only once: not again after a rotation, and not after
+    // the process was killed, since the race service and its in-memory state are gone then.
     var startedInRaceMode by rememberSaveable { mutableStateOf(false) }
     if (startInRaceMode && !startedInRaceMode) {
         LaunchedEffect(Unit) {

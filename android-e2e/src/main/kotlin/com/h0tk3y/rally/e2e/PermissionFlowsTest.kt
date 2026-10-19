@@ -55,6 +55,38 @@ class PermissionFlowsTest {
         app.waitForRaceServiceTypes(TYPE_LOCATION)
     }
 
+    /** Back is not a denial for Android, so the system dialog can still be shown, and the app must not send the user to the settings */
+    @Test
+    fun dismissingTheSystemDialogWithBackIsNotPermanent() {
+        app.tapRaceMode()
+        app.waitForSystemDialog()
+        app.device.pressBack()
+
+        app.waitForExplanation(GPS_TITLE, GPS_REASON)
+        assertFalse(app.has(By.text("Open app settings")))
+        app.explanationAllow()
+
+        app.systemAllowLocation(precise = true)
+        app.waitForRaceMode()
+    }
+
+    /** The activity is recreated while the system dialog is shown; the result must still complete the request */
+    @Test
+    fun permissionGrantedAfterRotationEntersRaceMode() {
+        app.tapRaceMode()
+        app.waitForSystemDialog()
+        try {
+            app.device.setOrientationLeft()
+            app.device.waitForIdle()
+            app.systemAllowLocation(precise = true)
+            app.waitForRaceMode()
+            app.waitForRaceServiceTypes(TYPE_LOCATION)
+        } finally {
+            app.device.setOrientationNatural()
+            app.device.unfreezeRotation()
+        }
+    }
+
     @Test
     fun approximateLocationOnlyIsExplained() {
         app.tapRaceMode()

@@ -243,7 +243,8 @@ class TcpStreamedRaceService : StreamedRaceService, StoppableService, Service() 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         startReceiveJob()
 
-        return START_STICKY
+        // Like the local race service: a restart would happen in the background with no screen to show the stream on
+        return START_NOT_STICKY
     }
 
     private var receiveJob: Job? = null
@@ -618,7 +619,10 @@ class LocalRaceService : PrimaryRaceService, Service() {
     override fun onCreate() {
         super.onCreate()
         RaceNotificationUtils.createNotificationChannel(this, NotificationManagerCompat.from(this))
-        // Start with the type that needs no runtime permissions; switch to the location type once the GPS source is known to be usable
+        // Start with the type that needs no runtime permissions; switch to the location type once the GPS source is known to be usable.
+        // If even this fails, there is no way to stay alive: stopping is the best effort, though Android may still report that
+        // the service did not enter the foreground in time. This can only happen if the app was not allowed to start the service,
+        // which RaceServiceConnection handles at the call site.
         if (!promoteToForeground(ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)) {
             stopSelf()
         }
@@ -626,6 +630,11 @@ class LocalRaceService : PrimaryRaceService, Service() {
 
     @Volatile
     private var foregroundServiceType: Int? = null
+
+    private fun leaveForeground() {
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        foregroundServiceType = null
+    }
 
     private fun promoteToForeground(type: Int): Boolean {
         if (foregroundServiceType == type) return true
@@ -650,14 +659,14 @@ class LocalRaceService : PrimaryRaceService, Service() {
 
     override fun stopService(name: Intent?): Boolean {
         raceJob?.cancel()
-        stopForeground(STOP_FOREGROUND_REMOVE)
+        leaveForeground()
         return true
     }
 
     override fun onDestroy() {
         super.onDestroy()
         raceJob?.cancel()
-        stopForeground(STOP_FOREGROUND_REMOVE)
+        leaveForeground()
     }
 
     override fun onBind(intent: Intent): IBinder {
@@ -782,7 +791,7 @@ class LocalRaceService : PrimaryRaceService, Service() {
                 debugSpeed = SpeedKmh(0.0)
                 debugSpeedJob?.cancel()
 
-                promoteToForeground(raceServiceType(telemetrySource, hasFineLocation()))
+                val isForegroundTypeSet = promoteToForeground(raceServiceType(telemetrySource, hasFineLocation()))
 
                 when (telemetrySource) {
                     BT_OBD -> {
@@ -810,6 +819,12 @@ class LocalRaceService : PrimaryRaceService, Service() {
                         val job = serviceScope.launch gpsJob@{
                             btState.value = TelemetryState.GpsTelemetry(GpsReceiverState.NoSatellite, 0)
                             launch {
+                                if (!isForegroundTypeSet) {
+                                    // Without the location type, the updates would stop in the background. Report it as a missing
+                                    // permission, so that the UI retries with recheckTelemetryAccess when it is visible again.
+                                    btState.value = TelemetryState.GpsTelemetry(GpsReceiverState.NoPermissions, 0)
+                                    return@launch
+                                }
                                 when (gpsMeasurement.requestPlatformUpdates()) {
                                     GpsStartResult.STARTED -> collectGpsMeasurement(gpsMeasurement, this@gpsJob)
                                     GpsStartResult.NO_PERMISSION ->
@@ -1132,7 +1147,7 @@ class LocalRaceService : PrimaryRaceService, Service() {
     }
 
     override fun forceStop() {
-        stopForeground(STOP_FOREGROUND_REMOVE)
+        leaveForeground()
         stopSelf()
     }
 

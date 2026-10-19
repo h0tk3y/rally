@@ -180,4 +180,5 @@
     <string name="settingsBatteryOptimizationOn">Оптимизация батареи: включена</string>
     <string name="settingsBatteryOptimizationOff">Оптимизация батареи: отключена для приложения</string>
     <string name="settingsBatteryOptimizationHint">Некоторые устройства останавливают приложения в фоне для экономии батареи, из-за этого может прерваться режим гонки. Отключение оптимизации помогает; у некоторых производителей есть дополнительные настройки, см. советы для устройства.</string>
+    <string name="settingsBtPickerUnavailable">На этом устройстве нет выбора Bluetooth-устройств. Введите MAC-адрес адаптера вручную.</string>
 </resources>
