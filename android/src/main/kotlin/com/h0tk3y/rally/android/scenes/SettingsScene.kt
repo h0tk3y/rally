@@ -30,6 +30,7 @@ import androidx.compose.material.RadioButton
 import androidx.compose.material.Scaffold
 import androidx.compose.material.Switch
 import androidx.compose.material.Text
+import androidx.compose.material.TextButton
 import androidx.compose.material.TopAppBar
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -38,6 +39,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -46,11 +48,21 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import androidx.core.content.IntentCompat
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.viewModelScope
 import com.h0tk3y.rally.R
 import com.h0tk3y.rally.android.PreferenceRepository
 import com.h0tk3y.rally.android.TelemetrySource
+import com.h0tk3y.rally.android.permissions.TelemetryAccessController
+import com.h0tk3y.rally.android.permissions.TelemetryAccessDialogHost
+import com.h0tk3y.rally.android.permissions.hasGpsHardware
+import com.h0tk3y.rally.android.permissions.rememberTelemetryAccessController
+import com.h0tk3y.rally.android.util.isIgnoringBatteryOptimizations
+import com.h0tk3y.rally.android.util.openBatteryOptimizationSettings
+import com.h0tk3y.rally.android.util.openDontKillMyApp
 import com.h0tk3y.rally.android.util.IpAddressDisplay
 import com.h0tk3y.rally.strRound3
 import com.h0tk3y.rally.strRound5
@@ -82,11 +94,14 @@ fun SettingsScene(
         content = { padding ->
 
             val lazyListState = rememberLazyListState()
+            val telemetryAccess = rememberTelemetryAccessController()
+            TelemetryAccessDialogHost(telemetryAccess, onChangeSource = null)
 
             LazyColumn(Modifier.padding(padding), lazyListState, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                item { TelemetrySource(model, calibrateByCurrentDistance) }
+                item { TelemetrySource(model, telemetryAccess, calibrateByCurrentDistance) }
                 item { Allowance(model) }
                 item { SoundFeedback(model) }
+                item { BackgroundReliability() }
             }
         }
     )
@@ -95,9 +110,19 @@ fun SettingsScene(
 @Composable
 private fun LazyItemScope.TelemetrySource(
     model: SettingsViewModel,
+    telemetryAccess: TelemetryAccessController,
     calibrateByCurrentDistance: Double?
 ) {
     val telemetrySource by model.currentTelemetrySource.collectAsState(TelemetrySource.BT_OBD)
+    val btMac by model.currentMacSelection.collectAsState(null)
+    val context = LocalContext.current
+    val hasGps = remember(context) { context.hasGpsHardware() }
+
+    /** Asks for the source's permissions right when the user picks it, rather than later when the race mode starts */
+    fun selectSource(source: TelemetrySource) {
+        model.setTelemetrySource(source)
+        telemetryAccess.runWhenReady(source, btDeviceSelected = !btMac.isNullOrEmpty()) { }
+    }
 
     Text(stringResource(R.string.settingsTelemetrySource), style = MaterialTheme.typography.h6, modifier = Modifier.padding(16.dp))
 
@@ -106,12 +131,19 @@ private fun LazyItemScope.TelemetrySource(
     SettingsRow(
         Modifier
             .fillMaxWidth()
-            .clickable { model.setTelemetrySource(TelemetrySource.GPS) }
+            .clickable(enabled = hasGps) { selectSource(TelemetrySource.GPS) }
     ) {
-        RadioButton(selected = isGps, onClick = null)
+        RadioButton(selected = isGps, onClick = null, enabled = hasGps || isGps)
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(stringResource(R.string.telemetrySourceGps))
             Text(style = MaterialTheme.typography.caption, text = stringResource(R.string.telemetrySourceGpsHint))
+            if (!hasGps) {
+                Text(
+                    style = MaterialTheme.typography.caption,
+                    color = MaterialTheme.colors.error,
+                    text = stringResource(R.string.telemetrySourceGpsUnavailable)
+                )
+            }
         }
     }
     
@@ -120,7 +152,7 @@ private fun LazyItemScope.TelemetrySource(
     SettingsRow(
         Modifier
             .fillMaxWidth()
-            .clickable { model.setTelemetrySource(TelemetrySource.BT_OBD) }
+            .clickable { selectSource(TelemetrySource.BT_OBD) }
     ) {
         RadioButton(selected = isObd, onClick = null)
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -130,7 +162,6 @@ private fun LazyItemScope.TelemetrySource(
     }
     if (isObd) {
         run {
-            val btMac by model.currentMacSelection.collectAsState(null)
             var text by rememberSaveable(btMac) { mutableStateOf(btMac ?: "") }
             Row {
                 Spacer(Modifier.width(48.dp))
@@ -148,8 +179,12 @@ private fun LazyItemScope.TelemetrySource(
                             label = { Text(stringResource(R.string.settingsBtMac)) }
                         )
 
-                        val context = LocalContext.current
-                        IconButton(onClick = { model.pickAndSetBluetoothDevice(context) }) {
+                        IconButton(onClick = {
+                            // Connecting to the picked adapter needs the permission, so ask for it before picking
+                            telemetryAccess.runWhenReady(TelemetrySource.BT_OBD, btDeviceSelected = true) {
+                                model.pickAndSetBluetoothDevice(context)
+                            }
+                        }) {
                             Icon(Icons.AutoMirrored.Rounded.BluetoothSearching, contentDescription = null)
                         }
                     }
@@ -171,7 +206,7 @@ private fun LazyItemScope.TelemetrySource(
     SettingsRow(
         Modifier
             .fillMaxWidth()
-            .clickable { model.setTelemetrySource(TelemetrySource.OUTGAUGE) }
+            .clickable { selectSource(TelemetrySource.OUTGAUGE) }
     ) {
         RadioButton(selected = isOutgauge, onClick = null)
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -218,7 +253,7 @@ private fun LazyItemScope.TelemetrySource(
     }
 
     SettingsRow(
-        Modifier.clickable { model.setTelemetrySource(TelemetrySource.SIMULATION) }
+        Modifier.clickable { selectSource(TelemetrySource.SIMULATION) }
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             RadioButton(selected = telemetrySource == TelemetrySource.SIMULATION, onClick = null)
@@ -416,6 +451,38 @@ fun SoundFeedback(
 }
 
 @Composable
+private fun BackgroundReliability() {
+    val context = LocalContext.current
+    var isExempt by remember { mutableStateOf(context.isIgnoringBatteryOptimizations()) }
+    LifecycleResumeEffect(context) {
+        // The user may have changed it in the system settings
+        isExempt = context.isIgnoringBatteryOptimizations()
+        onPauseOrDispose { }
+    }
+
+    Text(
+        stringResource(R.string.settingsBackgroundReliability),
+        style = MaterialTheme.typography.h6,
+        modifier = Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp)
+    )
+    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            if (isExempt) stringResource(R.string.settingsBatteryOptimizationOff)
+            else stringResource(R.string.settingsBatteryOptimizationOn)
+        )
+        Text(style = MaterialTheme.typography.caption, text = stringResource(R.string.settingsBatteryOptimizationHint))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { context.openBatteryOptimizationSettings() }) {
+                Text(stringResource(R.string.batteryButtonOpenSettings))
+            }
+            TextButton(onClick = { context.openDontKillMyApp() }) {
+                Text(stringResource(R.string.batteryButtonDeviceTips))
+            }
+        }
+    }
+}
+
+@Composable
 private fun SettingsRow(modifier: Modifier = Modifier, content: @Composable RowScope.() -> Unit) {
     Row(
         modifier
@@ -485,17 +552,21 @@ class SettingsViewModel(
         viewModelScope.launch {
             val bluetoothReceiver: BroadcastReceiver = object : BroadcastReceiver() {
                 override fun onReceive(context: Context, intent: Intent) {
-                    viewModelScope.launch {
-                        if (ACTION_BLUETOOTH_SELECTED == intent.action) {
-                            @Suppress("DEPRECATION") 
-                            val device = intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
-                            setBtMac(device?.address)
-                        }
+                    if (ACTION_BLUETOOTH_SELECTED == intent.action) {
+                        context.unregisterReceiver(this)
+                        val device = IntentCompat.getParcelableExtra(intent, BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+                        setBtMac(device?.address)
                     }
                 }
             }
 
-            context.registerReceiver(bluetoothReceiver, IntentFilter(ACTION_BLUETOOTH_SELECTED))
+            // The picker is a part of the system, so the receiver must be exported; Android 14+ throws if this is not specified
+            ContextCompat.registerReceiver(
+                context.applicationContext,
+                bluetoothReceiver,
+                IntentFilter(ACTION_BLUETOOTH_SELECTED),
+                ContextCompat.RECEIVER_EXPORTED
+            )
             val bluetoothPicker = Intent("android.bluetooth.devicepicker.action.LAUNCH")
             context.startActivity(bluetoothPicker)
         }

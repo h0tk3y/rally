@@ -6,7 +6,6 @@ import androidx.compose.material.Surface
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -147,12 +146,6 @@ fun App(
                                 onDispose(connection::disconnectIfConnected)
                             }
 
-                            if (withRace) {
-                                LaunchedEffect(sectionId) {
-                                    model.enterRaceMode()
-                                }
-                            }
-
                             val sectionOps = object : SectionOperations {
                                 override fun deleteThisSection() {
                                     database.deleteSectionById(sectionId)
@@ -184,6 +177,7 @@ fun App(
                                 model = model,
                                 emptySectionView = { Text(stringResource(R.string.noSectionData)) },
                                 onGoToSettings = { navigation.navigateTo(SettingsScene(it)) },
+                                startInRaceMode = withRace,
                             )
                         }
 
