@@ -87,6 +87,7 @@ import com.h0tk3y.rally.android.racecervice.TelemetryPublicState
 import com.h0tk3y.rally.android.scenes.RaceModelControls
 import com.h0tk3y.rally.android.scenes.RaceUiState
 import com.h0tk3y.rally.android.scenes.RaceUiState.RaceNotStarted
+import com.h0tk3y.rally.android.SpeedButtons
 import com.h0tk3y.rally.android.scenes.TimeAllowance
 import com.h0tk3y.rally.android.theme.LocalCustomColorsPalette
 import com.h0tk3y.rally.android.theme.LocalCustomTypography
@@ -596,6 +597,7 @@ private fun RaceControls(
     addPositionMaybeWithSpeed: (SpeedKmh?) -> Unit
 ) {
     val hapticFeedback = LocalHapticFeedback.current
+    val speedButtons by raceControls.speedButtons.collectAsState()
     when (race) {
         RaceNotStarted -> {
             GoRow(selectedPosition, hapticFeedback, raceControls::startRace, keepOdo = false)
@@ -603,6 +605,7 @@ private fun RaceControls(
             if (showRememberedSpeedControls) {
                 RaceViewElement {
                     NewSpeedLimits(
+                        speedButtons,
                         withClearButton = true,
                         applyLimit = { raceControls.setRememberSpeed(it) },
                         percent = speedLimitPercent,
@@ -615,6 +618,7 @@ private fun RaceControls(
         is RaceUiState.RaceGoing -> {
             RaceViewElement {
                 NewSpeedLimits(
+                    speedButtons,
                     false,
                     {
                         raceControls.setRememberSpeed(it)
@@ -668,6 +672,7 @@ private fun RaceControls(
             if (showRememberedSpeedControls) {
                 RaceViewElement {
                     NewSpeedLimits(
+                        speedButtons,
                         withClearButton = true,
                         applyLimit = { raceControls.setRememberSpeed(it) },
                         percent = speedLimitPercent,
@@ -866,10 +871,9 @@ fun StateSwitchButtonsRow(content: @Composable RowScope.() -> Unit) {
 private fun distanceString(distance: DistanceKm) = distance.valueKm.strRound3Exact()
 private fun deltaDistanceString(distance: DistanceKm) = (if (distance.valueKm > 0) "+" else "") + distance.valueKm.strRound3Exact()
 
-private val speedLimitValues: List<Int> = listOf(5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110)
-
 @Composable
 private fun NewSpeedLimits(
+    speedButtons: List<Int>,
     withClearButton: Boolean,
     applyLimit: (SpeedKmh?) -> Unit,
     percent: String?,
@@ -943,7 +947,9 @@ private fun NewSpeedLimits(
                     applyLimit(speedKmh?.valueKmh?.let(::makeSpeed))
                 })
 
-                speedLimitValues.forEach { limit ->
+                // The view model never gives an empty list, but the panel must not lose its buttons if it ever does.
+                // The same speed may be there more than once, so the speeds must not be used as keys if keys are ever added here.
+                speedButtons.ifEmpty { SpeedButtons.DEFAULT }.forEach { limit ->
                     SpeedLimitButton("$limit", limit.toDouble()) { speedKmh ->
                         applyLimit(speedKmh?.valueKmh?.let(::makeSpeed))
                     }

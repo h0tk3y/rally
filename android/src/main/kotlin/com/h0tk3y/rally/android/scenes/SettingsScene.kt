@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
+import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -60,6 +61,10 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.viewModelScope
 import com.h0tk3y.rally.R
 import com.h0tk3y.rally.android.PreferenceRepository
+import com.h0tk3y.rally.android.SpeedButtons
+import com.h0tk3y.rally.android.SpeedButtonsParseResult
+import com.h0tk3y.rally.android.encodeSpeedButtons
+import com.h0tk3y.rally.android.parseSpeedButtonsInput
 import com.h0tk3y.rally.android.TelemetrySource
 import com.h0tk3y.rally.android.permissions.AccessPurpose
 import com.h0tk3y.rally.android.permissions.TelemetryAccessController
@@ -72,6 +77,7 @@ import com.h0tk3y.rally.android.util.openDontKillMyApp
 import com.h0tk3y.rally.android.util.IpAddressDisplay
 import com.h0tk3y.rally.strRound3
 import com.h0tk3y.rally.strRound5
+import java.io.IOException
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -114,6 +120,7 @@ fun SettingsScene(
                 item { TelemetrySource(model, telemetryAccess, calibrateByCurrentDistance) }
                 item { Allowance(model) }
                 item { SoundFeedback(model) }
+                item { SpeedButtonsSetting(model) }
                 item { BackgroundReliability() }
             }
         }
@@ -468,6 +475,80 @@ fun SoundFeedback(
 }
 
 @Composable
+private fun SpeedButtonsSetting(model: SettingsViewModel) {
+    // Not keyed by the saved value: it lags behind the typing and would reset the field mid-word (e.g. drop a trailing comma).
+    // When the settings are opened again, the field shows the saved list, so a rejected input is not shown again.
+    var text by rememberSaveable { mutableStateOf<String?>(null) }
+    if (text == null) {
+        LaunchedEffect(Unit) { text = encodeSpeedButtons(model.speedButtons.first()) }
+    }
+    val savedSpeeds by model.speedButtons.collectAsState(null)
+    // No "Saved" line for the value the field was filled with, only after the user changes it (or presses "Default")
+    var isEdited by rememberSaveable { mutableStateOf(false) }
+    val currentText = text ?: return
+    val result = parseSpeedButtonsInput(currentText)
+
+    fun onChange(newText: String) {
+        text = newText
+        isEdited = true
+        // Only a valid list is saved; the race panel keeps the last valid one meanwhile
+        (parseSpeedButtonsInput(newText) as? SpeedButtonsParseResult.Valid)?.let { model.setSpeedButtons(it.speeds) }
+    }
+
+    Column(
+        Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(stringResource(R.string.settingsSpeedButtons))
+        Text(style = MaterialTheme.typography.caption, text = stringResource(R.string.settingsSpeedButtonsHint))
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(
+                modifier = Modifier.weight(1f),
+                value = currentText,
+                singleLine = true,
+                onValueChange = ::onChange,
+                isError = result is SpeedButtonsParseResult.Invalid,
+                label = { Text(stringResource(R.string.settingsSpeedButtonsField)) }
+            )
+            TextButton(
+                enabled = result != SpeedButtonsParseResult.Valid(SpeedButtons.DEFAULT),
+                onClick = { onChange(encodeSpeedButtons(SpeedButtons.DEFAULT)) }
+            ) {
+                Text(stringResource(R.string.settingsSpeedButtonsDefault))
+            }
+        }
+        when (result) {
+            is SpeedButtonsParseResult.Valid -> {
+                // Checked against the stored value read back, so a save that failed or has not completed yet is not reported as done
+                if (isEdited && savedSpeeds == result.speeds) {
+                    Text(
+                        style = MaterialTheme.typography.caption,
+                        text = stringResource(R.string.settingsSpeedButtonsSaved, encodeSpeedButtons(result.speeds))
+                    )
+                }
+            }
+
+            is SpeedButtonsParseResult.Invalid -> {
+                val error = when (result) {
+                    SpeedButtonsParseResult.Empty -> stringResource(R.string.speedButtonsErrorEmpty)
+                    is SpeedButtonsParseResult.NotAWholeNumber -> stringResource(R.string.speedButtonsErrorNotAWholeNumber, result.token)
+                    is SpeedButtonsParseResult.OutOfRange -> stringResource(R.string.speedButtonsErrorOutOfRange, result.token, SpeedButtons.MAX_SPEED)
+                    is SpeedButtonsParseResult.TooMany -> stringResource(R.string.speedButtonsErrorTooMany, result.count, SpeedButtons.MAX_COUNT)
+                }
+                Text(text = error, color = MaterialTheme.colors.error, style = MaterialTheme.typography.caption)
+                savedSpeeds?.let {
+                    Text(
+                        text = stringResource(R.string.speedButtonsNotSaved, encodeSpeedButtons(it)),
+                        color = MaterialTheme.colors.error,
+                        style = MaterialTheme.typography.caption
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun BackgroundReliability() {
     val context = LocalContext.current
     var isExempt by remember { mutableStateOf(context.isIgnoringBatteryOptimizations()) }
@@ -522,6 +603,7 @@ class SettingsViewModel(
     val currentAllowance = prefs.userPreferencesFlow.map { it.allowance }
     val currentCalibration = prefs.userPreferencesFlow.map { it.calibration }
     val outgaugePort = prefs.userPreferencesFlow.map { it.outgaugePort }
+    val speedButtons = prefs.userPreferencesFlow.map { it.speedButtons }
 
     fun setTelemetrySource(newTelemetrySource: TelemetrySource) {
         viewModelScope.launch {
@@ -562,6 +644,17 @@ class SettingsViewModel(
     fun setOutgaugePort(port: Int) {
         viewModelScope.launch {
             prefs.saveOutgaugePort(port)
+        }
+    }
+
+    fun setSpeedButtons(speeds: List<Int>) {
+        viewModelScope.launch {
+            try {
+                prefs.saveSpeedButtons(speeds)
+            } catch (e: IOException) {
+                // The stored value stays as it was; the settings field does not show it as saved
+                Log.w("SettingsViewModel", "Failed to save the speed buttons", e)
+            }
         }
     }
 
