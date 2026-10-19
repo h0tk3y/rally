@@ -61,6 +61,21 @@ def back():
     sh("input", "keyevent", "KEYCODE_BACK"); wait(0.8)
 
 
+def back_to_list():
+    """Presses Back until the section list shows: the first Back may only close the keyboard."""
+    for _ in range(3):
+        if match(SECTIONS["cal"]):  # only the list shows it; a section shows its own name in the title
+            return
+        back()
+    sys.exit("could not get back to the section list")
+
+
+def hide_keyboard():
+    """Presses Back only if the keyboard is shown: otherwise Back would leave the screen."""
+    if "mInputShown=true" in sh("dumpsys", "input_method"):
+        back()
+
+
 def shot(name):
     """Saves the screen to raw/<name>.png and its UI tree to raw/<name>.xml (annotate.py finds the elements in it)."""
     os.makedirs(ui.OUT, exist_ok=True)
@@ -193,6 +208,7 @@ def setup_device(font_scale="0.85"):
     demo("notifications", visible="false")
     demo("status", sync="hide", alarm="hide", location="hide")
     sh("cmd", "locale", "set-app-locales", PKG, "--locales", ui.LOCALE)
+    sh("dumpsys", "deviceidle", "whitelist", "+" + PKG)  # exempt from battery optimization: no one-time battery hint
     for p in ["ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION", "BLUETOOTH_CONNECT", "BLUETOOTH_SCAN", "POST_NOTIFICATIONS"]:
         sh("pm", "grant", PKG, "android.permission." + p)
 
@@ -206,8 +222,8 @@ def configure_for_race():
     sh("input", "swipe", "540", "1800", "540", "900", "300"); wait(0.8)
     tap(S("allowanceT10Down"))
     last = len(edit_texts()) - 1
-    clear(last); fill(last, "127.0.0.1"); back()
-    back()  # leave Settings
+    clear(last); fill(last, "127.0.0.1")
+    back_to_list()
 
 
 def open_race(hms, tc1):
@@ -230,7 +246,7 @@ def remember_speed(kmh):
     """Sets the speed of the next regularity with the v button; returns with the row of speeds open."""
     tap(S("vSpeedButton")); tap("=" + S("perHourSuffix") + " →"); sh("input", "text", str(kmh)); wait(0.5)
     tap(str(kmh), 0)  # the round button next to the field
-    back()  # hide the keyboard
+    hide_keyboard()
 
 
 # The series ----------------------------------------------------------------------------------------------------------
@@ -240,7 +256,7 @@ def series_settings():
     tap(S("showMenu")); tap(S("settings")); wait(1)
     tap(S("telemetrySourceObd"))
     clear(0); fill(0, "00:1D:A5:68:98:8B")
-    clear(1); fill(1, "1.018"); back(); tap(S("saveButton"))
+    clear(1); fill(1, "1.018"); hide_keyboard(); tap(S("saveButton"))
     back(); tap(S("showMenu")); tap(S("settings")); wait(1)  # reopen, so that no field has the focus
     shot("10-settings-obd")
     back()
@@ -253,7 +269,7 @@ def series_list():
     tap(S("createSection")); wait(1)
     if SECTIONS["new"]:
         fill(0, SECTIONS["new"])
-    fill(1, "28.6"); fill(2, "0:38"); fill(4, "12:05"); back()
+    fill(1, "28.6"); fill(2, "0:38"); fill(4, "12:05"); hide_keyboard()
     shot("04-create-section")
     tap(S("cancel"))
 
@@ -293,7 +309,6 @@ def series_regularity():
     goto(14.0, "10:30:02"); wait(2)
     shot("06-regularity")
     swipe_speed_row()
-    shot("06-speed-buttons")
     goto(17.3, "10:35:32"); tap("40")
     slider(38)
     goto(21.05, "10:41:10"); tap("30")
@@ -316,10 +331,13 @@ def series_end():
     slider(70)
     goto(33.75, "10:56:32")
     tap("40.0", -1)
-    back(); wait(1)
+    back_to_list()
     tap(S("showMenu")); tap(S("driverHud")); wait(3)  # the driver's device address is 127.0.0.1: this device
     shot("11-driver-hud")
-    back(); wait(1)
+    tap(S("showMenu")); tap(S("buttonSwapListAndRacePanel")); wait(1.5)
+    shot("11-driver-hud-swapped")
+    tap(S("showMenu")); tap(S("buttonSwapListAndRacePanel")); wait(1)  # the choice is saved: swap back
+    back_to_list()
     tap(SECTIONS["tc1"]); wait(1)
     goto(40.0, "11:01:58")
     tap(S("raceButtonStop")); wait(1)
@@ -357,6 +375,8 @@ def series_hero():
     goto(12.4, "10:27:22")
     tap(S("nowAtPosition", "12.4"), 0)
     slider(36)
+    goto(13.0, "10:28:22"); wait(1)
+    shot("06-speed-buttons")  # the tablet fits all the speed fields
     swipe_speed_row()
     goto(14.6, "10:31:02"); tap(S("buttonAddPassedPosition"))
     goto(16.1, "10:33:32"); tap(S("buttonAddPassedPosition"))
@@ -366,7 +386,7 @@ def series_hero():
     goto(22.6, "10:44:16"); tap(S("buttonAddPassedPosition"))
     # The road book: 80% of the speed limit from here; the sign says 50, so 40 km/h.
     goto(23.4, "10:45:52")
-    tap("100%"); sh("input", "text", "80"); back()
+    tap("100%"); sh("input", "text", "80"); hide_keyboard()
     tap("50")
     goto(24.85, "10:48:02")
     tap(S("raceButtonFinishRace")); wait(1)
@@ -383,7 +403,7 @@ def series_editor():
         xy(*KEY_DOWN)  # from 0.0 down to 21.05, with the keys: a tap would show the cursor handle
     shot("16-editor")
     tap(S("buttonCalculate"))
-    back(); wait(1)
+    back_to_list()
     # An error: ADD after the last position gives a position at 0.0 after 36.8.
     tap(SECTIONS["tc2"]); wait(1)
     tap(S("buttonEdit")); wait(0.6)
@@ -399,13 +419,13 @@ DEVICES = {  # the emulators, see README.md; override with RALLY_PHONE and RALLY
 TABLET_SERIES = {"hero"}  # every other series runs on the phone
 
 SERIES = {  # name: (function, the screenshots it captures)
-    "hero": (series_hero, ["00-hero"]),
+    "hero": (series_hero, ["06-speed-buttons", "00-hero"]),
     "settings": (series_settings, ["10-settings-obd"]),
     "list": (series_list, ["01-section-list", "04-create-section"]),
     "start": (series_start, ["06-race-not-started", "06-countdown"]),
     "liaison": (series_liaison, ["06-v-remembered", "06-section-timer"]),
-    "regularity": (series_regularity, ["06-regularity", "06-speed-buttons", "06-finished", "06-event-log"]),
-    "end": (series_end, ["11-driver-hud", "06-stopped", "14-section-times", "05-menu-race-on",
+    "regularity": (series_regularity, ["06-regularity", "06-finished", "06-event-log"]),
+    "end": (series_end, ["11-driver-hud", "11-driver-hud-swapped", "06-stopped", "14-section-times", "05-menu-race-on",
                          "05-section-rows", "06-backwards", "06-distance-edit", "06-landscape"]),
     "editor": (series_editor, ["16-editor", "15-error"]),
 }

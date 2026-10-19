@@ -265,14 +265,14 @@ def row_anatomy():
         dist = s.find(rx=rx, cls="EditText")
         row_y = (dist.y0, dist.y1)
         if parts == "first":
-            marks_ = [mark(1, dist),
-                      mark(2, union(s.find(rx=re.escape(S("labelThenAvg", "")) + r"\d", y=row_y), s.find(text="40.0", cls="EditText", y=row_y))),
-                      mark(4, union(*[s.find(rx=r"\d\d:\d\d", y=row_y, idx=k) for k in (0, 1)])),
-                      mark(5, s.find(rx=r"\d\d:\d\d:\d\d", y=row_y)),
-                      mark(6, s.find(rx=r"-\d", y=row_y))]
+            marks_ = [mark(1, dist, False),
+                      mark(2, union(s.find(rx=re.escape(S("labelThenAvg", "")) + r"\d", y=row_y), s.find(text="40.0", cls="EditText", y=row_y)), False),
+                      mark(4, union(*[s.find(rx=r"\d\d:\d\d", y=row_y, idx=k) for k in (0, 1)]), False),
+                      mark(5, s.find(rx=r"\d\d:\d\d:\d\d", y=row_y), False),
+                      mark(6, s.find(rx=r"-\d", y=row_y), False)]
         else:
-            marks_ = [mark(3, s.find(rx=r"➠.*", y=row_y))]
-        imgs.append(render(s, Box(0, dist.y0 - 6, 1080, dist.y1 + 6), marks_, f"rows-{i}", top=72,
+            marks_ = [mark(3, s.find(rx=r"➠.*", y=row_y), False)]
+        imgs.append(render(s, Box(0, dist.y0 + 4, 1080, dist.y1 - 4), marks_, f"rows-{i}", top=72,
                            sides=("above",), side_margin=False))
     mg(*imgs, "-append", t("rows"))
     save(t("rows"), "row-anatomy", 50)
@@ -287,16 +287,12 @@ def section_menu():
 
 
 def timers():
-    """The clock row of the section timer and of the regularity timer, side by side."""
-    cells = []
-    for name, desc, cap in (("06-section-timer", S("raceStatusSectionGoing"), CAPTIONS["section_timer"]),
-                            ("06-regularity", S("raceStatusRaceGoing"), CAPTIONS["regularity_timer"])):
+    """The clock row of each timer, as two pictures that the guide shows side by side in a table."""
+    for name, desc, out in (("06-section-timer", S("raceStatusSectionGoing"), "timer-section"),
+                            ("06-regularity", S("raceStatusRaceGoing"), "timer-regularity")):
         s = Screen(name)
         icon, clock, early, dist = panel_parts(s, desc)
-        c = render(s, Box(0, clock.y0 - 16, 1080, clock.y1 + 16), [], "timer-" + name)
-        cells.append(border(caption(c, cap, t("timer-c-" + name)), t("timer-b-" + name)))
-    mg(cells[0], cells[1], "+append", t("timers"))
-    save(t("timers"), "timers", 40)
+        save(render(s, Box(0, clock.y0 - 16, 1080, clock.y1 + 16), [], out), out, 40)
 
 
 def panel_parts(s, timer_desc):
@@ -335,12 +331,21 @@ def race_panel_regularity():
 
 
 def speed_buttons():
+    """From the tablet, where the whole row of speed fields fits; the badges go above, clear of the × sign."""
     s = Screen("06-speed-buttons")
+    exact = s.find(text="=" + S("perHourSuffix") + " →", button=True)
+    row_y = (exact.y0, exact.y1)
+    def round_button_right_of(field):
+        return min((n["box"] for n in s.nodes if n["click"] and n["box"].x0 > field.x1 and row_y[0] <= n["box"].cy <= row_y[1]),
+                   key=lambda b: b.x0)
+    any_speed = s.find(text=S("perHourSuffix") + " →", button=True)
     percent = s.find(text="100%", button=True)
-    buttons = union(*[s.find(text=str(v), button=True) for v in (20, 30, 40, 50, 60)])
-    buttons = Box(buttons.x0, buttons.y0, 1080, buttons.y1)
-    save(render(s, band(s, percent, percent, margin=14), [mark(1, percent), mark(2, buttons)], "speeds", top=30),
-         "speed-buttons", 50)
+    speeds = union(*[s.find(text=str(v), button=True) for v in (5, 10, 20) if s.nodes])
+    speeds = Box(speeds.x0, speeds.y0, max(n["box"].x1 for n in s.nodes if row_y[0] <= n["box"].cy <= row_y[1]), speeds.y1)
+    marks_ = [mark(1, exact | round_button_right_of(exact)), mark(2, percent),  # numbered left to right
+              mark(3, any_speed | round_button_right_of(any_speed)), mark(4, speeds)]
+    crop = Box(exact.x0 - 20, exact.y0 - 20, max(n["box"].x1 for n in s.nodes), exact.y1 + 20)
+    save(render(s, crop, marks_, "speeds", top=72, sides=("above",), side_margin=False), "speed-buttons", 45)
 
 
 def remembered_speed():
@@ -432,57 +437,59 @@ def settings_obd():
 def driver_hud():
     s = Screen("11-driver-hud")
     data = s.find(rx=re.escape(S("telemetryData").strip()) + r"\s*✔")
-    last_row = s.find(text="40.0", cls="EditText", idx=-1)
-    speed = s.find(rx=r"v=.*")
-    top = render(s, Box(0, 75, 1080, last_row.y1 + 10), [], "hud-list")
-    bottom = render(s, band(s, data, speed, margin=20), [mark(1, data, False)], "hud-panel")
-    mg(top, "-size", "1080x24", "xc:#eeeeee", bottom, "-append", t("hud"))
-    save(t("hud"), "driver-hud", 45)
+    save(render(s, Box(0, 75, 1080, 2330), [mark(1, data, False)], "hud"), "driver-hud", 40)
+
+
+def driver_hud_swapped():
+    s = Screen("11-driver-hud-swapped")
+    save(render(s, Box(0, 75, 1080, 2330), [], "hud-swapped"), "driver-hud-swapped", 40)
 
 
 def section_times():
-    imgs = []
-    for name, cap in (("05-section-rows", CAPTIONS["hidden"]),
-                      ("14-section-times", CAPTIONS["open"])):
+    """The same rows with the race panel hidden and open, as two pictures for a table."""
+    for name, out in (("05-section-rows", "section-times-normal"), ("14-section-times", "section-times-section")):
         s = Screen(name)
         first = s.find(text="0.0", cls="EditText")
         last = s.find(text="40.0", cls="EditText", idx=-1)
-        imgs.append(caption(render(s, Box(0, first.y0 - 8, 1080, last.y1 + 8), [], "times-" + name), cap,
-                            t("times-c-" + name)))
-    mg(border(imgs[0], t("times-l")), border(imgs[1], t("times-r")), "+append", t("times"))
-    save(t("times"), "section-times", 40)
+        save(render(s, Box(0, first.y0 - 8, 1080, last.y1 + 8), [], out), out, 40)
 
 
 def race_states():
-    """Four states of the race panel, without the simulation slider: it is only there for practice."""
+    """Four states of the race panel, as four pictures of the same height for a table; without the simulation slider."""
     crops = []
-    for i, (name, cap) in enumerate((("06-race-not-started", CAPTIONS["not_started"]), ("06-section-timer", CAPTIONS["section_runs"]),
-                                     ("06-regularity", CAPTIONS["regularity_runs"]), ("06-stopped", CAPTIONS["stopped"]))):
+    for name, out in (("06-race-not-started", "race-state-not-started"), ("06-section-timer", "race-state-section-timer"),
+                      ("06-regularity", "race-state-regularity"), ("06-stopped", "race-state-stopped")):
         s = Screen(name)
         toolbar = s.find(desc=S("eventLog"), button=True)
         sim = s.row(s.find(text=S("simulateSpeedPrefix")))
         above = [n["box"] for n in s.nodes if (n["text"] or n["desc"] or n["click"]) and toolbar.y0 <= n["box"].y0
                  and n["box"].y1 <= sim.y0 and n["box"].x1 - n["box"].x0 < 1000]
-        crops.append((render(s, band(s, toolbar, union(*above)), [], f"state-{i}"), cap))
+        crops.append((render(s, band(s, toolbar, union(*above)), [], out), out))
     height = max(int(subprocess.run(["magick", "identify", "-format", "%h", c], capture_output=True, text=True).stdout)
                  for c, _ in crops)
-    cells = []
-    for i, (c, cap) in enumerate(crops):
+    for c, out in crops:
         mg(c, "-background", "white", "-gravity", "south", "-extent", f"1080x{height}", c)
-        cells.append(border(caption(c, cap, t(f"state-c-{i}")), t(f"state-b-{i}")))
-    mg(cells[0], cells[1], "+append", t("states-1"))
-    mg(cells[2], cells[3], "+append", t("states-2"))
-    mg(t("states-1"), t("states-2"), "-append", t("states"))
-    save(t("states"), "race-states", 40)
+        save(c, out, 40)
+
+
+def snap_to_color(png, box, color, x=1000, reach=80):
+    """The vertical extent of `color` at column x near `box`: the UI tree can be a few pixels off the screenshot."""
+    out = subprocess.run(["magick", png, "-crop", f"1x{box.y1 - box.y0 + 2 * reach}+{x}+{box.y0 - reach}", "+repage",
+                          "txt:-"], capture_output=True, text=True).stdout
+    ys = [box.y0 - reach + int(m.group(1)) for m in re.finditer(r"^0,(\d+):.*#" + color, out, re.M)]
+    return Box(box.x0, min(ys), box.x1, max(ys) + 1) if ys else box
 
 
 def editor():
     s = Screen("16-editor")
     calc = s.find(text=S("buttonCalculate"), button=True)
-    selected = s.row([n["box"] for n in s.nodes if n["focused"] and n["cls"] == "EditText"][0])
-    selected = Box(0, selected.y0, 1080, selected.y1)
+    focused = [n["box"] for n in s.nodes if n["focused"] and n["cls"] == "EditText"][0]
+    # The row itself: the text fields in a row are taller than the row, so frame the row's own clickable container.
+    selected = min((n["box"] for n in s.nodes if n["click"] and n["box"].x1 - n["box"].x0 > 900
+                    and n["box"].y0 <= focused.cy <= n["box"].y1), key=Box.area)
+    selected = snap_to_color(s.png, selected, "FFFFCC")  # the yellow of the selected row
     keypad = union(s.find(text=S("keyRemove"), button=True), s.find(text="0", button=True))
-    keypad = Box(0, keypad.y0 - 20, 1080, 2320)
+    keypad = Box(12, keypad.y0 - 20, 1068, 2320)
     marks_ = [mark(1, calc, False), mark(2, selected), mark(3, keypad)]
     save(render(s, Box(0, 75, 1080, 2330), marks_, "editor"), "editor", 40)
 
@@ -499,5 +506,5 @@ if __name__ == "__main__":
   text_badges()
   for f in (hero, section_list, create_section, section_screen, row_anatomy, section_menu, timers, race_panel, race_panel_regularity,
           speed_buttons, remembered_speed, regularity_finished, distance_edit, backwards, countdown, event_log,
-          landscape, error, settings_obd, driver_hud, section_times, race_states, editor):
+          landscape, error, settings_obd, driver_hud, driver_hud_swapped, section_times, race_states, editor):
       f()
