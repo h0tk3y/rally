@@ -1,12 +1,8 @@
 package com.h0tk3y.rally.android.scenes
 
 import android.content.ClipData
-import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.media.MediaPlayer
-import android.widget.Toast
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -52,6 +48,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -63,7 +60,6 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.core.app.ActivityCompat
 import com.h0tk3y.rally.InputToTextSerializer
 import com.h0tk3y.rally.LineNumber
 import com.h0tk3y.rally.PositionLine
@@ -78,8 +74,13 @@ import com.h0tk3y.rally.SpeedKmh
 import com.h0tk3y.rally.SubsMatch
 import com.h0tk3y.rally.android.LoadState
 import com.h0tk3y.rally.android.db.SectionInsertOrRenameResult
-import com.h0tk3y.rally.android.permissions.RequiredPermissions
+import com.h0tk3y.rally.android.permissions.AccessPurpose
+import com.h0tk3y.rally.android.permissions.TelemetryAccessDialogHost
+import com.h0tk3y.rally.android.permissions.rememberTelemetryAccessController
 import com.h0tk3y.rally.android.racecervice.TelemetryPublicState
+import com.h0tk3y.rally.android.util.BatteryOptimizationHintDialog
+import com.h0tk3y.rally.android.util.isIgnoringBatteryOptimizations
+import com.h0tk3y.rally.android.util.openBatteryOptimizationSettings
 import com.h0tk3y.rally.android.scenes.DataKind.AstroTime
 import com.h0tk3y.rally.android.scenes.DataKind.AverageSpeed
 import com.h0tk3y.rally.android.scenes.DataKind.Distance
@@ -92,6 +93,7 @@ import com.h0tk3y.rally.android.views.RaceView
 import com.h0tk3y.rally.formatPercentage
 import com.h0tk3y.rally.modifier
 import com.h0tk3y.rally.strRound3
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 interface SectionOperations {
@@ -110,6 +112,7 @@ fun SectionScene(
     model: CommonSectionViewModel,
     emptySectionView: @Composable () -> Unit,
     onGoToSettings: (calibrateFromCurrentDistance: Double?) -> Unit,
+    startInRaceMode: Boolean = false,
 ) {
     val section by model.section.collectAsState(LoadState.LOADING)
     val positions by model.inputPositions.collectAsState(emptyList())
@@ -223,17 +226,77 @@ fun SectionScene(
     val showRaceModeFab = !isLargeScreen && !editorState.isEnabled && !raceUiVisible && model is RaceModelControls
 
     val context = LocalContext.current
-    val launchServiceAfterObtainingPermission = permissionRequester(whenObtained = {
-        (model as? RaceModelControls)?.enterRaceMode()
-    }, whenFailedToObtain = {
-        Toast.makeText(context, context.getString(R.string.toastGrantPermission), Toast.LENGTH_LONG).show()
-    })
+    val coroutineScope = rememberCoroutineScope()
+    var showBatteryHint by rememberSaveable { mutableStateOf(false) }
+    val telemetryAccess = rememberTelemetryAccessController(
+        onReady = { purpose ->
+            if (purpose == AccessPurpose.ENTER_RACE_MODE && model is RaceModelControls) {
+                model.enterRaceMode()
+                if (model is BatteryHintControls) {
+                    coroutineScope.launch {
+                        showBatteryHint = model.consumeBatteryHint(context.isIgnoringBatteryOptimizations())
+                    }
+                }
+            }
+        },
+        onAccessMaybeGranted = { (model as? RaceModelControls)?.recheckTelemetryAccess() }
+    )
+    val goToSettings = { onGoToSettings((raceState as? RaceUiState.HasRaceModel)?.raceModel?.currentDistance?.valueKm) }
+
+    TelemetryAccessDialogHost(telemetryAccess, onChangeSource = goToSettings)
+
+    val explainTelemetryProblem: (TelemetryPublicState) -> Unit = { state ->
+        if (model is RaceModelControls) {
+            coroutineScope.launch {
+                telemetryAccess.explain(model.telemetrySource.first(), state)
+            }
+        }
+    }
+
+    // A permission can go missing after the race mode has started, e.g. when the user sets up an OBD adapter in the settings.
+    // The status in the race panel is easy to miss, so explain it once per screen.
+    var explainedMissingPermission by rememberSaveable { mutableStateOf(false) }
+    val isMissingPermission = telemetryState == TelemetryPublicState.BtNoPermissions || telemetryState == TelemetryPublicState.GpsNoPermissions
+    if (isMissingPermission && raceUiVisible && !explainedMissingPermission) {
+        LaunchedEffect(Unit) {
+            explainedMissingPermission = true
+            explainTelemetryProblem(telemetryState)
+        }
+    }
+    if (showBatteryHint) {
+        BatteryOptimizationHintDialog(
+            onOpenSettings = {
+                showBatteryHint = false
+                context.openBatteryOptimizationSettings()
+            },
+            onDismiss = { showBatteryHint = false }
+        )
+    }
+
+    /** All the ways into the race mode start the race service only after checking the permissions of the telemetry source */
+    val launchServiceAfterObtainingPermission: () -> Unit = {
+        if (model is RaceModelControls) {
+            coroutineScope.launch {
+                telemetryAccess.runWhenReady(model.telemetrySource.first(), AccessPurpose.ENTER_RACE_MODE)
+            }
+        }
+    }
 
     val onStartRaceMode: () -> Unit = {
         if (raceState is RaceUiState.NoRaceServiceConnection) {
             launchServiceAfterObtainingPermission()
         } else {
             (model as? RaceModelControls)?.enterRaceMode()
+        }
+    }
+
+    // Opened from the race panel of another section. Enter the race mode only once: not again after a rotation, and not after
+    // the process was killed, since the race service and its in-memory state are gone then.
+    var startedInRaceMode by rememberSaveable { mutableStateOf(false) }
+    if (startInRaceMode && !startedInRaceMode) {
+        LaunchedEffect(Unit) {
+            startedInRaceMode = true
+            onStartRaceMode()
         }
     }
 
@@ -472,7 +535,7 @@ fun SectionScene(
                         Divider()
                     }
                     DropdownMenuItem(onClick = {
-                        onGoToSettings((raceState as? RaceUiState.HasRaceModel)?.raceModel?.currentDistance?.valueKm)
+                        goToSettings()
                         showMenu = false
                     }) {
                         Icon(Icons.Default.Settings, stringResource(R.string.settings))
@@ -542,10 +605,9 @@ fun SectionScene(
                 navigateToSection = { sectionOps?.navigateToNewSection(it, true) },
                 goToEventLog = sectionOps?.let { it::navigateToEventLog },
                 goToSettings = {
-                    if (model is RaceModelControls)
-                        onGoToSettings((raceState as? RaceUiState.HasRaceModel)?.raceModel?.currentDistance?.valueKm)
-                    else null
+                    if (model is RaceModelControls) goToSettings()
                 },
+                onTelemetryAccessProblem = explainTelemetryProblem,
                 modifier = keyboardModifier,
                 addPositionMaybeWithSpeed = { speed ->
                     val currentRaceState = raceState
@@ -614,25 +676,6 @@ fun SectionScene(
             bottomPanel(keyboardModifier)
         }
     }
-}
-
-@Composable
-private fun permissionRequester(
-    whenObtained: () -> Unit,
-    whenFailedToObtain: () -> Unit
-): () -> Unit {
-    val context = LocalContext.current
-
-    val permissions = RequiredPermissions.permissionsForRaceService(context)
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
-        if (permissions.all { ActivityCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED }) {
-            whenObtained()
-        } else {
-            whenFailedToObtain()
-        }
-    }
-
-    return { launcher.launch(permissions) }
 }
 
 interface EditorControls {

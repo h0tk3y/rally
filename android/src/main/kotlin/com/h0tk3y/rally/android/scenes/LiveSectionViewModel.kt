@@ -7,6 +7,7 @@ import com.h0tk3y.rally.*
 import com.h0tk3y.rally.PositionLineModifier.*
 import com.h0tk3y.rally.android.LoadState
 import com.h0tk3y.rally.android.PreferenceRepository
+import com.h0tk3y.rally.android.TelemetrySource
 import com.h0tk3y.rally.android.db.DatabaseOperations
 import com.h0tk3y.rally.android.racecervice.CommonRaceService
 import com.h0tk3y.rally.android.racecervice.PrimaryRaceService
@@ -154,7 +155,14 @@ abstract class StatefulSectionViewModel(
 
 
 interface RaceModelControls {
+    /** The telemetry source of the race service; the race mode should only be entered when the source has its permissions */
+    val telemetrySource: Flow<TelemetrySource>
+
+    /** Enters the race mode, starting the race service if needed. Check the permissions of [telemetrySource] first. */
     fun enterRaceMode()
+
+    /** Retries the telemetry source if it was blocked by a missing permission that might have been granted now */
+    fun recheckTelemetryAccess()
     fun startRace(startOption: StartOption)
     fun finishRace()
     fun undoFinishRace()
@@ -167,6 +175,14 @@ interface RaceModelControls {
     fun leaveRaceMode(forceStop: Boolean)
     fun hideRaceUi()
     fun setSpeedLimitPercent(value: String?)
+}
+
+/**
+ * Explains once that the battery optimization may stop the race service in the background.
+ */
+interface BatteryHintControls {
+    /** Returns `true` only the first time, unless the app is already exempt from the optimization */
+    suspend fun consumeBatteryHint(isIgnoringBatteryOptimizations: Boolean): Boolean
 }
 
 /**
@@ -234,7 +250,8 @@ class LiveSectionViewModel(
     private val database: DatabaseOperations,
     private val prefs: PreferenceRepository,
     coroutineDispatcher: CoroutineDispatcher
-) : StatefulSectionViewModel(coroutineDispatcher), EditableSectionViewModel, RaceModelControls, RaceServiceHolder<PrimaryRaceService> {
+) : StatefulSectionViewModel(coroutineDispatcher), EditableSectionViewModel, RaceModelControls, BatteryHintControls,
+    RaceServiceHolder<PrimaryRaceService> {
     private val parser = InputRoadmapParser(DefaultModifierValidator())
 
     private val _raceCurrentLineNumber: MutableStateFlow<LineNumber> = MutableStateFlow(LineNumber(1, 0))
@@ -630,6 +647,20 @@ class LiveSectionViewModel(
             updateFocus(sanitizeFocus(newFocus))
         }
         sanitizeSelection()
+    }
+
+    override val telemetrySource: Flow<TelemetrySource> = prefs.userPreferencesFlow
+        .map { it.telemetrySource }
+        .distinctUntilChanged()
+
+    override fun recheckTelemetryAccess() {
+        service?.recheckTelemetryAccess()
+    }
+
+    override suspend fun consumeBatteryHint(isIgnoringBatteryOptimizations: Boolean): Boolean {
+        if (isIgnoringBatteryOptimizations || prefs.userPreferencesFlow.first().batteryHintShown) return false
+        prefs.saveBatteryHintShown()
+        return true
     }
 
     override fun enterRaceMode() {
