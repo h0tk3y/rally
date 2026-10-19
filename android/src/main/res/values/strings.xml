@@ -102,6 +102,7 @@
     <string name="telemetrySourceGpsHint">Get location and speed from GPS</string>
     <string name="satStatusPattern">" (%1$d sat)"</string>
     <string name="telemetryDataWaiting">Data: waiting</string>
+    <string name="telemetryDataLinkLost">Data: link lost</string>
     <string name="notConnectedToRaceService">Not connected to race service</string>
     <string name="finishedTimeDistancePrefix">"Finished: "</string>
     <string name="raceGoingInAnotherSection">Race going in another section</string>

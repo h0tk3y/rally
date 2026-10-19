@@ -131,6 +131,8 @@ sealed interface TelemetryPublicState {
 
     data object WaitingForStream : TelemetryPublicState
     data class ReceivesStream(val isDelayed: Boolean) : TelemetryPublicState
+    /** Frames had arrived earlier, then the connection dropped; no frame on a new connection yet. */
+    data object StreamLinkLost : TelemetryPublicState
 
     data object NotInitialized : TelemetryPublicState
     data object IncompatibleStream : TelemetryPublicState
@@ -165,16 +167,21 @@ internal val streamDataDelayThreshold: Duration = 1.seconds
 /**
  * Maps the connection state and the time since the last frame received over the current connection to the public state.
  * [sinceLastFrame] is null when no frame has been received over the current connection yet.
+ * [hadFramesBefore] tells whether any frame has been received in this session (over any connection).
  */
 internal fun streamedTelemetryPublicState(
     connectionState: StreamConnectionState,
-    sinceLastFrame: Duration?
-): TelemetryPublicState = when (connectionState) {
-    StreamConnectionState.NotInitialized -> TelemetryPublicState.WaitingForStream
-    StreamConnectionState.Incompatible -> TelemetryPublicState.IncompatibleStream
-    StreamConnectionState.Connected ->
-        if (sinceLastFrame == null) TelemetryPublicState.WaitingForStream
-        else TelemetryPublicState.ReceivesStream(isDelayed = sinceLastFrame >= streamDataDelayThreshold)
+    sinceLastFrame: Duration?,
+    hadFramesBefore: Boolean,
+): TelemetryPublicState {
+    val noDataState = if (hadFramesBefore) TelemetryPublicState.StreamLinkLost else TelemetryPublicState.WaitingForStream
+    return when (connectionState) {
+        StreamConnectionState.NotInitialized -> noDataState
+        StreamConnectionState.Incompatible -> TelemetryPublicState.IncompatibleStream
+        StreamConnectionState.Connected ->
+            if (sinceLastFrame == null) noDataState
+            else TelemetryPublicState.ReceivesStream(isDelayed = sinceLastFrame >= streamDataDelayThreshold)
+    }
 }
 
 
@@ -231,14 +238,17 @@ class TcpStreamedRaceService : StreamedRaceService, StoppableService, Service() 
     /** When the last frame was received over the current connection; null until the first one arrives. */
     private val _lastFrameAt = MutableStateFlow<TimeMark?>(null)
 
+    /** Whether any frame has been received during the lifetime of this service, over any connection. */
+    private val _hadFrames = MutableStateFlow(false)
+
     @OptIn(ExperimentalCoroutinesApi::class)
     override val telemetryPublicState: Flow<TelemetryPublicState>
-        get() = combine(_telemetryState, _lastFrameAt, ::Pair).transformLatest { (connectionState, lastFrameAt) ->
-            emit(streamedTelemetryPublicState(connectionState, lastFrameAt?.elapsedNow()))
+        get() = combine(_telemetryState, _lastFrameAt, _hadFrames, ::Triple).transformLatest { (connectionState, lastFrameAt, hadFrames) ->
+            emit(streamedTelemetryPublicState(connectionState, lastFrameAt?.elapsedNow(), hadFrames))
             if (connectionState == StreamConnectionState.Connected && lastFrameAt != null) {
                 // Cancelled by transformLatest if the next frame arrives in time:
                 delay(streamDataDelayThreshold - lastFrameAt.elapsedNow())
-                emit(streamedTelemetryPublicState(connectionState, lastFrameAt.elapsedNow()))
+                emit(streamedTelemetryPublicState(connectionState, lastFrameAt.elapsedNow(), hadFrames))
             }
         }
 
@@ -357,6 +367,7 @@ class TcpStreamedRaceService : StreamedRaceService, StoppableService, Service() 
         _currentRaceLine.value = raceState.currentRaceLine
         _rememberSpeedLimit.value = raceState.rememberSpeed
         _speedLimitPercent.value = raceState.speedLimitPercent
+        _hadFrames.value = true
         _lastFrameAt.value = TimeSource.Monotonic.markNow()
     }
 
