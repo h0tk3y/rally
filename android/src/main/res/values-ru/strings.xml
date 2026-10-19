@@ -29,7 +29,7 @@
     <string name="eventSectionFinished">Финиш секции</string>
     <string name="eventUndoSectionFinish">Отмена финиша секции</string>
     <string name="eventRaceStarted">Начало ДС</string>
-    <string name="eventRaceFinished">Финиш ДС</string>
+    <string name="eventRaceFinished">Финиш</string>
     <string name="eventUndoRaceFinish">Отмена финиша ДС</string>
     <string name="buttonCalculate">Расчёт</string>
     <string name="buttonEdit">Редактор</string>

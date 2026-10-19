@@ -10,6 +10,7 @@ import com.h0tk3y.rally.RallyTimesResult
 import com.h0tk3y.rally.RallyTimesResultSuccess
 import com.h0tk3y.rally.SpeedKmh
 import com.h0tk3y.rally.android.db.SectionInsertOrRenameResult
+import com.h0tk3y.rally.android.racecervice.LocalRaceService
 import com.h0tk3y.rally.android.racecervice.PrimaryRaceService
 import com.h0tk3y.rally.android.racecervice.TelemetryPublicState
 import com.h0tk3y.rally.android.testing.MainDispatcherRule
@@ -26,6 +27,7 @@ import io.mockk.verify
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Rule
@@ -241,6 +243,65 @@ class FinishRaceTest {
         val finishEvent = outcome.events.single { it.kind == RaceEventKind.RACE_FINISH }
         assertNotNull(finishEvent.earlyLateMillis)
         assertNull(outcome.events.single { it.kind == RaceEventKind.RACE_UNDO_FINISH }.earlyLateMillis)
+    }
+
+    /**
+     * Finish and start (`finishRace()` then `startRace(StartNowFromGoingState)`, as the race panel button does) keeps the
+     * finished regularity's early/late value for the next one. The race state transitions come from the real service.
+     */
+    @Test
+    fun `finish and start keeps the early or late value of the finished regularity`() {
+        val db = InMemoryDatabaseOperations()
+        val section = (db.createSection("test", earlyLateRoadmap) as SectionInsertOrRenameResult.Success).section
+        val realService = LocalRaceService()
+        realService.go(section.id, DistanceKm.zero, DistanceKm.zero, sectionStart)
+        val service = mockk<PrimaryRaceService>(relaxed = true) {
+            every { raceState }.answers { realService.raceState }
+            every { startRace(any(), any(), any(), any()) }.answers {
+                realService.startRace(firstArg(), secondArg(), thirdArg(), arg(3))
+            }
+            every { finishRace(any(), any()) }.answers { realService.finishRace(firstArg(), secondArg()) }
+            every { distanceCorrection(any()) }.answers { realService.distanceCorrection(firstArg()) }
+            every { rememberSpeedLimit }.returns(MutableStateFlow(null))
+            every { speedLimitPercent }.returns(MutableStateFlow(null))
+            every { telemetryPublicState }.returns(MutableStateFlow(TelemetryPublicState.Simulation))
+        }
+
+        runTest(withMain.dispatcher) {
+            val viewModel = LiveSectionViewModel(section.id, db, defaultPreferencesMock(), withMain.dispatcher)
+            suspend fun step(action: suspend LiveSectionViewModel.() -> Unit) {
+                action(viewModel)
+                repeat(10) { runCurrent() }
+            }
+            try {
+                repeat(10) { runCurrent() }
+                viewModel.onServiceConnected(service)
+                repeat(10) { runCurrent() }
+
+                step { selectLine(LineNumber(2, 0), null) }
+                step { startRace(StartOption(StartOption.StartAtSelectedPositionNow, isRace = true)) }
+                step { distanceCorrection(DistanceKm(1.5)) }
+                val firstRace = assertIs<RaceState.InRace>(realService.raceState.value).raceModel
+                assertEquals(DistanceKm(2.5), firstRace.currentDistance)
+
+                step {
+                    finishRace()
+                    startRace(StartOption(StartOption.StartNowFromGoingState, true))
+                }
+
+                val finishEvent = db.events.value.single { it.kind == RaceEventKind.RACE_FINISH }
+                val expectedEarlyLate = finishEvent.timestamp - (firstRace.startAtTime + 90.seconds)
+                assertEquals(expectedEarlyLate.inWholeMilliseconds, finishEvent.earlyLateMillis)
+
+                val secondRace = assertIs<RaceState.InRace>(realService.raceState.value)
+                assertEquals(expectedEarlyLate, secondRace.previousFinishEarlyLate)
+                val uiState = assertIs<RaceUiState.RaceGoing>(viewModel.raceState.first())
+                assertEquals(expectedEarlyLate, uiState.lastFinishEarlyLate)
+            } finally {
+                viewModel.viewModelScope.cancel()
+                repeat(10) { runCurrent() }
+            }
+        }
     }
 }
 
