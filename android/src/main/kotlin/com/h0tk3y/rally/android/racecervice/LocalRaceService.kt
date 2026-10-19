@@ -40,6 +40,7 @@ import com.h0tk3y.rally.LineNumber
 import com.h0tk3y.rally.PositionLine
 import com.h0tk3y.rally.PositionLineModifier
 import com.h0tk3y.rally.PlainSpeedKmh
+import com.h0tk3y.rally.android.util.ScreenshotMode
 import com.h0tk3y.rally.R
 import com.h0tk3y.rally.SpeedKmh
 import com.h0tk3y.rally.SpeedWithPercentage
@@ -674,6 +675,10 @@ class LocalRaceService : PrimaryRaceService, Service() {
         // which RaceServiceConnection handles at the call site.
         if (!promoteToForeground(ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)) {
             stopSelf()
+        }
+        serviceScope.launch {
+            // Debug builds only: the screenshot mode sets the simulated speed instead of the slider
+            ScreenshotMode.simulatedSpeed.collect { speed -> if (speed != null) setDebugSpeed(speed) }
         }
     }
 
