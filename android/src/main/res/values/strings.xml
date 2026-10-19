@@ -165,6 +165,16 @@
     <string name="notificationTitleRally">Rally</string>
     <string name="settingsSoundFeedback">Play sounds on race mode actions</string>
     <string name="settingsRaceModeTitle">Race mode</string>
+    <string name="settingsSpeedButtons">Speed buttons</string>
+    <string name="settingsSpeedButtonsHint">Speeds in km/h for the buttons in the race panel, separated by spaces, commas or other punctuation, e.g. 20 40, 60; 80. Whole numbers from 1 to 999.</string>
+    <string name="settingsSpeedButtonsField">Speeds, km/h</string>
+    <string name="settingsSpeedButtonsDefault">Default</string>
+    <string name="settingsSpeedButtonsPreview">Buttons: %1$s</string>
+    <string name="speedButtonsErrorEmpty">Enter at least one speed</string>
+    <string name="speedButtonsErrorNotAWholeNumber">“%1$s” is not a whole number</string>
+    <string name="speedButtonsErrorOutOfRange">%1$s is out of range: a speed should be from 1 to %2$d</string>
+    <string name="speedButtonsErrorTooMany">Too many speeds: %1$d, at most %2$d</string>
+    <string name="speedButtonsNotSaved">Not saved, the race panel keeps the buttons: %1$s</string>
     <string name="settingsCalibrateOdometerDistance">Odometer distance: %1$s</string>
     <string name="noSectionData">No section data</string>
     <string name="telemetryGpsNoHardware">GPS: unavailable!</string>
