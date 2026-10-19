@@ -118,7 +118,7 @@
     <string name="buttonGoToRaceSection">Go to section</string>
     <string name="buttonUndoStop">Undo stop</string>
     <string name="preLabelNextRace">Next regularity: </string>
-    <string name="preLabelStartRace">Start regularity:</string>
+    <string name="preLabelStartRace">Regularity:</string>
     <string name="nowAtPosition">Now from %1$s</string>
     <string name="inTimeAtPosition">On %1$s from %2$s</string>
     <string name="inTimeAtPositionKeepOdo">On %1$s from %2$s, keep ODO</string>
@@ -132,7 +132,7 @@
     <string name="buttonClearSpeedLimit">Clear</string>
     <string name="raceButtonFinishRace">Finish regularity</string>
     <string name="raceButtonFinishAndStart">Finish and start</string>
-    <string name="raceButtonUndoFinishRace">Undo finish regularity</string>
+    <string name="raceButtonUndoFinishRace">Undo finish</string>
     <string name="raceButtonStop">Stop</string>
     <string name="simulateSpeedPrefix">Simulate speed:</string>
     <string name="otherDeviceNetworkHint">The other device must be on the same Wi-Fi network.</string>
