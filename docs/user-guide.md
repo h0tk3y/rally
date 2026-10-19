@@ -6,18 +6,48 @@
 
 This guide is for the co-driver in a TSD (time–speed–distance) rally. It explains how you prepare a section, how you use the app in the car, and how the app calculates the times.
 
+**Download:** the app is for Android. Get `android-release.apk` from the [latest release on GitHub](https://github.com/h0tk3y/rally/releases/latest) and open it on your phone or tablet to install it.
+
 ## Contents
 
 1. [What the app does](#1-what-the-app-does)
 2. [Words used in this guide](#2-words-used-in-this-guide)
 3. [Quick start](#3-quick-start)
 4. [The section list](#4-the-section-list)
+   - [4.1 Create a section](#41-create-a-section)
 5. [The section screen](#5-the-section-screen)
+   - [5.1 What a row shows](#51-what-a-row-shows)
+   - [5.2 The section menu](#52-the-section-menu)
 6. [Race mode](#6-race-mode)
+   - [6.1 Turn race mode on](#61-turn-race-mode-on)
+   - [6.2 Race mode keeps running](#62-race-mode-keeps-running)
+   - [6.3 What the race panel shows](#63-what-the-race-panel-shows)
+   - [6.4 The distance from the selected position](#64-the-distance-from-the-selected-position)
+   - [6.5 The two timers: Go and Regularity](#65-the-two-timers-go-and-regularity)
+   - [6.6 The race states](#66-the-race-states)
+   - [6.7 Correcting the distance](#67-correcting-the-distance)
+   - [6.8 Speed buttons and the "v" button](#68-speed-buttons-and-the-v-button)
+   - [6.9 Adding a position as you pass it](#69-adding-a-position-as-you-pass-it)
+   - [6.10 Event log](#610-event-log)
+   - [6.11 Sounds](#611-sounds)
 7. [A rally day with the app](#7-a-rally-day-with-the-app)
+   - [7.1 Before the rally](#71-before-the-rally)
+   - [7.2 When you get the road book](#72-when-you-get-the-road-book)
+   - [7.3 Before the start](#73-before-the-start)
+   - [7.4 At the start](#74-at-the-start)
+   - [7.5 A regularity inside a section](#75-a-regularity-inside-a-section)
+   - [7.6 Moving to the next section](#76-moving-to-the-next-section)
+   - [7.7 On the road](#77-on-the-road)
+   - [7.8 After the stage](#78-after-the-stage)
 8. [Allowance](#8-allowance)
 9. [Measuring the distance](#9-measuring-the-distance)
 10. [Settings](#10-settings)
+    - [10.1 Telemetry source](#101-telemetry-source)
+    - [10.2 Calibration](#102-calibration)
+    - [10.3 Send data to the driver's device](#103-send-data-to-the-drivers-device)
+    - [10.4 Allowance](#104-allowance)
+    - [10.5 Race mode](#105-race-mode)
+    - [10.6 Background work](#106-background-work)
 11. [The driver's screen (Driver HUD)](#11-the-drivers-screen-driver-hud)
 12. [Saving, copying and sharing](#12-saving-copying-and-sharing)
 13. [Questions and problems](#13-questions-and-problems)
@@ -25,7 +55,20 @@ This guide is for the co-driver in a TSD (time–speed–distance) rally. It exp
 [Advanced topics](#advanced-topics):
 
 14. [How the app calculates the times](#14-how-the-app-calculates-the-times)
+    - [14.1 The marks](#141-the-marks)
+    - [14.2 One average speed](#142-one-average-speed)
+    - [14.3 Inner stretches](#143-inner-stretches)
+    - [14.4 Several times on one row](#144-several-times-on-one-row)
+    - [14.5 One stretch after another](#145-one-stretch-after-another)
+    - [14.6 The ➠ speed](#146-the--speed)
+    - [14.7 Time of day](#147-time-of-day)
+    - [14.8 Section times in race mode](#148-section-times-in-race-mode)
 15. [Editing positions](#15-editing-positions)
+    - [15.1 When to use the editor](#151-when-to-use-the-editor)
+    - [15.2 How the editor works](#152-how-the-editor-works)
+    - [15.3 The keys](#153-the-keys)
+    - [15.4 Typing a time of day](#154-typing-a-time-of-day)
+    - [15.5 When a row moves](#155-when-a-row-moves)
 16. [How race mode builds your roadmap](#16-how-race-mode-builds-your-roadmap)
 17. [Errors and warnings](#17-errors-and-warnings)
 18. [Importing a section](#18-importing-a-section)
@@ -61,6 +104,8 @@ You can also change the roadmap by hand with the app's editor. This is for fixin
 ---
 
 ## 3. Quick start
+
+**Install the app** from the [latest release](https://github.com/h0tk3y/rally/releases/latest) (the `android-release.apk` file). If the driver uses the [Driver HUD](#11-the-drivers-screen-driver-hud), install it on their device too.
 
 **Before the rally, usually the day before:** if you use a reader in the car (OBD), set it up in Settings (see [Telemetry source](#101-telemetry-source)), then calibrate it on the calibration route that the organisers publish in advance (see [Calibration](#102-calibration)). With GPS you can skip this.
 
@@ -619,7 +664,7 @@ The driver's device does not show the allowance, and has no buttons to change th
 | **Data: waiting** | No data yet. Check the address, the Wi-Fi, and that race mode is on on your device. |
 | **Data ✔** | Data arrives. |
 | **Data ???** | No new data for more than a second. |
-| **Data: incompatible version** | The two devices have different versions of the app. Install the same version on both. |
+| **Data: incompatible version** | The two devices have different versions of the app. Install the same version, preferably the [latest release](https://github.com/h0tk3y/rally/releases/latest), on both. |
 
 **Swap views** in the menu (three dots) of the Driver HUD screen puts the race panel above the list, so the clock is at the top; with the device turned sideways, the panel goes on the left. The app remembers the choice.
 
@@ -664,7 +709,7 @@ Check the distance source in the race panel (see [Measuring the distance](#9-mea
 They change the distance only while the race panel is open and a timer runs. After you type in a field of the race panel, they may change the volume again.
 
 **The driver's device says "Data: waiting".**
-Check that both devices are on the same Wi-Fi, that the address on your device is right, and that race mode is on on your device. If it says **Data: incompatible version**, install the same version of the app on both devices.
+Check that both devices are on the same Wi-Fi, that the address on your device is right, and that race mode is on on your device. If it says **Data: incompatible version**, install the same version of the app on both devices; the [latest release](https://github.com/h0tk3y/rally/releases/latest) has it.
 
 **I started at the wrong position.**
 There is no undo for a start. After the section timer starts, tap **Stop**, select the right position, and start again. In a regularity, tap **Finish regularity**, then start a new regularity from the right position. Afterwards, check the positions: race mode added marks for the wrong start (see [How race mode builds your roadmap](#16-how-race-mode-builds-your-roadmap)). If they overlap the part of the road you then drove for real, delete them in the editor, or they break the roadmap.
