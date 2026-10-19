@@ -12,6 +12,7 @@ import kotlinx.serialization.encodeToString
 import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.time.Duration.Companion.milliseconds
 
 class TelemetrySerializationTest {
     @Test
@@ -66,5 +67,18 @@ class TelemetrySerializationTest {
         val decodedPos2Modifier = assertIs<PositionLineModifier.ThenAvgSpeed>(decoded.serializedPositions?.get(1)?.modifiers?.get(0))
         val decodedThenAvg = assertIs<PlainSpeedKmh>(decodedPos2Modifier.setavg)
         assertEquals(60.0, decodedThenAvg.valueKmh)
+    }
+
+    @Test
+    fun `race state keeps the early or late value of the finish`() {
+        val model = com.h0tk3y.rally.model.RaceModel(
+            kotlin.time.Instant.fromEpochSeconds(1000), DistanceKm(1.0), DistanceKm(2.5), DistanceKm.zero, true, PlainSpeedKmh(60.0)
+        )
+        val state: RaceState = RaceState.Going(1L, model, model, kotlin.time.Instant.fromEpochSeconds(1090), (-12300).milliseconds)
+
+        val decoded = SerializationUtils.json.decodeFromString<RaceState>(SerializationUtils.json.encodeToString(state))
+
+        assertEquals(state, decoded)
+        assertEquals((-12300).milliseconds, assertIs<RaceState.Going>(decoded).finishedEarlyLate)
     }
 }

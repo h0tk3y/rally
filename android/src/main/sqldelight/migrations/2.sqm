@@ -1,0 +1,4 @@
+-- Migrate from v2: store how early or late a regularity finished, in milliseconds (negative is early).
+-- Events logged before this migration keep NULL here, which means unknown.
+
+ALTER TABLE Event ADD COLUMN earlyLateMillis INTEGER;
