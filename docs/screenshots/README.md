@@ -98,10 +98,10 @@ Badges are teal circles with a number. The guide refers to them with the same ba
 | `row-anatomy.png` | `05-section-rows`, rows 17.329 and 24.872 | 5.1 What a row shows | ① distance, ② marks, ③ ➠ speed, ④ times, ⑤ time of day, ⑥ allowance |
 | `section-menu.png` | `05-menu-race-on` | 5.2 The section menu | none |
 | `timers.png` | `06-section-timer`, `06-regularity` | 6.5 The two timers | none: the two clocks, captioned |
-| `race-states.png` | `06-race-not-started`, `06-section-timer`, `06-regularity`, `06-stopped` | 6.6 The race states | none: four captioned panels |
+| `race-states.png` | `06-race-not-started`, `06-section-timer`, `06-regularity`, `06-stopped` | 6.6 The race states | none: four captioned panels, without the simulation slider |
 | `race-panel-regularity.png` | `06-regularity` | 6.6, While the regularity timer runs | ① flag and clock, ② average speed, ③ speed row, ④ **Finish regularity**, ⑤ **Finish and start** |
 | `regularity-finished.png` | `06-finished` | 6.6, after Finish regularity | ① **Finished:**, ② the Next regularity row, ③ **Undo finish** |
-| `race-panel.png` | `06-section-timer` | 6.3 What the race panel shows | ① toolbar, ② clock, ③ allowance, ④ early/late, ⑤ distance and distance to the selected row, ⑥ ↶, -0.1 and +0.1, ⑦ speed, ⑧ the Regularity row, ⑨ **Stop**, ⑩ the simulation slider |
+| `race-panel.png` | `06-section-timer` | 6.3 What the race panel shows | ① toolbar, ② clock, ③ allowance, ④ early/late, ⑤ distance and distance to the selected row, ⑥ ↶, -0.1 and +0.1, ⑦ speed, ⑧ the Regularity row, ⑨ **Stop** |
 | `landscape.png` | `06-landscape` | 6.3, the toolbar | ① the toolbar at the bottom |
 | `distance-edit.png` | `06-distance-edit` | 6.7 Correcting the distance | a frame around the edit row |
 | `backwards.png` | `06-backwards` | 6.7, Going backwards | a frame around the red ↶ |
