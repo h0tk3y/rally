@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.os.IBinder
+import android.util.Log
 import androidx.core.content.ContextCompat
 import com.h0tk3y.rally.android.racecervice.CommonRaceService
 import com.h0tk3y.rally.android.racecervice.LocalRaceService
@@ -68,7 +69,14 @@ fun <S : CommonRaceService> connectToService(
     if (context.bindService(intent, connection, Context.BIND_AUTO_CREATE)) {
         connection.markBound()
     }
-    ContextCompat.startForegroundService(context, intent)
+    try {
+        ContextCompat.startForegroundService(context, intent)
+    } catch (e: IllegalStateException) {
+        // ForegroundServiceStartNotAllowedException (Android 12+): the app went to the background before the service started.
+        // The service can't run in the foreground then, so don't leave it running half-started; the user can enter the race mode again.
+        Log.w("raceService", "not allowed to start the race service now", e)
+        connection.disconnectIfConnected()
+    }
 }
 
 fun localRaceServiceConnection(
