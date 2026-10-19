@@ -16,28 +16,27 @@ class RacePermissionsTest {
     @Test
     fun `gps requires fine and coarse location together on all versions`() {
         for (sdk in listOf(Build.VERSION_CODES.O, Build.VERSION_CODES.R, Build.VERSION_CODES.S, Build.VERSION_CODES.UPSIDE_DOWN_CAKE)) {
-            assertEquals(listOf(fine, coarse), racePermissions(TelemetrySource.GPS, btDeviceSelected = true, sdk).required)
+            assertEquals(listOf(fine, coarse), racePermissions(TelemetrySource.GPS, sdk).required)
         }
     }
 
     @Test
-    fun `obd requires bluetooth connect only on android 12+ with a selected adapter`() {
-        assertEquals(listOf(btConnect), racePermissions(TelemetrySource.BT_OBD, btDeviceSelected = true, Build.VERSION_CODES.S).required)
-        assertEquals(emptyList<String>(), racePermissions(TelemetrySource.BT_OBD, btDeviceSelected = false, Build.VERSION_CODES.S).required)
-        assertEquals(emptyList<String>(), racePermissions(TelemetrySource.BT_OBD, btDeviceSelected = true, Build.VERSION_CODES.R).required)
+    fun `obd requires bluetooth connect on android 12+`() {
+        assertEquals(listOf(btConnect), racePermissions(TelemetrySource.BT_OBD, Build.VERSION_CODES.S).required)
+        assertEquals(emptyList<String>(), racePermissions(TelemetrySource.BT_OBD, Build.VERSION_CODES.R).required)
     }
 
     @Test
     fun `simulation and outgauge require nothing`() {
         for (source in listOf(TelemetrySource.SIMULATION, TelemetrySource.OUTGAUGE)) {
-            assertEquals(emptyList<String>(), racePermissions(source, btDeviceSelected = true, Build.VERSION_CODES.UPSIDE_DOWN_CAKE).required)
+            assertEquals(emptyList<String>(), racePermissions(source, Build.VERSION_CODES.UPSIDE_DOWN_CAKE).required)
         }
     }
 
     @Test
     fun `notifications are optional and only requested on android 13+`() {
-        assertEquals(listOf(notifications), racePermissions(TelemetrySource.GPS, true, Build.VERSION_CODES.TIRAMISU).optional)
-        assertEquals(emptyList<String>(), racePermissions(TelemetrySource.GPS, true, Build.VERSION_CODES.S_V2).optional)
+        assertEquals(listOf(notifications), racePermissions(TelemetrySource.GPS, Build.VERSION_CODES.TIRAMISU).optional)
+        assertEquals(emptyList<String>(), racePermissions(TelemetrySource.GPS, Build.VERSION_CODES.S_V2).optional)
     }
 
     @Test

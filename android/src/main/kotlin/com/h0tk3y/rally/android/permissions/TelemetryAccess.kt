@@ -100,8 +100,8 @@ class TelemetryAccessController internal constructor(
      *
      * The optional permissions (notifications) are asked for along the way but never block [onReady].
      */
-    fun runWhenReady(source: TelemetrySource, btDeviceSelected: Boolean, onReady: () -> Unit) {
-        val permissions = racePermissions(source, btDeviceSelected)
+    fun runWhenReady(source: TelemetrySource, onReady: () -> Unit) {
+        val permissions = racePermissions(source)
         val request = PendingRequest(source, permissions, onReady)
         when (val issue = currentIssue(source, permissions.required)) {
             null -> {
@@ -125,8 +125,8 @@ class TelemetryAccessController internal constructor(
     }
 
     /** Explains the problem with the [source] that the race panel reports, e.g. on a tap on its status */
-    fun explain(source: TelemetrySource, btDeviceSelected: Boolean, telemetryState: TelemetryPublicState) {
-        val permissions = racePermissions(source, btDeviceSelected)
+    fun explain(source: TelemetrySource, telemetryState: TelemetryPublicState) {
+        val permissions = racePermissions(source)
         val issue = when (telemetryState) {
             TelemetryPublicState.GpsLocationDisabled -> TelemetryAccessIssue.LocationDisabled
             else -> currentIssue(source, permissions.required)
