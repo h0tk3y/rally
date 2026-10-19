@@ -12,9 +12,9 @@
     <string name="saveButton">Сохранить</string>
     <string name="distance">Дистанция</string>
     <string name="kmUnit">км</string>
-    <string name="timeHhMmSs">Норма времени ЧЧ:ММ(:СС)</string>
+    <string name="timeHhMmSs">Норма времени ЧЧ-ММ(-СС)</string>
     <string name="averageSpeedHint">Средняя скорость</string>
-    <string name="startAtHhMmSs">Время старта ЧЧ:ММ(:СС)</string>
+    <string name="startAtHhMmSs">Время старта ЧЧ-ММ(-СС)</string>
     <string name="showMenu">Показать меню</string>
     <string name="driverHud">Экран пилота</string>
     <string name="settings">Настройки</string>
