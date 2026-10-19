@@ -30,7 +30,7 @@ sealed interface SpeedButtonsParseResult {
     /** A number of 4+ digits, or zero (`0`, `000`) */
     data class OutOfRange(val token: String) : Invalid
 
-    /** More than [SpeedButtons.MAX_COUNT] distinct speeds */
+    /** More than [SpeedButtons.MAX_COUNT] speeds, repeats included */
     data class TooMany(val count: Int) : Invalid
 }
 
@@ -54,7 +54,7 @@ private val asciiDigits = Regex("[0-9]+")
  *
  * * A dot is not a separator, so a fractional speed such as `42.5` is [SpeedButtonsParseResult.NotAWholeNumber].
  * * Each speed is a positive whole number of 1–3 ASCII digits; leading zeros are allowed (`05` is 5), but `0` and `000` are not positive.
- * * The order is kept as typed. A repeated speed is kept only at its first place.
+ * * The order is kept as typed, and so are repeats: a co-driver may want the same speed in several places of the layout.
  * * The first invalid part is reported, so that the user can find it.
  */
 fun parseSpeedButtonsInput(text: String): SpeedButtonsParseResult {
@@ -62,7 +62,7 @@ fun parseSpeedButtonsInput(text: String): SpeedButtonsParseResult {
     if (tokens.isEmpty()) {
         return SpeedButtonsParseResult.Empty
     }
-    val speeds = LinkedHashSet<Int>()
+    val speeds = mutableListOf<Int>()
     for (token in tokens) {
         if (!asciiDigits.matches(token)) {
             return SpeedButtonsParseResult.NotAWholeNumber(token)
@@ -76,7 +76,7 @@ fun parseSpeedButtonsInput(text: String): SpeedButtonsParseResult {
     if (speeds.size > SpeedButtons.MAX_COUNT) {
         return SpeedButtonsParseResult.TooMany(speeds.size)
     }
-    return SpeedButtonsParseResult.Valid(speeds.toList())
+    return SpeedButtonsParseResult.Valid(speeds)
 }
 
 /** The stored form, which is also what the settings field shows: the speeds separated by single spaces */
@@ -97,5 +97,5 @@ fun decodeStoredSpeedButtons(stored: String?): List<Int> {
         if (part.isEmpty() || part.length > 3 || !asciiDigits.matches(part)) return SpeedButtons.DEFAULT
         part.toInt().takeIf { it in 1..SpeedButtons.MAX_SPEED } ?: return SpeedButtons.DEFAULT
     }
-    return speeds.distinct()
+    return speeds
 }
