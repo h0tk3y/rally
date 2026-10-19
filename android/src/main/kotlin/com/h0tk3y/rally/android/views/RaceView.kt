@@ -947,7 +947,8 @@ private fun NewSpeedLimits(
                     applyLimit(speedKmh?.valueKmh?.let(::makeSpeed))
                 })
 
-                // The view model never gives an empty list, but the panel must not lose its buttons if it ever does
+                // The view model never gives an empty list, but the panel must not lose its buttons if it ever does.
+                // The same speed may be there more than once, so the speeds must not be used as keys if keys are ever added here.
                 speedButtons.ifEmpty { SpeedButtons.DEFAULT }.forEach { limit ->
                     SpeedLimitButton("$limit", limit.toDouble()) { speedKmh ->
                         applyLimit(speedKmh?.valueKmh?.let(::makeSpeed))
