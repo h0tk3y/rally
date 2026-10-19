@@ -23,11 +23,12 @@ import kotlin.test.assertEquals
 
 class SpeedButtonsTest {
     @Test
-    fun `speeds are separated by any whitespace or punctuation`() {
+    fun `speeds are separated by any whitespace or punctuation other than dots`() {
         assertEquals(Valid(listOf(20, 40, 60, 80)), parseSpeedButtonsInput("20 40, 60; 80"))
-        assertEquals(Valid(listOf(20, 40, 60)), parseSpeedButtonsInput("  20\t\n40/60.  "))
-        assertEquals(Valid(listOf(20, 40, 60)), parseSpeedButtonsInput("20 40–60"))
+        assertEquals(Valid(listOf(20, 40, 60)), parseSpeedButtonsInput("  20\t\n40/60!  "))
+        assertEquals(Valid(listOf(20, 40, 60)), parseSpeedButtonsInput("20\u00A040–60"))
         assertEquals(Valid(listOf(20, 40)), parseSpeedButtonsInput(",,20;;;40,,"))
+        assertEquals(Valid(listOf(20, 40)), parseSpeedButtonsInput("20,40"))
     }
 
     @Test
@@ -36,8 +37,23 @@ class SpeedButtonsTest {
     }
 
     @Test
-    fun `fractional speeds are split at the point as the punctuation is a separator`() {
-        assertEquals(Valid(listOf(42, 5)), parseSpeedButtonsInput("42.5"))
+    fun `fractional speeds and dots are not whole numbers`() {
+        assertEquals(NotAWholeNumber("42.5"), parseSpeedButtonsInput("20 42.5 60"))
+        assertEquals(NotAWholeNumber("20."), parseSpeedButtonsInput("20. 40"))
+        assertEquals(NotAWholeNumber(".5"), parseSpeedButtonsInput(".5"))
+        assertEquals(NotAWholeNumber("."), parseSpeedButtonsInput("20 . 40"))
+        assertEquals(NotAWholeNumber("..."), parseSpeedButtonsInput("..."))
+    }
+
+    @Test
+    fun `dot-like characters are not separators either`() {
+        listOf("．", "﹒", "․", "‥", "…", "·", "٫", "。", "｡").forEach { dot ->
+            assertEquals(NotAWholeNumber("42${dot}5"), parseSpeedButtonsInput("42${dot}5"), "dot: '$dot'")
+        }
+    }
+
+    @Test
+    fun `a comma between digits separates two speeds`() {
         assertEquals(Valid(listOf(42, 5)), parseSpeedButtonsInput("42,5"))
     }
 
@@ -67,7 +83,7 @@ class SpeedButtonsTest {
     fun `empty input or only separators is invalid`() {
         assertEquals(Empty, parseSpeedButtonsInput(""))
         assertEquals(Empty, parseSpeedButtonsInput("   "))
-        assertEquals(Empty, parseSpeedButtonsInput(" ,;. -/"))
+        assertEquals(Empty, parseSpeedButtonsInput(" ,; -/"))
     }
 
     @Test
