@@ -21,6 +21,7 @@ import com.h0tk3y.rally.model.RaceEventKind.SECTION_START
 import com.h0tk3y.rally.model.RaceModel
 import com.h0tk3y.rally.model.RaceState
 import com.h0tk3y.rally.model.duration
+import com.h0tk3y.rally.model.earlyLate
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.future.await
@@ -28,6 +29,7 @@ import kotlinx.datetime.*
 import java.util.concurrent.CompletableFuture
 import kotlin.math.sign
 import kotlin.time.Clock
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Instant
 
@@ -206,14 +208,16 @@ sealed interface RaceUiState {
         val serial: Long,
         val lastFinishAt: Instant?,
         val lastFinishModel: RaceModel?,
-        val raceModelOfGoingAtSection: RaceModel
+        val raceModelOfGoingAtSection: RaceModel,
+        val lastFinishEarlyLate: Duration? = null,
     ) : RaceUiState, HasRaceModel
 
     data class Going(
         override val raceModel: RaceModel,
         val raceModelAtFinish: RaceModel?,
         val finishedAt: Instant?,
-        val serial: Long
+        val serial: Long,
+        val finishedEarlyLate: Duration? = null,
     ) : RaceUiState, HasRaceModel
 
     data class Stopped(
@@ -221,6 +225,7 @@ sealed interface RaceUiState {
         override val raceModel: RaceModel,
         val finishedAt: Instant?,
         val raceModelAtFinish: RaceModel?,
+        val finishedEarlyLate: Duration? = null,
     ) : RaceUiState, HasRaceModel
 }
 
@@ -587,13 +592,15 @@ class LiveSectionViewModel(
                 raceState.raceSectionId != (section.value as? LoadState.Loaded)?.value?.id ->
                     RaceUiState.RaceGoingInAnotherSection(raceState.raceSectionId)
 
-                raceState is RaceState.Going -> RaceUiState.Going(raceState.raceModel, raceState.finishedRaceModel, raceState.finishedAt, 0L)
+                raceState is RaceState.Going ->
+                    RaceUiState.Going(raceState.raceModel, raceState.finishedRaceModel, raceState.finishedAt, 0L, raceState.finishedEarlyLate)
                 raceState is RaceState.InRace -> RaceUiState.RaceGoing(
                     raceState.raceModel,
                     0L,
                     raceState.previousFinishAt,
                     raceState.previousFinishModel,
-                    raceState.goingModel
+                    raceState.goingModel,
+                    raceState.previousFinishEarlyLate
                 )
 
                 else -> error("unexpected race state")
@@ -601,7 +608,9 @@ class LiveSectionViewModel(
         }
 
         RaceState.NotStarted -> RaceUiState.RaceNotStarted
-        is RaceState.Stopped -> RaceUiState.Stopped(raceState.stoppedAt, raceState.raceModelAtStop, raceState.finishedAt, raceState.finishedModel)
+        is RaceState.Stopped -> RaceUiState.Stopped(
+            raceState.stoppedAt, raceState.raceModelAtStop, raceState.finishedAt, raceState.finishedModel, raceState.finishedEarlyLate
+        )
     }
 
     override fun switchEditor() {
@@ -637,6 +646,11 @@ class LiveSectionViewModel(
 
         val currentState = _raceState.value
         if (currentState is RaceUiState.RaceGoing) {
+            val finishedAt = Clock.System.now()
+            // Capture this before the finish edits the roadmap: the same value that the race panel shows for the regularity
+            val finishEarlyLate = (_results.value as? RallyTimesResultSuccess)?.raceTimeDistanceLocalizer?.let { localizer ->
+                earlyLate(finishedAt, currentState.raceModel, localizer)
+            }
             val finishDistance = currentState.raceModel.currentDistance.roundTo3Digits()
             maybeCreateItemAtDistanceFromModel(
                 finishDistance,
@@ -644,14 +658,15 @@ class LiveSectionViewModel(
                 if (shouldEndStretchAtFinish(finishDistance)) listOf(EndAvgSpeed(null)) else emptyList()
             )
             restoreStartAtime(currentState.raceModelOfGoingAtSection)
-            service?.finishRace(currentState.raceModel)
+            service?.finishRace(currentState.raceModel, finishEarlyLate)
 
             database.insertEvent(
                 RaceEventKind.RACE_FINISH,
                 sectionId,
                 currentState.raceModel.currentDistance,
-                Clock.System.now(),
-                sinceTimestamp = currentState.raceModel.startAtTime
+                finishedAt,
+                sinceTimestamp = currentState.raceModel.startAtTime,
+                earlyLate = finishEarlyLate
             )
         }
     }
@@ -1658,7 +1673,8 @@ class StreamedSectionViewModel(
                     raceState.raceModel,
                     raceState.finishedRaceModel,
                     raceState.finishedAt,
-                    0L
+                    0L,
+                    raceState.finishedEarlyLate
                 )
 
                 is RaceState.InRace -> RaceUiState.RaceGoing(
@@ -1666,13 +1682,16 @@ class StreamedSectionViewModel(
                     0L,
                     raceState.previousFinishAt,
                     raceState.previousFinishModel,
-                    raceState.goingModel
+                    raceState.goingModel,
+                    raceState.previousFinishEarlyLate
                 )
             }
         }
 
         RaceState.NotStarted -> RaceUiState.RaceNotStarted
-        is RaceState.Stopped -> RaceUiState.Stopped(raceState.stoppedAt, raceState.raceModelAtStop, raceState.finishedAt, raceState.finishedModel)
+        is RaceState.Stopped -> RaceUiState.Stopped(
+            raceState.stoppedAt, raceState.raceModelAtStop, raceState.finishedAt, raceState.finishedModel, raceState.finishedEarlyLate
+        )
     }
 
     override fun onServiceDisconnected() {

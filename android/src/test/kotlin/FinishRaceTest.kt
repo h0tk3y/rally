@@ -14,12 +14,15 @@ import com.h0tk3y.rally.android.racecervice.PrimaryRaceService
 import com.h0tk3y.rally.android.racecervice.TelemetryPublicState
 import com.h0tk3y.rally.android.testing.MainDispatcherRule
 import com.h0tk3y.rally.android.views.StartOption
+import com.h0tk3y.rally.db.Event
+import com.h0tk3y.rally.model.RaceEventKind
 import com.h0tk3y.rally.model.RaceModel
 import com.h0tk3y.rally.model.RaceState
 import com.h0tk3y.rally.modifier
 import defaultPreferencesMock
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -46,7 +49,12 @@ class FinishRaceTest {
     private val sectionStart = Clock.System.now()
     private val raceStart = sectionStart + 60.seconds
 
-    private class Outcome(val positions: List<PositionLine>, val results: RallyTimesResult)
+    private class Outcome(
+        val positions: List<PositionLine>,
+        val results: RallyTimesResult,
+        val events: List<Event>,
+        val service: PrimaryRaceService
+    )
 
     /**
      * Runs a section timer from 0.0, starts a race at the position on [raceStartLine], and moves the race to [finishAtKm].
@@ -95,7 +103,12 @@ class FinishRaceTest {
                     step { undoFinishRace() }
                 }
 
-                outcome = Outcome(viewModel.inputPositions.value.filterIsInstance<PositionLine>(), viewModel.results.value)
+                outcome = Outcome(
+                    viewModel.inputPositions.value.filterIsInstance<PositionLine>(),
+                    viewModel.results.value,
+                    db.events.value.sortedBy { it.id },
+                    service
+                )
             } finally {
                 viewModel.viewModelScope.cancel()
                 repeat(10) { runCurrent() }
@@ -203,6 +216,31 @@ class FinishRaceTest {
             parser.parseRoadmap(roadmap.reader()).filterIsInstance<PositionLine>().map { it.atKm },
             outcome.positions.map { it.atKm }
         )
+    }
+
+    /** The race starts at 1.0 km with `setavg 60` from the roadmap, so the race expects 1.5 minutes at 2.5 km. */
+    private val earlyLateRoadmap = """
+        0.0 setavg 60
+        1.0
+        2.0
+        3.0
+        """.trimIndent()
+
+    @Test
+    fun `finish records how early or late it was in the event log and the race state`() {
+        val outcome = raceAndFinish(earlyLateRoadmap, raceStartLine = 2, finishAtKm = 2.5)
+        val finishEvent = outcome.events.single { it.kind == RaceEventKind.RACE_FINISH }
+        val expectedEarlyLate = finishEvent.timestamp - (raceStart + 90.seconds)
+        assertEquals(expectedEarlyLate.inWholeMilliseconds, finishEvent.earlyLateMillis)
+        verify { outcome.service.finishRace(any(), expectedEarlyLate) }
+    }
+
+    @Test
+    fun `undo finish keeps the logged finish with its early or late value`() {
+        val outcome = raceAndFinish(earlyLateRoadmap, raceStartLine = 2, finishAtKm = 2.5, undoFinish = true)
+        val finishEvent = outcome.events.single { it.kind == RaceEventKind.RACE_FINISH }
+        assertNotNull(finishEvent.earlyLateMillis)
+        assertNull(outcome.events.single { it.kind == RaceEventKind.RACE_UNDO_FINISH }.earlyLateMillis)
     }
 }
 

@@ -27,6 +27,8 @@ sealed interface RaceState {
         val stoppedAt: @Contextual Instant,
         val finishedAt: @Contextual Instant?,
         val finishedModel: RaceModel?,
+        /** How early (negative) or late (positive) the last regularity finished, if it was known at the finish. */
+        val finishedEarlyLate: Duration? = null,
     ) : RaceState
     
     @Serializable
@@ -35,7 +37,9 @@ sealed interface RaceState {
         override val raceModel: RaceModel,
         val previousFinishAt: @Contextual Instant?,
         val previousFinishModel: RaceModel?,
-        val goingModel: RaceModel
+        val goingModel: RaceModel,
+        /** How early (negative) or late (positive) the previous regularity finished, if it was known at the finish. */
+        val previousFinishEarlyLate: Duration? = null,
     ) : RaceState, MovingWithRaceModel
     
     @Serializable
@@ -43,7 +47,9 @@ sealed interface RaceState {
         override val raceSectionId: Long,
         override val raceModel: RaceModel,
         val finishedRaceModel: RaceModel?,
-        val finishedAt: @Contextual Instant?
+        val finishedAt: @Contextual Instant?,
+        /** How early (negative) or late (positive) the last regularity finished, if it was known at the finish. */
+        val finishedEarlyLate: Duration? = null,
     ) : RaceState, MovingWithRaceModel
 }
 
