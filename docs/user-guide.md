@@ -164,7 +164,7 @@ From left to right:
 - <img src="images/badges/6.png" height="20" alt="6"> **The allowance**, such as `-1`, if you turned it on in Settings (see [Allowance](#8-allowance)).
 
 > [!TIP]
-> **Advanced.** The small number after `setavg`, `thenavg` or `endavg` (for example `setavg1` and `endavg1`) shows which marks belong together: a `setavg` and the `endavg` that ends it have the same number.
+> **Advanced.** The small number after `setavg`, `thenavg` or `endavg` (for example `setavg1` and `endavg1`) shows which marks belong together: a `setavg` and the `endavg` that ends it have the same number, and so does every `thenavg` in between.
 
 If the roadmap has an error, the app shows a red bar at the top, **Failed to calculate because of errors**, and no times at all. See [Errors and warnings](#17-errors-and-warnings).
 
@@ -199,7 +199,7 @@ Race mode is what you use in the car. It measures the distance you drive, shows 
 - On a tablet, tap **Race mode** in the top bar.
 - On any device, open the menu (three dots) and tap **Race mode**. This also closes the editor if it is open.
 
-The first time, the app asks you to allow it to use your location, to find nearby devices (Bluetooth) and, on Android 14 and later, to show notifications. Allow all of them. If you refuse one, the app says **Please grant the required permissions** and does not start race mode.
+The app asks for the permissions that the distance source needs, such as the location for GPS or nearby devices for OBD. Allow them; if something is missing, the app's dialogs explain what to do.
 
 The race panel then appears below the list (or beside it, if you turn the device sideways).
 
@@ -212,7 +212,7 @@ When you open the section again, the race panel opens by itself. If race mode ru
 The screen stays on while a timer runs and the race panel is open. If you hide the race panel, the screen may turn off as usual.
 
 > [!WARNING]
-> Normally the app keeps running in the background. Some phones (for example Xiaomi, Huawei, or Samsung with its "deep sleeping apps") can close it by themselves to save battery. Race mode then starts again but forgets the timers. To prevent this, open the list of apps in the device's settings, choose this app, open **Battery**, and choose the option without limits (often called **Unrestricted**). Keep the device charged. Before the rally, test it: start a timer, lock the device for a while, and check that the timer still runs.
+> Normally the app keeps running in the background. Some phones (for example Xiaomi, Huawei, or Samsung with its "deep sleeping apps") can close it by themselves to save battery. Race mode then starts again but forgets the timers. To prevent this, exempt the app from battery optimization: the app offers it the first time you turn race mode on (**Battery optimization**), and you can do it any time in Settings, under **Background work** (see [Background work](#106-background-work)). Keep the device charged. Before the rally, test it: start a timer, lock the device for a while, and check that the timer still runs.
 
 To hide the panel without stopping, use **Hide race panel** in the menu. To end race mode, first stop the timers (see below), then use **Drop race state and stop** in the menu.
 
@@ -276,7 +276,9 @@ The app has two timers. The panel shows only one of them at a time:
 - The **section timer** (started from the **Go** row) times the **whole section** at its overall average speed (section length ÷ section time). Use it for a section with a set time, from one time control to the next. The panel shows a stopwatch icon.
 - The **regularity timer** (started from the **Regularity** row) times a **regularity**, where each set average speed and each speed change counts. The panel shows a flag icon.
 
-<img src="images/timers.png" alt="The clock of the section timer, with a stopwatch, and of the regularity timer, with a flag">
+| Section timer | Regularity timer |
+|---|---|
+| <img src="images/timer-section.png" width="400" alt="Section timer"> | <img src="images/timer-regularity.png" width="400" alt="Regularity timer"> |
 
 Both timers use the **device's clock**. Before the start, set the device's time by hand from the official rally clock.
 
@@ -294,7 +296,11 @@ The panel looks different in each state:
 | **Stopped** | **Stopped:** with the time and the distance | the Go row, the Regularity row, **Undo stop** | section timer, or regularity timer |
 | **In another section** | **Race going in another section** | **Go to section** | |
 
-<img src="images/race-states.png" alt="The race panel when not started, with the section timer, with the regularity timer, and after Stop">
+| Not started | Section timer runs |
+|---|---|
+| <img src="images/race-state-not-started.png" width="400" alt="Not started"> | <img src="images/race-state-section-timer.png" width="400" alt="Section timer runs"> |
+| **Regularity timer runs** | **Stopped** |
+| <img src="images/race-state-regularity.png" width="400" alt="Regularity timer runs"> | <img src="images/race-state-stopped.png" width="400" alt="Stopped"> |
 
 #### Starting: the Go row and the Regularity row
 
@@ -382,15 +388,15 @@ While the regularity timer runs, the panel shows a row of round speed buttons: *
 - adds a position at your current distance with `thenavg` and that speed, so the times from here use the new speed;
 - remembers this speed.
 
-On a phone the row does not fit on the screen: swipe it sideways to see all the speed buttons <img src="images/badges/2.png" height="20" alt="2"> and the fields before them.
+On a phone the row does not fit on the screen: swipe it sideways to see all the speed buttons <img src="images/badges/4.png" height="20" alt="4"> and the fields before them. On a tablet more of it fits:
 
 <img src="images/speed-buttons.png" width="540" alt="The row of speed buttons, swiped sideways">
 
 More fields in that row:
 
-- **The percentage field** <img src="images/badges/1.png" height="20" alt="1"> (with **×** after it). Some rallies set the speed as a percentage of the speed limit on the road signs, for example "speed limit times 80%". Type `80` here. Then tap the speed limit you see on the sign, for example **60**: the app uses 60 × 80% = 48 km/h.
-- **The "/h →" field and its button**: type any speed, then tap the round button next to it. It also uses the percentage.
-- **The "=/h →" field and its button**: type an exact speed. This one does not use the percentage.
+- **The "=/h →" field and its button** <img src="images/badges/1.png" height="20" alt="1">: type an exact speed. This one does not use the percentage.
+- **The percentage field** <img src="images/badges/2.png" height="20" alt="2"> (with **×** after it). Some rallies set the speed as a percentage of the speed limit on the road signs, for example "speed limit times 80%". Type `80` here. Then tap the speed limit you see on the sign, for example **60**: the app uses 60 × 80% = 48 km/h.
+- **The "/h →" field and its button** <img src="images/badges/3.png" height="20" alt="3">: type any speed, then tap the round button next to it. It also uses the percentage.
 
 If you tap the wrong speed, tap the right one straight after: it adds another position with the right speed. Between the two taps the app used the wrong speed, so the times are a little off; the sooner you correct it, the smaller the error. Later, you can delete the wrong position in the editor (see [When to use the editor](#151-when-to-use-the-editor)).
 
@@ -519,6 +525,8 @@ The race panel shows the state of the source in its toolbar. Tap it to open Sett
 | **GPS ± (5 sat)** | Weak GPS signal. The app adds up the distance from the speed instead of the location. |
 | **GPS: no position (3 sat)** | No usable GPS signal. The speed shows as 0. |
 | **GPS: waiting (0 sat)** | Waiting for the first GPS signal. If this stays for long, check that the app may use your location. |
+| **GPS: location off!** | Location is turned off on the device. Turn it on. |
+| **GPS: unavailable!** | The device has no GPS receiver. Choose another source. |
 | **OBD: connecting…** | Connecting to the reader in the car. |
 | **OBD ✔** | The reader works. |
 | **OBD: permissions!** | The app may not use Bluetooth. Allow it in the device's settings. |
@@ -576,6 +584,10 @@ See [Allowance](#8-allowance).
 
 **Play sounds on race mode actions** turns the beeps on or off. See [Sounds](#611-sounds).
 
+### 10.6 Background work
+
+Shows whether the device may stop the app to save battery: **Battery optimization: on**, or **off, the app is exempt**. **Open battery settings** opens the place to exempt the app. **Tips for this device** opens advice for your device's make: some makers have their own battery savers on top of Android's. See the warning in [Race mode keeps running](#62-race-mode-keeps-running).
+
 ---
 
 ## 11. The driver's screen (Driver HUD)
@@ -598,9 +610,9 @@ The driver's device now shows:
 - the race panel: the clock, early/late, the distance, the distance to the selected row, the speed;
 - the countdown on the selected row.
 
-<img src="images/driver-hud.png" width="486" alt="The driver's device showing the section and the race panel">
+<img src="images/driver-hud.png" width="432" alt="The driver's device showing the section and the race panel">
 
-The driver's device does not show the allowance, and has no buttons to change anything. The state of the link <img src="images/badges/1.png" height="20" alt="1"> shows above the panel:
+The driver's device does not show the allowance, and has no buttons to change the race. The **↶** shows there only while you drive backwards. The state of the link <img src="images/badges/1.png" height="20" alt="1"> shows above the panel:
 
 | Text | Meaning |
 |---|---|
@@ -608,6 +620,10 @@ The driver's device does not show the allowance, and has no buttons to change an
 | **Data ✔** | Data arrives. |
 | **Data ???** | No new data for more than a second. |
 | **Data: incompatible version** | The two devices have different versions of the app. Install the same version on both. |
+
+**Swap views** in the menu (three dots) of the Driver HUD screen puts the race panel above the list, so the clock is at the top; with the device turned sideways, the panel goes on the left. The app remembers the choice.
+
+<img src="images/driver-hud-swapped.png" width="432" alt="The driver's device with the views swapped: the race panel above the list">
 
 Leave the Driver HUD screen to stop it.
 
@@ -841,7 +857,9 @@ When the race panel is open and no regularity timer runs, the list shows **secti
 
 These are the times that the section timer uses. When a regularity timer starts, the list goes back to the normal times.
 
-<img src="images/section-times.png" alt="The same section with normal times and with section times">
+| Race panel hidden: normal times | Race panel open: section times |
+|---|---|
+| <img src="images/section-times-normal.png" width="400" alt="Race panel hidden: normal times"> | <img src="images/section-times-section.png" width="400" alt="Race panel open: section times"> |
 
 > [!NOTE]
 > The icon next to the clock tells you which times you see. With the flag (the regularity timer runs), the rows show the normal times. With the stopwatch (only the section timer runs), and also before the start and after **Stop**, they show section times.
