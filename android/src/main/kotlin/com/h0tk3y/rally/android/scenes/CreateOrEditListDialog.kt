@@ -277,6 +277,8 @@ private fun ColumnScope.EditableStageData(
                 },
                 placeholderString = defaultTimeText,
                 suffix = null,
+                isAllowMinus = true,
+                isAllowColon = true,
                 isError = ::isInvalidTimeInput
             )
         })
@@ -314,6 +316,8 @@ private fun ColumnScope.EditableStageData(
             placeholderString = "",
             "",
             addSuffixToPlaceholder = false,
+            isAllowMinus = true,
+            isAllowColon = true,
             isError = ::isInvalidStartTimeInput
         )
     })
