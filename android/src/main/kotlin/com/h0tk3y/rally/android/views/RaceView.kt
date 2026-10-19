@@ -79,6 +79,7 @@ import com.h0tk3y.rally.PositionLine
 import com.h0tk3y.rally.PositionLineModifier
 import com.h0tk3y.rally.R
 import com.h0tk3y.rally.SpeedKmh
+import com.h0tk3y.rally.android.util.ScreenshotMode
 import com.h0tk3y.rally.SpeedWithPercentage
 import com.h0tk3y.rally.TimeDistanceLocalizer
 import com.h0tk3y.rally.TimeHr
@@ -170,7 +171,8 @@ fun RaceView(
                         addPositionMaybeWithSpeed
                     )
                 }
-                if (telemetryState == TelemetryPublicState.Simulation) {
+                val isScreenshotMode by ScreenshotMode.isOn.collectAsState()
+                if (telemetryState == TelemetryPublicState.Simulation && !isScreenshotMode) {
                     DebugSpeedSlider(setDebugSpeed, (race as? RaceUiState.HasRaceModel)?.raceModel?.instantSpeed)
                 }
 
@@ -269,6 +271,7 @@ private fun TelemetryStatus(
     goToSettings: () -> Unit,
     onAccessProblem: (TelemetryPublicState) -> Unit
 ) {
+    val isScreenshotMode by ScreenshotMode.isOn.collectAsState()
     val onClick = {
         if (telemetryPublicState.accessProblemSource() != null) onAccessProblem(telemetryPublicState) else goToSettings()
     }
@@ -287,7 +290,10 @@ private fun TelemetryStatus(
             TelemetryPublicState.OutGaugeWaiting -> stringResource(R.string.telemetryOutgaugeWaiting)
             TelemetryPublicState.OutGaugeDelayed -> stringResource(R.string.telemetryOutgaugeDelayed)
             is TelemetryPublicState.OutGaugeError -> stringResource(R.string.telemetryOutgaugeError)
-            TelemetryPublicState.Simulation -> stringResource(R.string.telemetrySimulationOk)
+            TelemetryPublicState.Simulation ->
+                // The screenshot mode shows the simulated source as a working OBD adapter
+                if (isScreenshotMode) stringResource(R.string.telemetryObdOk)
+                else stringResource(R.string.telemetrySimulationOk)
             is TelemetryPublicState.ReceivesStream ->
                 stringResource(R.string.telemetryData) + (if (telemetryPublicState.isDelayed) stringResource(R.string.telemetryDataDelay) else stringResource(R.string.telemetryOk))
 
