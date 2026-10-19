@@ -1,10 +1,14 @@
 package com.h0tk3y.rally.android.scenes
 
+import android.Manifest
 import android.bluetooth.BluetoothDevice
+import android.content.ActivityNotFoundException
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.os.Build
+import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -57,6 +61,7 @@ import androidx.lifecycle.viewModelScope
 import com.h0tk3y.rally.R
 import com.h0tk3y.rally.android.PreferenceRepository
 import com.h0tk3y.rally.android.TelemetrySource
+import com.h0tk3y.rally.android.permissions.AccessPurpose
 import com.h0tk3y.rally.android.permissions.TelemetryAccessController
 import com.h0tk3y.rally.android.permissions.TelemetryAccessDialogHost
 import com.h0tk3y.rally.android.permissions.hasGpsHardware
@@ -67,6 +72,9 @@ import com.h0tk3y.rally.android.util.openDontKillMyApp
 import com.h0tk3y.rally.android.util.IpAddressDisplay
 import com.h0tk3y.rally.strRound3
 import com.h0tk3y.rally.strRound5
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -96,7 +104,10 @@ fun SettingsScene(
         content = { padding ->
 
             val lazyListState = rememberLazyListState()
-            val telemetryAccess = rememberTelemetryAccessController()
+            val context = LocalContext.current
+            val telemetryAccess = rememberTelemetryAccessController(onReady = { purpose ->
+                if (purpose == AccessPurpose.PICK_BT_DEVICE) model.pickAndSetBluetoothDevice(context)
+            })
             TelemetryAccessDialogHost(telemetryAccess, onChangeSource = null)
 
             LazyColumn(Modifier.padding(padding), lazyListState, verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -122,7 +133,7 @@ private fun LazyItemScope.TelemetrySource(
     /** Asks for the source's permissions right when the user picks it, rather than later when the race mode starts */
     fun selectSource(source: TelemetrySource) {
         model.setTelemetrySource(source)
-        telemetryAccess.runWhenReady(source) { }
+        telemetryAccess.runWhenReady(source, AccessPurpose.NONE)
     }
 
     Text(stringResource(R.string.settingsTelemetrySource), style = MaterialTheme.typography.h6, modifier = Modifier.padding(16.dp))
@@ -168,6 +179,9 @@ private fun LazyItemScope.TelemetrySource(
             if (text == null) {
                 LaunchedEffect(Unit) { text = model.currentMacSelection.first().orEmpty() }
             }
+            LaunchedEffect(model) {
+                model.pickedMac.collect { text = it }
+            }
             Row {
                 Spacer(Modifier.width(48.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -186,9 +200,7 @@ private fun LazyItemScope.TelemetrySource(
 
                         IconButton(onClick = {
                             // Connecting to the picked adapter needs the permission, so ask for it before picking
-                            telemetryAccess.runWhenReady(TelemetrySource.BT_OBD) {
-                                model.pickAndSetBluetoothDevice(context) { picked -> text = picked.orEmpty() }
-                            }
+                            telemetryAccess.runWhenReady(TelemetrySource.BT_OBD, AccessPurpose.PICK_BT_DEVICE)
                         }) {
                             Icon(Icons.AutoMirrored.Rounded.BluetoothSearching, contentDescription = null)
                         }
@@ -553,31 +565,61 @@ class SettingsViewModel(
         }
     }
 
-    fun pickAndSetBluetoothDevice(context: Context, onPicked: (String?) -> Unit) {
-        viewModelScope.launch {
-            val bluetoothReceiver: BroadcastReceiver = object : BroadcastReceiver() {
-                override fun onReceive(context: Context, intent: Intent) {
-                    if (ACTION_BLUETOOTH_SELECTED == intent.action) {
-                        context.unregisterReceiver(this)
-                        val device = IntentCompat.getParcelableExtra(intent, BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
-                        setBtMac(device?.address)
-                        onPicked(device?.address)
-                    }
+    private val _pickedMac = MutableSharedFlow<String>(extraBufferCapacity = 1)
+
+    /** The addresses the user picks with the system Bluetooth picker, to show in the MAC field */
+    val pickedMac: SharedFlow<String> = _pickedMac.asSharedFlow()
+
+    private var btPickerReceiver: Pair<Context, BroadcastReceiver>? = null
+
+    fun pickAndSetBluetoothDevice(context: Context) {
+        val appContext = context.applicationContext
+        unregisterBtPickerReceiver()
+
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                if (ACTION_BLUETOOTH_SELECTED == intent.action) {
+                    unregisterBtPickerReceiver()
+                    val address = IntentCompat.getParcelableExtra(intent, BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)?.address
+                    setBtMac(address)
+                    address?.let(_pickedMac::tryEmit)
                 }
             }
+        }
+        // The picker is a part of the system, so the receiver must be exported (Android 14+ throws if this is not specified).
+        // Only accept the result from a sender with the Bluetooth permission, so that other apps can't set the address.
+        ContextCompat.registerReceiver(
+            appContext,
+            receiver,
+            IntentFilter(ACTION_BLUETOOTH_SELECTED),
+            bluetoothSenderPermission,
+            null,
+            ContextCompat.RECEIVER_EXPORTED
+        )
+        btPickerReceiver = appContext to receiver
 
-            // The picker is a part of the system, so the receiver must be exported; Android 14+ throws if this is not specified
-            ContextCompat.registerReceiver(
-                context.applicationContext,
-                bluetoothReceiver,
-                IntentFilter(ACTION_BLUETOOTH_SELECTED),
-                ContextCompat.RECEIVER_EXPORTED
-            )
-            val bluetoothPicker = Intent("android.bluetooth.devicepicker.action.LAUNCH")
-            context.startActivity(bluetoothPicker)
+        try {
+            context.startActivity(Intent("android.bluetooth.devicepicker.action.LAUNCH"))
+        } catch (e: ActivityNotFoundException) {
+            // Some vendors ship no picker
+            unregisterBtPickerReceiver()
+            Toast.makeText(context, R.string.settingsBtPickerUnavailable, Toast.LENGTH_LONG).show()
         }
     }
+
+    /** The picker may be closed without a result, so the receiver is also removed with the next pick or with this view model */
+    private fun unregisterBtPickerReceiver() {
+        btPickerReceiver?.let { (context, receiver) -> context.unregisterReceiver(receiver) }
+        btPickerReceiver = null
+    }
+
+    override fun onCleared() {
+        unregisterBtPickerReceiver()
+    }
 }
+
+private val bluetoothSenderPermission =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Manifest.permission.BLUETOOTH_CONNECT else Manifest.permission.BLUETOOTH
 
 private const val ACTION_BLUETOOTH_SELECTED =
     "android.bluetooth.devicepicker.action.DEVICE_SELECTED"

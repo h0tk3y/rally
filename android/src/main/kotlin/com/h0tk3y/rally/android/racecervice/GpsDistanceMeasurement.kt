@@ -12,6 +12,7 @@ import androidx.core.location.LocationListenerCompat
 import androidx.core.location.LocationManagerCompat
 import androidx.core.location.LocationRequestCompat
 import com.h0tk3y.rally.android.permissions.hasFineLocation
+import com.h0tk3y.rally.android.permissions.hasGpsHardware
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -64,8 +65,7 @@ class GpsDistanceMeasurement(
     val distanceAccumulator = DistanceAccumulator()
 
     fun requestPlatformUpdates(): GpsStartResult {
-        // Wi-Fi-only devices, like many tablets, have no GPS provider, and requesting its updates would throw
-        if (!LocationManagerCompat.hasProvider(locationManager, LocationManager.GPS_PROVIDER))
+        if (!context.hasGpsHardware())
             return GpsStartResult.NO_GPS_HARDWARE
 
         // Approximate location is not enough for the GPS provider, and it is not precise enough to measure the distance anyway

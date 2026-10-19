@@ -184,7 +184,7 @@ class RallyApp {
         const val COARSE_LOCATION = "android.permission.ACCESS_COARSE_LOCATION"
         val LOCATION = arrayOf(FINE_LOCATION, COARSE_LOCATION)
         const val BLUETOOTH_CONNECT = "android.permission.BLUETOOTH_CONNECT"
-        val BLUETOOTH = arrayOf(BLUETOOTH_CONNECT, "android.permission.BLUETOOTH_SCAN")
+        val BLUETOOTH = arrayOf(BLUETOOTH_CONNECT)
 
         // ServiceInfo.FOREGROUND_SERVICE_TYPE_*
         const val TYPE_LOCATION = 0x8

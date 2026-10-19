@@ -5,7 +5,10 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.os.Build
+import android.location.LocationManager
 import androidx.core.content.ContextCompat
+import androidx.core.content.getSystemService
+import androidx.core.location.LocationManagerCompat
 import com.h0tk3y.rally.android.TelemetrySource
 
 /**
@@ -55,7 +58,9 @@ fun Context.isGranted(permission: String): Boolean =
 
 fun Context.hasFineLocation(): Boolean = isGranted(Manifest.permission.ACCESS_FINE_LOCATION)
 
-fun Context.hasGpsHardware(): Boolean = packageManager.hasSystemFeature(PackageManager.FEATURE_LOCATION_GPS)
+/** Wi-Fi-only devices, like many tablets, have no GPS provider; requesting its updates would throw. Needs no permission. */
+fun Context.hasGpsHardware(): Boolean =
+    getSystemService<LocationManager>()?.let { LocationManagerCompat.hasProvider(it, LocationManager.GPS_PROVIDER) } == true
 
 /** Without GPS hardware (e.g. Wi-Fi-only tablets), defaulting to the GPS source would leave the user with a source that can't work. */
 fun Context.defaultTelemetrySource(): TelemetrySource =
