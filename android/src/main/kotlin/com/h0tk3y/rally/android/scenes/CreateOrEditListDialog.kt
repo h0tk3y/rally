@@ -178,15 +178,16 @@ private fun importTextFromData(distanceKm: DistanceKm, speedKmh: SpeedKmh, start
         ${distanceKm.valueKm}
     """.trimIndent()
 
+// Placeholder values used for empty fields; they must pass the validation below
+internal const val defaultDistanceText = "60.0"
+internal const val defaultTimeText = "01:00"
+internal const val defaultSpeedText = "60"
+
 @Composable
 private fun ColumnScope.EditableStageData(
     updateData: (DistanceKm, SpeedKmh, TimeDayHrMinSec?) -> Unit,
     onValidityChange: (Boolean) -> Unit
 ) {
-    val defaultDistanceText = "60.0"
-    val defaultTimeText = "01:00"
-    val defaultSpeedText = "60"
-
     val distanceText = rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue("")) }
     val timeText = rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue("")) }
     val speedText = rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue("")) }
@@ -324,15 +325,23 @@ sealed interface ItemSaveResult<out T> {
     object AlreadyExists : ItemSaveResult<Nothing>
 }
 
-// Empty distance, time and speed fields are valid: the dialog uses the placeholder values for them
-internal fun isInvalidDistanceInput(text: String): Boolean = text.ifEmpty { "0.0" }.toDoubleOrNull() == null
-internal fun isInvalidTimeInput(text: String): Boolean = text.isNotEmpty() && parseTimeInput(text) == null
-internal fun isInvalidSpeedInput(text: String): Boolean = text.ifEmpty { "0.0" }.toDoubleOrNull() == null
+// Empty distance, time and speed fields are valid: the dialog uses the placeholder values for them.
+// Otherwise, they must be positive: a zero or negative value gives no meaningful average speed or stage time.
+internal fun isInvalidDistanceInput(text: String): Boolean = text.isNotEmpty() && !isPositiveNumber(text)
+internal fun isInvalidTimeInput(text: String): Boolean =
+    text.isNotEmpty() && (parseTimeInput(text)?.toHr()?.timeHours ?: 0.0) <= 0.0
+internal fun isInvalidSpeedInput(text: String): Boolean = text.isNotEmpty() && !isPositiveNumber(text)
+
+// The start time is a time of day, so 00:00 is valid there
 internal fun isInvalidStartTimeInput(text: String): Boolean = text.isNotEmpty() && parseTimeInput(text) == null
+
+// Also rejects "NaN" and "Infinity", which toDoubleOrNull accepts
+private fun isPositiveNumber(text: String): Boolean = text.toDoubleOrNull()?.let { it.isFinite() && it > 0.0 } == true
 
 internal fun isValidStageDataInput(distance: String, time: String, speed: String, startTime: String): Boolean =
     !isInvalidDistanceInput(distance) && !isInvalidTimeInput(time) && !isInvalidSpeedInput(speed) && !isInvalidStartTimeInput(startTime)
 
+// '-' is a separator here, so the parts cannot be negative: "-1:00" has an empty part and is rejected
 internal fun parseTimeInput(string: String): TimeDayHrMinSec? {
     val parts = string.split(":", ".", "-")
     if (!parts.all { it.toIntOrNull() != null })
