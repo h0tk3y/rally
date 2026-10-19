@@ -152,9 +152,11 @@ The **Create section** window has these fields:
 |---|---|
 | **New section name** | Any name. Two sections cannot have the same name. |
 | **Distance** | The length of the section in km, for example `60.0`. |
-| **Time HH:MM(:SS)** | How long the section should take. |
+| **Time HH-MM(-SS)** | How long the section should take. |
 | **Average speed** | The set average speed in km/h. |
-| **Start at HH:MM(:SS)** | The time of day of the start. You may leave it empty, and then you will be able to start at any exact second by pressing **Now**. |
+| **Start at HH-MM(-SS)** | The time of day of the start. You may leave it empty, and then you will be able to start at any exact second by pressing **Now**. |
+
+A field with a zero, negative or unreadable value turns red, and **Save** stays disabled until you correct it.
 
 <img src="images/create-section.png" width="480" alt="The Create section window, filled in">
 
@@ -394,14 +396,16 @@ Below them:
 
 The flag <img src="images/badges/1.png" height="20" alt="1"> shows that the regularity timer runs, and `ṽ=` <img src="images/badges/2.png" height="20" alt="2"> is your average speed in the regularity. The row of speed fields and buttons <img src="images/badges/3.png" height="20" alt="3"> is described in [Speed buttons](#68-speed-buttons-and-the-v-button).
 
-- **Finish regularity** <img src="images/badges/4.png" height="20" alt="4"> ends the regularity timer. The panel goes back to the section timer and shows **Finished:** with the regularity time and distance.
+- **Finish regularity** <img src="images/badges/4.png" height="20" alt="4"> ends the regularity timer. The panel goes back to the section timer and shows **Finished:** with the regularity time and distance, and how early or late you were at the finish, for example `+2.4` (seconds late) or `-1.3` (early).
 - **Finish and start** <img src="images/badges/5.png" height="20" alt="5"> ends the regularity and immediately starts a new one from where you are. Use it for chained regularities, for example at an intermediate finish where the next regularity starts at once. You cannot undo this.
 
 The regularity timer does not end by itself, even after the last position: tap **Finish regularity**.
 
-After **Finish regularity**, the section timer runs on. The panel shows the finished regularity <img src="images/badges/1.png" height="20" alt="1">, the **Next regularity:** row <img src="images/badges/2.png" height="20" alt="2"> for a later regularity, and **Undo finish** <img src="images/badges/3.png" height="20" alt="3">:
+After **Finish regularity**, the section timer runs on. The panel shows the finished regularity <img src="images/badges/1.png" height="20" alt="1"> with its early/late at the finish, the **Next regularity:** row <img src="images/badges/2.png" height="20" alt="2"> for a later regularity, and **Undo finish** <img src="images/badges/3.png" height="20" alt="3">:
 
 <img src="images/regularity-finished.png" width="540" alt="The race panel right after Finish regularity">
+
+**Finished:** stays on the panel after **Stop** and **Undo stop**, and while the next regularity runs, until you finish that one. **Undo finish** removes it. The event log also keeps the value (see [Event log](#610-event-log)).
 
 #### After Stop
 
@@ -428,7 +432,7 @@ While you drive back in a regularity, the app removes every `thenavg` mark at th
 
 ### 6.8 Speed buttons and the "v" button
 
-While the regularity timer runs, the panel shows a row of round speed buttons: **5, 10, 20, 30 … 110**. When the set speed changes (at a point in the road book, or at a sign on the road), tap the new speed. The app:
+While the regularity timer runs, the panel shows a row of round speed buttons. By default they are **5, 10, 20, 30 … 110**; you can set your own speeds in [Settings](#105-race-mode), for example only the speed limits used in your rally. When the set speed changes (at a point in the road book, or at a sign on the road), tap the new speed. The app:
 
 - adds a position at your current distance with `thenavg` and that speed, so the times from here use the new speed;
 - remembers this speed.
@@ -455,7 +459,7 @@ The **Add passed position** button (a pin with a plus, in the toolbar) adds a po
 
 ### 6.10 Event log
 
-The **Event log** button (a clock with an arrow, in the toolbar) opens a list of what happened in this section: when the section timer and the regularity timers started and finished, and each undo. Each line shows the distance and the time of day. Finished timers also show how long they ran. The log stays when the app closes.
+The **Event log** button (a clock with an arrow, in the toolbar) opens a list of what happened in this section: when the section timer and the regularity timers started and finished, and each undo. Each line shows the distance and the time of day. Finished timers also show how long they ran, and a finished regularity also shows how early or late you were at its finish, as **Finished:** showed it. The log stays when the app closes.
 
 <img src="images/event-log.png" width="540" alt="The event log after a section with one regularity">
 
@@ -589,7 +593,7 @@ How the app treats GPS: it ignores very bad signals. When the signal is weak, it
 
 ## 10. Settings
 
-The app saves each setting immediately, except the calibration factor, which has its own **Save** button.
+The app saves each setting immediately, except the calibration factor, which has its own **Save** button, and the speed buttons, which are saved only when the list is valid.
 
 ### 10.1 Telemetry source
 
@@ -629,6 +633,8 @@ See [Allowance](#8-allowance).
 
 **Play sounds on race mode actions** turns the beeps on or off. See [Sounds](#611-sounds).
 
+**Speed buttons** sets the round buttons in the race panel and in the **v** row (see [Speed buttons](#68-speed-buttons-and-the-v-button)): whole speeds from 1 to 999 km/h, separated by spaces, commas or semicolons, for example `30 40 50 60 70 90`. Up to 30 speeds, in the order you type them. The app saves the list as you type, as soon as it is valid, and shows **Saved:** with the buttons. If the list has a mistake, the field turns red and says what is wrong, and the race panel keeps the previous buttons; the next time you open Settings, the field shows them. **Default** brings back 5, 10, 20 … 110.
+
 ### 10.6 Background work
 
 Shows whether the device may stop the app to save battery: **Battery optimization: on**, or **off, the app is exempt**. **Open battery settings** opens the place to exempt the app. **Tips for this device** opens advice for your device's make: some makers have their own battery savers on top of Android's. See the warning in [Race mode keeps running](#62-race-mode-keeps-running).
@@ -664,6 +670,7 @@ The driver's device does not show the allowance, and has no buttons to change th
 | **Data: waiting** | No data yet. Check the address, the Wi-Fi, and that race mode is on on your device. |
 | **Data ✔** | Data arrives. |
 | **Data ???** | No new data for more than a second. |
+| **Data: link lost** | Data was arriving, but the connection dropped. The driver's device keeps trying to connect again. Check the Wi-Fi and that race mode is still on on your device. |
 | **Data: incompatible version** | The two devices have different versions of the app. Install the same version, preferably the [latest release](https://github.com/h0tk3y/rally/releases/latest), on both. |
 
 **Swap views** in the menu (three dots) of the Driver HUD screen puts the race panel above the list, so the clock is at the top; with the device turned sideways, the panel goes on the left. The app remembers the choice.
