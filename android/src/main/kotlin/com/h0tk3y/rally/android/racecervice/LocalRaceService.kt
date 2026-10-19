@@ -469,6 +469,8 @@ class LocalRaceService : PrimaryRaceService, Service() {
             is RaceState.InRace -> current.raceModel
             else -> null
         }
+        // Starting while in a regularity gives its implicit finish no early/late value. No UI path does that: "Finish and
+        // start" finishes the regularity first, so the state is Going here.
         val previousFinishEarlyLate = when (val current = _raceState.value) {
             is RaceState.Going -> current.finishedEarlyLate
             is RaceState.Stopped -> current.finishedEarlyLate
