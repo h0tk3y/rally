@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.h0tk3y.rally.android.permissions.defaultTelemetrySource
 import com.h0tk3y.rally.android.scenes.TimeAllowance
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -16,6 +17,8 @@ import kotlinx.coroutines.flow.map
 internal val Context.dataStore by preferencesDataStore(
     name = "rally-prefs"
 )
+
+internal fun Context.preferenceRepository() = PreferenceRepository(dataStore, defaultTelemetrySource())
 
 private object PreferencesKeys {
     val ALLOWANCE = stringPreferencesKey("allowance")
@@ -27,6 +30,8 @@ private object PreferencesKeys {
     val SOUND_FEEDBACK = booleanPreferencesKey("soundFeedback")
     val OUTGAUGE_PORT = intPreferencesKey("outgaugePort")
     val HUD_SWAP_PANELS = booleanPreferencesKey("hudSwapPanels")
+    val BATTERY_HINT_SHOWN = booleanPreferencesKey("batteryHintShown")
+    val SPEED_BUTTONS = stringPreferencesKey("speedButtons")
 }
 
 data class UserPreferences(
@@ -38,16 +43,25 @@ data class UserPreferences(
     val sendTeleToIp: String?,
     val soundFeedback: Boolean,
     val outgaugePort: Int = 4444,
-    val hudSwapPanels: Boolean = false
+    val hudSwapPanels: Boolean = false,
+    val batteryHintShown: Boolean = false,
+    /** Never empty: a missing or unreadable stored value gives [SpeedButtons.DEFAULT] */
+    val speedButtons: List<Int> = SpeedButtons.DEFAULT
 )
 
 enum class TelemetrySource {
     BT_OBD, GPS, SIMULATION, OUTGAUGE
 }
 
-class PreferenceRepository(val dataStore: DataStore<Preferences>) {
+/**
+ * @param defaultTelemetrySource the source used until the user picks one; see [com.h0tk3y.rally.android.permissions.defaultTelemetrySource]
+ */
+class PreferenceRepository(
+    val dataStore: DataStore<Preferences>,
+    private val defaultTelemetrySource: TelemetrySource = TelemetrySource.GPS
+) {
     val userPreferencesFlow: Flow<UserPreferences> = dataStore.data.map { preferences ->
-        mapUserPreferences(preferences)
+        mapUserPreferences(preferences, defaultTelemetrySource)
     }
 
     suspend fun saveTimeAllowance(timeAllowance: TimeAllowance?) {
@@ -104,21 +118,39 @@ class PreferenceRepository(val dataStore: DataStore<Preferences>) {
         }
     }
 
+    /** Saves only a list that [parseSpeedButtonsInput] accepts; anything else is ignored rather than stored */
+    suspend fun saveSpeedButtons(speeds: List<Int>) {
+        val encoded = encodeSpeedButtons(speeds)
+        if (decodeStoredSpeedButtons(encoded) != speeds) return
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.SPEED_BUTTONS] = encoded
+        }
+    }
+
+    suspend fun saveBatteryHintShown() {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.BATTERY_HINT_SHOWN] = true
+        }
+    }
+
 }
 
-private fun mapUserPreferences(preferences: Preferences): UserPreferences {
+private fun mapUserPreferences(preferences: Preferences, defaultTelemetrySource: TelemetrySource): UserPreferences {
     // Get the sort order from preferences and convert it to a [SortOrder] object
     val timeAllowance =
         preferences[PreferencesKeys.ALLOWANCE]?.let { pref -> TimeAllowance.entries.find { it.name == pref } }
     val calibration = preferences[PreferencesKeys.CALIBRATION] ?: 1.0
     val telemetrySource = preferences[PreferencesKeys.TELEMETRY_SOURCE]?.let { value  -> TelemetrySource.entries.find { it.name == value } } 
-        ?: TelemetrySource.GPS
+        ?: defaultTelemetrySource
     val btMac = preferences[PreferencesKeys.BT_MAC]
     val speedLimitPercent = preferences[PreferencesKeys.SPEED_LIMIT_PERCENT_TEXT]
     val sendTeleToIp = preferences[PreferencesKeys.SEND_TELE_TO_IP]
     val soundFeedback = preferences[PreferencesKeys.SOUND_FEEDBACK] ?: false
     val outgaugePort = preferences[PreferencesKeys.OUTGAUGE_PORT] ?: 4444
     val hudSwapPanels = preferences[PreferencesKeys.HUD_SWAP_PANELS] ?: false
+    val batteryHintShown = preferences[PreferencesKeys.BATTERY_HINT_SHOWN] ?: false
+    // A value of another type under this key (e.g. restored from an edited backup) throws on the cast, so fall back to the default too
+    val speedButtons = decodeStoredSpeedButtons(runCatching { preferences[PreferencesKeys.SPEED_BUTTONS] }.getOrNull())
     return UserPreferences(
         timeAllowance,
         calibration,
@@ -128,6 +160,8 @@ private fun mapUserPreferences(preferences: Preferences): UserPreferences {
         sendTeleToIp?.takeIf { it.isNotEmpty() },
         soundFeedback,
         outgaugePort,
-        hudSwapPanels
+        hudSwapPanels,
+        batteryHintShown,
+        speedButtons
     )
 }

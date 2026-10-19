@@ -1,10 +1,15 @@
 package com.h0tk3y.rally.android.scenes
 
+import android.Manifest
 import android.bluetooth.BluetoothDevice
+import android.content.ActivityNotFoundException
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.os.Build
+import android.util.Log
+import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -30,14 +35,17 @@ import androidx.compose.material.RadioButton
 import androidx.compose.material.Scaffold
 import androidx.compose.material.Switch
 import androidx.compose.material.Text
+import androidx.compose.material.TextButton
 import androidx.compose.material.TopAppBar
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.BluetoothSearching
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -46,14 +54,34 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import androidx.core.content.IntentCompat
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.viewModelScope
 import com.h0tk3y.rally.R
 import com.h0tk3y.rally.android.PreferenceRepository
+import com.h0tk3y.rally.android.SpeedButtons
+import com.h0tk3y.rally.android.SpeedButtonsParseResult
+import com.h0tk3y.rally.android.encodeSpeedButtons
+import com.h0tk3y.rally.android.parseSpeedButtonsInput
 import com.h0tk3y.rally.android.TelemetrySource
+import com.h0tk3y.rally.android.permissions.AccessPurpose
+import com.h0tk3y.rally.android.permissions.TelemetryAccessController
+import com.h0tk3y.rally.android.permissions.TelemetryAccessDialogHost
+import com.h0tk3y.rally.android.permissions.hasGpsHardware
+import com.h0tk3y.rally.android.permissions.rememberTelemetryAccessController
+import com.h0tk3y.rally.android.util.isIgnoringBatteryOptimizations
+import com.h0tk3y.rally.android.util.openBatteryOptimizationSettings
+import com.h0tk3y.rally.android.util.openDontKillMyApp
 import com.h0tk3y.rally.android.util.IpAddressDisplay
 import com.h0tk3y.rally.strRound3
 import com.h0tk3y.rally.strRound5
+import java.io.IOException
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
@@ -82,11 +110,18 @@ fun SettingsScene(
         content = { padding ->
 
             val lazyListState = rememberLazyListState()
+            val context = LocalContext.current
+            val telemetryAccess = rememberTelemetryAccessController(onReady = { purpose ->
+                if (purpose == AccessPurpose.PICK_BT_DEVICE) model.pickAndSetBluetoothDevice(context)
+            })
+            TelemetryAccessDialogHost(telemetryAccess, onChangeSource = null)
 
             LazyColumn(Modifier.padding(padding), lazyListState, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                item { TelemetrySource(model, calibrateByCurrentDistance) }
+                item { TelemetrySource(model, telemetryAccess, calibrateByCurrentDistance) }
                 item { Allowance(model) }
                 item { SoundFeedback(model) }
+                item { SpeedButtonsSetting(model) }
+                item { BackgroundReliability() }
             }
         }
     )
@@ -95,9 +130,18 @@ fun SettingsScene(
 @Composable
 private fun LazyItemScope.TelemetrySource(
     model: SettingsViewModel,
+    telemetryAccess: TelemetryAccessController,
     calibrateByCurrentDistance: Double?
 ) {
     val telemetrySource by model.currentTelemetrySource.collectAsState(TelemetrySource.BT_OBD)
+    val context = LocalContext.current
+    val hasGps = remember(context) { context.hasGpsHardware() }
+
+    /** Asks for the source's permissions right when the user picks it, rather than later when the race mode starts */
+    fun selectSource(source: TelemetrySource) {
+        model.setTelemetrySource(source)
+        telemetryAccess.runWhenReady(source, AccessPurpose.NONE)
+    }
 
     Text(stringResource(R.string.settingsTelemetrySource), style = MaterialTheme.typography.h6, modifier = Modifier.padding(16.dp))
 
@@ -106,12 +150,19 @@ private fun LazyItemScope.TelemetrySource(
     SettingsRow(
         Modifier
             .fillMaxWidth()
-            .clickable { model.setTelemetrySource(TelemetrySource.GPS) }
+            .clickable(enabled = hasGps) { selectSource(TelemetrySource.GPS) }
     ) {
-        RadioButton(selected = isGps, onClick = null)
+        RadioButton(selected = isGps, onClick = null, enabled = hasGps || isGps)
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(stringResource(R.string.telemetrySourceGps))
             Text(style = MaterialTheme.typography.caption, text = stringResource(R.string.telemetrySourceGpsHint))
+            if (!hasGps) {
+                Text(
+                    style = MaterialTheme.typography.caption,
+                    color = MaterialTheme.colors.error,
+                    text = stringResource(R.string.telemetrySourceGpsUnavailable)
+                )
+            }
         }
     }
     
@@ -120,7 +171,7 @@ private fun LazyItemScope.TelemetrySource(
     SettingsRow(
         Modifier
             .fillMaxWidth()
-            .clickable { model.setTelemetrySource(TelemetrySource.BT_OBD) }
+            .clickable { selectSource(TelemetrySource.BT_OBD) }
     ) {
         RadioButton(selected = isObd, onClick = null)
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -130,15 +181,21 @@ private fun LazyItemScope.TelemetrySource(
     }
     if (isObd) {
         run {
-            val btMac by model.currentMacSelection.collectAsState(null)
-            var text by rememberSaveable(btMac) { mutableStateOf(btMac ?: "") }
+            // Not keyed by the saved value: it lags behind the typing and would reset the field mid-word
+            var text by rememberSaveable { mutableStateOf<String?>(null) }
+            if (text == null) {
+                LaunchedEffect(Unit) { text = model.currentMacSelection.first().orEmpty() }
+            }
+            LaunchedEffect(model) {
+                model.pickedMac.collect { text = it }
+            }
             Row {
                 Spacer(Modifier.width(48.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         OutlinedTextField(
                             modifier = Modifier.weight(1f),
-                            value = text,
+                            value = text.orEmpty(),
                             onValueChange = {
                                 text = it
                                 model.viewModelScope.launch {
@@ -148,8 +205,10 @@ private fun LazyItemScope.TelemetrySource(
                             label = { Text(stringResource(R.string.settingsBtMac)) }
                         )
 
-                        val context = LocalContext.current
-                        IconButton(onClick = { model.pickAndSetBluetoothDevice(context) }) {
+                        IconButton(onClick = {
+                            // Connecting to the picked adapter needs the permission, so ask for it before picking
+                            telemetryAccess.runWhenReady(TelemetrySource.BT_OBD, AccessPurpose.PICK_BT_DEVICE)
+                        }) {
                             Icon(Icons.AutoMirrored.Rounded.BluetoothSearching, contentDescription = null)
                         }
                     }
@@ -171,7 +230,7 @@ private fun LazyItemScope.TelemetrySource(
     SettingsRow(
         Modifier
             .fillMaxWidth()
-            .clickable { model.setTelemetrySource(TelemetrySource.OUTGAUGE) }
+            .clickable { selectSource(TelemetrySource.OUTGAUGE) }
     ) {
         RadioButton(selected = isOutgauge, onClick = null)
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -218,7 +277,7 @@ private fun LazyItemScope.TelemetrySource(
     }
 
     SettingsRow(
-        Modifier.clickable { model.setTelemetrySource(TelemetrySource.SIMULATION) }
+        Modifier.clickable { selectSource(TelemetrySource.SIMULATION) }
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             RadioButton(selected = telemetrySource == TelemetrySource.SIMULATION, onClick = null)
@@ -416,6 +475,112 @@ fun SoundFeedback(
 }
 
 @Composable
+private fun SpeedButtonsSetting(model: SettingsViewModel) {
+    // Not keyed by the saved value: it lags behind the typing and would reset the field mid-word (e.g. drop a trailing comma).
+    // When the settings are opened again, the field shows the saved list, so a rejected input is not shown again.
+    var text by rememberSaveable { mutableStateOf<String?>(null) }
+    if (text == null) {
+        LaunchedEffect(Unit) { text = encodeSpeedButtons(model.speedButtons.first()) }
+    }
+    val savedSpeeds by model.speedButtons.collectAsState(null)
+    // No "Saved" line for the value the field was filled with, only after the user changes it (or presses "Default")
+    var isEdited by rememberSaveable { mutableStateOf(false) }
+    val currentText = text ?: return
+    val result = parseSpeedButtonsInput(currentText)
+
+    fun onChange(newText: String) {
+        text = newText
+        isEdited = true
+        // Only a valid list is saved; the race panel keeps the last valid one meanwhile
+        (parseSpeedButtonsInput(newText) as? SpeedButtonsParseResult.Valid)?.let { model.setSpeedButtons(it.speeds) }
+    }
+
+    Column(
+        Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(stringResource(R.string.settingsSpeedButtons))
+        Text(style = MaterialTheme.typography.caption, text = stringResource(R.string.settingsSpeedButtonsHint))
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(
+                modifier = Modifier.weight(1f),
+                value = currentText,
+                singleLine = true,
+                onValueChange = ::onChange,
+                isError = result is SpeedButtonsParseResult.Invalid,
+                label = { Text(stringResource(R.string.settingsSpeedButtonsField)) }
+            )
+            TextButton(
+                enabled = result != SpeedButtonsParseResult.Valid(SpeedButtons.DEFAULT),
+                onClick = { onChange(encodeSpeedButtons(SpeedButtons.DEFAULT)) }
+            ) {
+                Text(stringResource(R.string.settingsSpeedButtonsDefault))
+            }
+        }
+        when (result) {
+            is SpeedButtonsParseResult.Valid -> {
+                // Checked against the stored value read back, so a save that failed or has not completed yet is not reported as done
+                if (isEdited && savedSpeeds == result.speeds) {
+                    Text(
+                        style = MaterialTheme.typography.caption,
+                        text = stringResource(R.string.settingsSpeedButtonsSaved, encodeSpeedButtons(result.speeds))
+                    )
+                }
+            }
+
+            is SpeedButtonsParseResult.Invalid -> {
+                val error = when (result) {
+                    SpeedButtonsParseResult.Empty -> stringResource(R.string.speedButtonsErrorEmpty)
+                    is SpeedButtonsParseResult.NotAWholeNumber -> stringResource(R.string.speedButtonsErrorNotAWholeNumber, result.token)
+                    is SpeedButtonsParseResult.OutOfRange -> stringResource(R.string.speedButtonsErrorOutOfRange, result.token, SpeedButtons.MAX_SPEED)
+                    is SpeedButtonsParseResult.TooMany -> stringResource(R.string.speedButtonsErrorTooMany, result.count, SpeedButtons.MAX_COUNT)
+                }
+                Text(text = error, color = MaterialTheme.colors.error, style = MaterialTheme.typography.caption)
+                savedSpeeds?.let {
+                    Text(
+                        text = stringResource(R.string.speedButtonsNotSaved, encodeSpeedButtons(it)),
+                        color = MaterialTheme.colors.error,
+                        style = MaterialTheme.typography.caption
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BackgroundReliability() {
+    val context = LocalContext.current
+    var isExempt by remember { mutableStateOf(context.isIgnoringBatteryOptimizations()) }
+    LifecycleResumeEffect(context) {
+        // The user may have changed it in the system settings
+        isExempt = context.isIgnoringBatteryOptimizations()
+        onPauseOrDispose { }
+    }
+
+    Text(
+        stringResource(R.string.settingsBackgroundReliability),
+        style = MaterialTheme.typography.h6,
+        modifier = Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp)
+    )
+    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            if (isExempt) stringResource(R.string.settingsBatteryOptimizationOff)
+            else stringResource(R.string.settingsBatteryOptimizationOn)
+        )
+        Text(style = MaterialTheme.typography.caption, text = stringResource(R.string.settingsBatteryOptimizationHint))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { context.openBatteryOptimizationSettings() }) {
+                Text(stringResource(R.string.batteryButtonOpenSettings))
+            }
+            TextButton(onClick = { context.openDontKillMyApp() }) {
+                Text(stringResource(R.string.batteryButtonDeviceTips))
+            }
+        }
+    }
+}
+
+@Composable
 private fun SettingsRow(modifier: Modifier = Modifier, content: @Composable RowScope.() -> Unit) {
     Row(
         modifier
@@ -438,6 +603,7 @@ class SettingsViewModel(
     val currentAllowance = prefs.userPreferencesFlow.map { it.allowance }
     val currentCalibration = prefs.userPreferencesFlow.map { it.calibration }
     val outgaugePort = prefs.userPreferencesFlow.map { it.outgaugePort }
+    val speedButtons = prefs.userPreferencesFlow.map { it.speedButtons }
 
     fun setTelemetrySource(newTelemetrySource: TelemetrySource) {
         viewModelScope.launch {
@@ -481,26 +647,72 @@ class SettingsViewModel(
         }
     }
 
-    fun pickAndSetBluetoothDevice(context: Context) {
+    fun setSpeedButtons(speeds: List<Int>) {
         viewModelScope.launch {
-            val bluetoothReceiver: BroadcastReceiver = object : BroadcastReceiver() {
-                override fun onReceive(context: Context, intent: Intent) {
-                    viewModelScope.launch {
-                        if (ACTION_BLUETOOTH_SELECTED == intent.action) {
-                            @Suppress("DEPRECATION") 
-                            val device = intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
-                            setBtMac(device?.address)
-                        }
-                    }
-                }
+            try {
+                prefs.saveSpeedButtons(speeds)
+            } catch (e: IOException) {
+                // The stored value stays as it was; the settings field does not show it as saved
+                Log.w("SettingsViewModel", "Failed to save the speed buttons", e)
             }
-
-            context.registerReceiver(bluetoothReceiver, IntentFilter(ACTION_BLUETOOTH_SELECTED))
-            val bluetoothPicker = Intent("android.bluetooth.devicepicker.action.LAUNCH")
-            context.startActivity(bluetoothPicker)
         }
     }
+
+    private val _pickedMac = MutableSharedFlow<String>(extraBufferCapacity = 1)
+
+    /** The addresses the user picks with the system Bluetooth picker, to show in the MAC field */
+    val pickedMac: SharedFlow<String> = _pickedMac.asSharedFlow()
+
+    private var btPickerReceiver: Pair<Context, BroadcastReceiver>? = null
+
+    fun pickAndSetBluetoothDevice(context: Context) {
+        val appContext = context.applicationContext
+        unregisterBtPickerReceiver()
+
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                if (ACTION_BLUETOOTH_SELECTED == intent.action) {
+                    unregisterBtPickerReceiver()
+                    val address = IntentCompat.getParcelableExtra(intent, BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)?.address
+                    setBtMac(address)
+                    address?.let(_pickedMac::tryEmit)
+                }
+            }
+        }
+        // The picker is a part of the system, so the receiver must be exported (Android 14+ throws if this is not specified).
+        // Only accept the result from a sender with the Bluetooth permission, so that other apps can't set the address.
+        ContextCompat.registerReceiver(
+            appContext,
+            receiver,
+            IntentFilter(ACTION_BLUETOOTH_SELECTED),
+            bluetoothSenderPermission,
+            null,
+            ContextCompat.RECEIVER_EXPORTED
+        )
+        btPickerReceiver = appContext to receiver
+
+        try {
+            context.startActivity(Intent("android.bluetooth.devicepicker.action.LAUNCH"))
+        } catch (e: ActivityNotFoundException) {
+            // Some vendors ship no picker
+            unregisterBtPickerReceiver()
+            Toast.makeText(context, R.string.settingsBtPickerUnavailable, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    /** The picker may be closed without a result, so the receiver is also removed with the next pick or with this view model */
+    private fun unregisterBtPickerReceiver() {
+        btPickerReceiver?.let { (context, receiver) -> context.unregisterReceiver(receiver) }
+        btPickerReceiver = null
+    }
+
+    override fun onCleared() {
+        unregisterBtPickerReceiver()
+    }
 }
+
+private val bluetoothSenderPermission =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Manifest.permission.BLUETOOTH_CONNECT else Manifest.permission.BLUETOOTH
 
 private const val ACTION_BLUETOOTH_SELECTED =
     "android.bluetooth.devicepicker.action.DEVICE_SELECTED"

@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS Event (
     kind TEXT AS RaceEventKind NOT NULL,
     timestamp TEXT AS Instant NOT NULL,
     sinceTimestamp TEXT AS Instant,
+    earlyLateMillis INTEGER,
     FOREIGN KEY(sectionId) REFERENCES Section(id)  
 );
 
@@ -49,8 +50,8 @@ SELECT Event.* FROM Event WHERE sectionId = ?;
 
 createEvent:
 INSERT OR IGNORE INTO Event(
-    id, sectionId, distance, kind, timestamp, sinceTimestamp
-) VALUES (?, ?, ?, ?, ?, ?);
+    id, sectionId, distance, kind, timestamp, sinceTimestamp, earlyLateMillis
+) VALUES (?, ?, ?, ?, ?, ?, ?);
 
 deleteEventsForSection:
 DELETE FROM Event WHERE sectionId = ?;

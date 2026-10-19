@@ -79,14 +79,16 @@ import com.h0tk3y.rally.PositionLine
 import com.h0tk3y.rally.PositionLineModifier
 import com.h0tk3y.rally.R
 import com.h0tk3y.rally.SpeedKmh
+import com.h0tk3y.rally.android.util.ScreenshotMode
 import com.h0tk3y.rally.SpeedWithPercentage
 import com.h0tk3y.rally.TimeDistanceLocalizer
 import com.h0tk3y.rally.TimeHr
-import com.h0tk3y.rally.TimeMinSec
+import com.h0tk3y.rally.android.permissions.accessProblemSource
 import com.h0tk3y.rally.android.racecervice.TelemetryPublicState
 import com.h0tk3y.rally.android.scenes.RaceModelControls
 import com.h0tk3y.rally.android.scenes.RaceUiState
 import com.h0tk3y.rally.android.scenes.RaceUiState.RaceNotStarted
+import com.h0tk3y.rally.android.SpeedButtons
 import com.h0tk3y.rally.android.scenes.TimeAllowance
 import com.h0tk3y.rally.android.theme.LocalCustomColorsPalette
 import com.h0tk3y.rally.android.theme.LocalCustomTypography
@@ -94,6 +96,8 @@ import com.h0tk3y.rally.android.util.KeepScreenOn
 import com.h0tk3y.rally.android.util.VolumeKeyHandler
 import com.h0tk3y.rally.formatPercentage
 import com.h0tk3y.rally.model.RaceModel
+import com.h0tk3y.rally.model.earlyLate
+import com.h0tk3y.rally.model.formatEarlyLate
 import com.h0tk3y.rally.modifier
 import com.h0tk3y.rally.strRound1
 import com.h0tk3y.rally.strRound2Exact
@@ -103,7 +107,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlin.math.absoluteValue
 import kotlin.math.roundToInt
 import kotlin.time.Duration
-import kotlin.time.Duration.Companion.hours
 import kotlin.time.Instant
 
 @Composable
@@ -118,6 +121,7 @@ fun RaceView(
     navigateToSection: (Long) -> Unit,
     goToEventLog: (() -> Unit)?,
     goToSettings: (() -> Unit)?,
+    onTelemetryAccessProblem: (TelemetryPublicState) -> Unit,
     modifier: Modifier,
     addPositionMaybeWithSpeed: (SpeedKmh?) -> Unit,
     allowance: TimeAllowance?,
@@ -143,6 +147,7 @@ fun RaceView(
                     onAddPositionAtCurrentDistance = { addPositionMaybeWithSpeed(null) },
                     onGoToEventLog = goToEventLog,
                     onGoToSettings = goToSettings,
+                    onTelemetryAccessProblem = onTelemetryAccessProblem,
                     switchRememberedSpeedControls = {
                         if (canRememberSpeed) showRememberedSpeedControls = !showRememberedSpeedControls
                     },
@@ -166,7 +171,8 @@ fun RaceView(
                         addPositionMaybeWithSpeed
                     )
                 }
-                if (telemetryState == TelemetryPublicState.Simulation) {
+                val isScreenshotMode by ScreenshotMode.isOn.collectAsState()
+                if (telemetryState == TelemetryPublicState.Simulation && !isScreenshotMode) {
                     DebugSpeedSlider(setDebugSpeed, (race as? RaceUiState.HasRaceModel)?.raceModel?.instantSpeed)
                 }
 
@@ -201,6 +207,7 @@ private fun MoreRaceControls(
     onAddPositionAtCurrentDistance: () -> Unit,
     onGoToEventLog: (() -> Unit)?,
     onGoToSettings: (() -> Unit)?,
+    onTelemetryAccessProblem: (TelemetryPublicState) -> Unit,
     switchRememberedSpeedControls: () -> Unit,
     rememberSpeed: SpeedKmh?,
     isBigUi: Boolean
@@ -214,7 +221,7 @@ private fun MoreRaceControls(
                 Icon(Icons.Rounded.History, contentDescription = stringResource(R.string.eventLog))
             }
         }
-        TelemetryStatus(telemetryState, onGoToSettings ?: { })
+        TelemetryStatus(telemetryState, onGoToSettings ?: { }, onTelemetryAccessProblem)
         Spacer(Modifier.weight(1f))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             SpeedLimitLikeButton(
@@ -261,9 +268,14 @@ private fun RaceViewElement(modifier: Modifier = Modifier, content: @Composable 
 @Composable
 private fun TelemetryStatus(
     telemetryPublicState: TelemetryPublicState,
-    goToSettings: () -> Unit
+    goToSettings: () -> Unit,
+    onAccessProblem: (TelemetryPublicState) -> Unit
 ) {
-    RaceViewElement(Modifier.clickable(onClick = { goToSettings() })) {
+    val isScreenshotMode by ScreenshotMode.isOn.collectAsState()
+    val onClick = {
+        if (telemetryPublicState.accessProblemSource() != null) onAccessProblem(telemetryPublicState) else goToSettings()
+    }
+    RaceViewElement(Modifier.clickable(onClick = onClick)) {
         val text = when (telemetryPublicState) {
             TelemetryPublicState.NotInitialized -> stringResource(R.string.telemetryNotInitialized)
             TelemetryPublicState.BtConnecting -> stringResource(R.string.telemetryObdConnecting)
@@ -278,19 +290,25 @@ private fun TelemetryStatus(
             TelemetryPublicState.OutGaugeWaiting -> stringResource(R.string.telemetryOutgaugeWaiting)
             TelemetryPublicState.OutGaugeDelayed -> stringResource(R.string.telemetryOutgaugeDelayed)
             is TelemetryPublicState.OutGaugeError -> stringResource(R.string.telemetryOutgaugeError)
-            TelemetryPublicState.Simulation -> stringResource(R.string.telemetrySimulationOk)
+            TelemetryPublicState.Simulation ->
+                // The screenshot mode shows the simulated source as a working OBD adapter
+                if (isScreenshotMode) stringResource(R.string.telemetryObdOk)
+                else stringResource(R.string.telemetrySimulationOk)
             is TelemetryPublicState.ReceivesStream ->
                 stringResource(R.string.telemetryData) + (if (telemetryPublicState.isDelayed) stringResource(R.string.telemetryDataDelay) else stringResource(R.string.telemetryOk))
 
             TelemetryPublicState.IncompatibleStream -> stringResource(R.string.telemetryDataIncompatible)
 
             TelemetryPublicState.WaitingForStream -> stringResource(R.string.telemetryDataWaiting)
+            TelemetryPublicState.StreamLinkLost -> stringResource(R.string.telemetryDataLinkLost)
 
             is TelemetryPublicState.GpsGood -> stringResource(R.string.telemetryGpsGood) + satsString(telemetryPublicState.sats)
             is TelemetryPublicState.GpsProblematic -> stringResource(R.string.telemetryGpsProblematic) + satsString(telemetryPublicState.sats)
             is TelemetryPublicState.GpsNoPosition -> stringResource(R.string.telemetryGpsNoPosition) + satsString(telemetryPublicState.sats)
             is TelemetryPublicState.GpsWaiting -> stringResource(R.string.telemetryGpsWaiting) + satsString(telemetryPublicState.sats)
             TelemetryPublicState.GpsNoPermissions -> stringResource(R.string.telemetryGpsNoPermission)
+            TelemetryPublicState.GpsNoHardware -> stringResource(R.string.telemetryGpsNoHardware)
+            TelemetryPublicState.GpsLocationDisabled -> stringResource(R.string.telemetryGpsLocationDisabled)
         }
         val color = when (telemetryPublicState) {
             is TelemetryPublicState.ReceivesStream -> {
@@ -310,10 +328,13 @@ private fun TelemetryStatus(
             TelemetryPublicState.BtNoTargetMacAddress,
             TelemetryPublicState.NotInitialized,
             TelemetryPublicState.WaitingForStream,
+            TelemetryPublicState.StreamLinkLost,
             is TelemetryPublicState.GpsNoPosition,
             is TelemetryPublicState.GpsProblematic,
             is TelemetryPublicState.GpsWaiting,
             TelemetryPublicState.GpsNoPermissions,
+            TelemetryPublicState.GpsNoHardware,
+            TelemetryPublicState.GpsLocationDisabled,
             TelemetryPublicState.IncompatibleStream,
             TelemetryPublicState.BtReconnecting -> LocalCustomColorsPalette.current.warning
 
@@ -346,7 +367,7 @@ private fun RaceStatus(
             is RaceUiState.RaceGoing -> {
                 Column {
                     if (race.lastFinishAt != null && race.lastFinishModel != null) {
-                        Text(stringResource(R.string.finishedTimeDistancePrefix) + raceTimeDistanceString(race.lastFinishAt, race.lastFinishModel))
+                        Text(stringResource(R.string.finishedTimeDistancePrefix) + finishString(race.lastFinishAt, race.lastFinishModel, race.lastFinishEarlyLate))
                     }
                     RaceTimeDistance(
                         timeFlow, race, selectedPosition, isSectionTime = false, raceControls, distanceLocalizer, allowance
@@ -358,7 +379,7 @@ private fun RaceStatus(
             is RaceUiState.Going -> {
                 Column {
                     if (race.finishedAt != null && race.raceModelAtFinish != null) {
-                        Text(stringResource(R.string.finishedTimeDistancePrefix) + raceTimeDistanceString(race.finishedAt, race.raceModelAtFinish))
+                        Text(stringResource(R.string.finishedTimeDistancePrefix) + finishString(race.finishedAt, race.raceModelAtFinish, race.finishedEarlyLate))
                     }
                     RaceTimeDistance(
                         timeFlow, race, selectedPosition, isSectionTime = true, raceControls, sectionDistanceLocalizer, allowance
@@ -371,7 +392,7 @@ private fun RaceStatus(
             RaceNotStarted -> Text(stringResource(R.string.raceNotStarted))
             is RaceUiState.Stopped -> Column {
                 if (race.finishedAt != null && race.raceModelAtFinish != null) {
-                    Text(stringResource(R.string.finishedTimeDistancePrefix) + raceTimeDistanceString(race.finishedAt, race.raceModelAtFinish))
+                    Text(stringResource(R.string.finishedTimeDistancePrefix) + finishString(race.finishedAt, race.raceModelAtFinish, race.finishedEarlyLate))
                 }
                 Text(stringResource(R.string.stoppedTimeDistancePrefix) + raceTimeDistanceString(race.stoppedAt, race.raceModel))
             }
@@ -406,25 +427,13 @@ private fun RaceTimeDistance(
                 Text(timeString(time, raceModel), style = LocalCustomTypography.current.raceIndicatorText)
             }
             if (distanceLocalizer != null) {
-                val expectedTime = distanceLocalizer.getExpectedTimeForDistance(raceModel.currentDistance)
-                if (expectedTime != null) {
-                    val delta = time - (raceModel.startAtTime + expectedTime.timeHours.hours)
+                val delta = earlyLate(time, raceModel, distanceLocalizer)
+                if (delta != null) {
                     val deltaSec = delta.inWholeMicroseconds.toDouble() / 1000_000
-                    val timeText = if (deltaSec.absoluteValue < 60.0) {
-                        val sign = if (delta <= Duration.ZERO) "" else "+"
-                        "$sign${deltaSec.strRound1()}"
-                    } else {
-                        val sign = if (delta < Duration.ZERO) "-" else if (delta == Duration.ZERO) "" else "+"
-                        "$sign${
-                            TimeMinSec(
-                                deltaSec.absoluteValue.roundToInt() / 60,
-                                deltaSec.absoluteValue.roundToInt() % 60,
-                                false
-                            )
-                        }"
-                    }
+                    val timeText = formatEarlyLate(delta)
                     val allowedTime = if (isSectionTime) {
                         val allowanceTime = run {
+                            val expectedTime = distanceLocalizer.getExpectedTimeForDistance(raceModel.currentDistance) ?: return@run null
                             val expectedTimeForZero = distanceLocalizer.getExpectedTimeForDistance(DistanceKm.zero) ?: return@run null
                             val timeFromSectionStart = expectedTime - expectedTimeForZero
                             allowance(allowance, timeFromSectionStart)
@@ -561,6 +570,11 @@ private fun raceTimeDistanceString(time: Instant, race: RaceModel): String {
     return "${timeString(time, race)} / ${distanceString(race.currentDistance)}"
 }
 
+/** The time at the finish followed by how early or late it was, if that is known, then the distance: `time (±delta) / distance`. */
+private fun finishString(finishedAt: Instant, raceModelAtFinish: RaceModel, earlyLate: Duration?): String =
+    timeString(finishedAt, raceModelAtFinish) + earlyLate?.let { " (${formatEarlyLate(it)})" }.orEmpty() +
+        " / " + distanceString(raceModelAtFinish.currentDistance)
+
 private fun timeString(time: Instant, race: RaceModel): String {
     val elapsedOrRemainingHours = TimeHr((time.minus(race.startAtTime).inWholeMilliseconds.toDouble() / 1000 / 3600).absoluteValue).toTimeDayHrMinSec()
     val isElapsed = !(time - race.startAtTime).isNegative()
@@ -590,6 +604,7 @@ private fun RaceControls(
     addPositionMaybeWithSpeed: (SpeedKmh?) -> Unit
 ) {
     val hapticFeedback = LocalHapticFeedback.current
+    val speedButtons by raceControls.speedButtons.collectAsState()
     when (race) {
         RaceNotStarted -> {
             GoRow(selectedPosition, hapticFeedback, raceControls::startRace, keepOdo = false)
@@ -597,6 +612,7 @@ private fun RaceControls(
             if (showRememberedSpeedControls) {
                 RaceViewElement {
                     NewSpeedLimits(
+                        speedButtons,
                         withClearButton = true,
                         applyLimit = { raceControls.setRememberSpeed(it) },
                         percent = speedLimitPercent,
@@ -609,6 +625,7 @@ private fun RaceControls(
         is RaceUiState.RaceGoing -> {
             RaceViewElement {
                 NewSpeedLimits(
+                    speedButtons,
                     false,
                     {
                         raceControls.setRememberSpeed(it)
@@ -662,6 +679,7 @@ private fun RaceControls(
             if (showRememberedSpeedControls) {
                 RaceViewElement {
                     NewSpeedLimits(
+                        speedButtons,
                         withClearButton = true,
                         applyLimit = { raceControls.setRememberSpeed(it) },
                         percent = speedLimitPercent,
@@ -860,10 +878,9 @@ fun StateSwitchButtonsRow(content: @Composable RowScope.() -> Unit) {
 private fun distanceString(distance: DistanceKm) = distance.valueKm.strRound3Exact()
 private fun deltaDistanceString(distance: DistanceKm) = (if (distance.valueKm > 0) "+" else "") + distance.valueKm.strRound3Exact()
 
-private val speedLimitValues: List<Int> = listOf(5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110)
-
 @Composable
 private fun NewSpeedLimits(
+    speedButtons: List<Int>,
     withClearButton: Boolean,
     applyLimit: (SpeedKmh?) -> Unit,
     percent: String?,
@@ -937,7 +954,9 @@ private fun NewSpeedLimits(
                     applyLimit(speedKmh?.valueKmh?.let(::makeSpeed))
                 })
 
-                speedLimitValues.forEach { limit ->
+                // The view model never gives an empty list, but the panel must not lose its buttons if it ever does.
+                // The same speed may be there more than once, so the speeds must not be used as keys if keys are ever added here.
+                speedButtons.ifEmpty { SpeedButtons.DEFAULT }.forEach { limit ->
                     SpeedLimitButton("$limit", limit.toDouble()) { speedKmh ->
                         applyLimit(speedKmh?.valueKmh?.let(::makeSpeed))
                     }

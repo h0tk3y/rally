@@ -17,6 +17,7 @@ import com.google.accompanist.systemuicontroller.rememberSystemUiController
 import com.h0tk3y.rally.android.db.Database
 import com.h0tk3y.rally.android.db.DatabaseDriverFactory
 import com.h0tk3y.rally.android.theme.AppTheme
+import com.h0tk3y.rally.android.util.ScreenshotMode
 
 
 class MainActivity : ComponentActivity() {
@@ -24,8 +25,9 @@ class MainActivity : ComponentActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         
         super.onCreate(savedInstanceState)
+        ScreenshotMode.registerReceiver(this)
         val database = Database(DatabaseDriverFactory(this))
-        val repo = PreferenceRepository(dataStore)
+        val repo = preferenceRepository()
 
         setContent {
             AppTheme {

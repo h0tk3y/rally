@@ -14,6 +14,7 @@ import com.h0tk3y.rally.model.RaceEventKind
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlin.time.Duration
 import kotlin.time.Instant
 
 interface DatabaseOperations {
@@ -24,7 +25,15 @@ interface DatabaseOperations {
     fun createEmptySection(name: String): SectionInsertOrRenameResult
     fun createSection(name: String, positions: String?): SectionInsertOrRenameResult
     fun renameSection(id: Long, newName: String): SectionInsertOrRenameResult
-    fun insertEvent(kind: RaceEventKind, sectionId: Long, distanceKm: DistanceKm, timestamp: Instant, sinceTimestamp: Instant?)
+    /** [earlyLate] is how early (negative) or late (positive) a regularity finished, stored for [RaceEventKind.RACE_FINISH]. */
+    fun insertEvent(
+        kind: RaceEventKind,
+        sectionId: Long,
+        distanceKm: DistanceKm,
+        timestamp: Instant,
+        sinceTimestamp: Instant?,
+        earlyLate: Duration? = null
+    )
     fun selectEventsForSection(section: Section): Flow<LoadState<List<Event>>>
     fun deleteEventsForSection(section: Section)
 }
@@ -101,9 +110,10 @@ class Database(databaseDriverFactory: DatabaseDriverFactory): DatabaseOperations
         sectionId: Long,
         distanceKm: DistanceKm,
         timestamp: Instant,
-        sinceTimestamp: Instant?
+        sinceTimestamp: Instant?,
+        earlyLate: Duration?
     ) {
-        dbQuery.createEvent(id = null, sectionId, distanceKm.valueKm, kind, timestamp, sinceTimestamp)
+        dbQuery.createEvent(id = null, sectionId, distanceKm.valueKm, kind, timestamp, sinceTimestamp, earlyLate?.inWholeMilliseconds)
     }
 
     override fun selectEventsForSection(section: Section): Flow<LoadState<List<Event>>> {
