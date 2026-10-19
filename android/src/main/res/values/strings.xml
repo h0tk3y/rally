@@ -30,7 +30,7 @@
     <string name="eventUndoSectionFinish">Undo section finish</string>
     <string name="eventRaceStarted">Race started</string>
     <string name="eventRaceFinished">Finished</string>
-    <string name="eventUndoRaceFinish">Undo race finish</string>
+    <string name="eventUndoRaceFinish">Undo finish</string>
     <string name="buttonCalculate">Calculate</string>
     <string name="buttonEdit">Edit</string>
     <string name="stateLoading">Loading</string>
