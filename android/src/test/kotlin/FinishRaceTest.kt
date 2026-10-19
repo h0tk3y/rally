@@ -10,19 +10,24 @@ import com.h0tk3y.rally.RallyTimesResult
 import com.h0tk3y.rally.RallyTimesResultSuccess
 import com.h0tk3y.rally.SpeedKmh
 import com.h0tk3y.rally.android.db.SectionInsertOrRenameResult
+import com.h0tk3y.rally.android.racecervice.LocalRaceService
 import com.h0tk3y.rally.android.racecervice.PrimaryRaceService
 import com.h0tk3y.rally.android.racecervice.TelemetryPublicState
 import com.h0tk3y.rally.android.testing.MainDispatcherRule
 import com.h0tk3y.rally.android.views.StartOption
+import com.h0tk3y.rally.db.Event
+import com.h0tk3y.rally.model.RaceEventKind
 import com.h0tk3y.rally.model.RaceModel
 import com.h0tk3y.rally.model.RaceState
 import com.h0tk3y.rally.modifier
 import defaultPreferencesMock
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Rule
@@ -46,7 +51,12 @@ class FinishRaceTest {
     private val sectionStart = Clock.System.now()
     private val raceStart = sectionStart + 60.seconds
 
-    private class Outcome(val positions: List<PositionLine>, val results: RallyTimesResult)
+    private class Outcome(
+        val positions: List<PositionLine>,
+        val results: RallyTimesResult,
+        val events: List<Event>,
+        val service: PrimaryRaceService
+    )
 
     /**
      * Runs a section timer from 0.0, starts a race at the position on [raceStartLine], and moves the race to [finishAtKm].
@@ -95,7 +105,12 @@ class FinishRaceTest {
                     step { undoFinishRace() }
                 }
 
-                outcome = Outcome(viewModel.inputPositions.value.filterIsInstance<PositionLine>(), viewModel.results.value)
+                outcome = Outcome(
+                    viewModel.inputPositions.value.filterIsInstance<PositionLine>(),
+                    viewModel.results.value,
+                    db.events.value.sortedBy { it.id },
+                    service
+                )
             } finally {
                 viewModel.viewModelScope.cancel()
                 repeat(10) { runCurrent() }
@@ -203,6 +218,90 @@ class FinishRaceTest {
             parser.parseRoadmap(roadmap.reader()).filterIsInstance<PositionLine>().map { it.atKm },
             outcome.positions.map { it.atKm }
         )
+    }
+
+    /** The race starts at 1.0 km with `setavg 60` from the roadmap, so the race expects 1.5 minutes at 2.5 km. */
+    private val earlyLateRoadmap = """
+        0.0 setavg 60
+        1.0
+        2.0
+        3.0
+        """.trimIndent()
+
+    @Test
+    fun `finish records how early or late it was in the event log and the race state`() {
+        val outcome = raceAndFinish(earlyLateRoadmap, raceStartLine = 2, finishAtKm = 2.5)
+        val finishEvent = outcome.events.single { it.kind == RaceEventKind.RACE_FINISH }
+        val expectedEarlyLate = finishEvent.timestamp - (raceStart + 90.seconds)
+        assertEquals(expectedEarlyLate.inWholeMilliseconds, finishEvent.earlyLateMillis)
+        verify { outcome.service.finishRace(any(), expectedEarlyLate) }
+    }
+
+    @Test
+    fun `undo finish keeps the logged finish with its early or late value`() {
+        val outcome = raceAndFinish(earlyLateRoadmap, raceStartLine = 2, finishAtKm = 2.5, undoFinish = true)
+        val finishEvent = outcome.events.single { it.kind == RaceEventKind.RACE_FINISH }
+        assertNotNull(finishEvent.earlyLateMillis)
+        assertNull(outcome.events.single { it.kind == RaceEventKind.RACE_UNDO_FINISH }.earlyLateMillis)
+    }
+
+    /**
+     * Finish and start (`finishRace()` then `startRace(StartNowFromGoingState)`, as the race panel button does) keeps the
+     * finished regularity's early/late value for the next one. The race state transitions come from the real service.
+     */
+    @Test
+    fun `finish and start keeps the early or late value of the finished regularity`() {
+        val db = InMemoryDatabaseOperations()
+        val section = (db.createSection("test", earlyLateRoadmap) as SectionInsertOrRenameResult.Success).section
+        val realService = LocalRaceService()
+        realService.go(section.id, DistanceKm.zero, DistanceKm.zero, sectionStart)
+        val service = mockk<PrimaryRaceService>(relaxed = true) {
+            every { raceState }.answers { realService.raceState }
+            every { startRace(any(), any(), any(), any()) }.answers {
+                realService.startRace(firstArg(), secondArg(), thirdArg(), arg(3))
+            }
+            every { finishRace(any(), any()) }.answers { realService.finishRace(firstArg(), secondArg()) }
+            every { distanceCorrection(any()) }.answers { realService.distanceCorrection(firstArg()) }
+            every { rememberSpeedLimit }.returns(MutableStateFlow(null))
+            every { speedLimitPercent }.returns(MutableStateFlow(null))
+            every { telemetryPublicState }.returns(MutableStateFlow(TelemetryPublicState.Simulation))
+        }
+
+        runTest(withMain.dispatcher) {
+            val viewModel = LiveSectionViewModel(section.id, db, defaultPreferencesMock(), withMain.dispatcher)
+            suspend fun step(action: suspend LiveSectionViewModel.() -> Unit) {
+                action(viewModel)
+                repeat(10) { runCurrent() }
+            }
+            try {
+                repeat(10) { runCurrent() }
+                viewModel.onServiceConnected(service)
+                repeat(10) { runCurrent() }
+
+                step { selectLine(LineNumber(2, 0), null) }
+                step { startRace(StartOption(StartOption.StartAtSelectedPositionNow, isRace = true)) }
+                step { distanceCorrection(DistanceKm(1.5)) }
+                val firstRace = assertIs<RaceState.InRace>(realService.raceState.value).raceModel
+                assertEquals(DistanceKm(2.5), firstRace.currentDistance)
+
+                step {
+                    finishRace()
+                    startRace(StartOption(StartOption.StartNowFromGoingState, true))
+                }
+
+                val finishEvent = db.events.value.single { it.kind == RaceEventKind.RACE_FINISH }
+                val expectedEarlyLate = finishEvent.timestamp - (firstRace.startAtTime + 90.seconds)
+                assertEquals(expectedEarlyLate.inWholeMilliseconds, finishEvent.earlyLateMillis)
+
+                val secondRace = assertIs<RaceState.InRace>(realService.raceState.value)
+                assertEquals(expectedEarlyLate, secondRace.previousFinishEarlyLate)
+                val uiState = assertIs<RaceUiState.RaceGoing>(viewModel.raceState.first())
+                assertEquals(expectedEarlyLate, uiState.lastFinishEarlyLate)
+            } finally {
+                viewModel.viewModelScope.cancel()
+                repeat(10) { runCurrent() }
+            }
+        }
     }
 }
 
