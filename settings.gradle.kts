@@ -27,6 +27,7 @@ pluginManagement {
         kotlin("plugin.power-assert").version(extra["kotlin.version"] as String)
         id("com.android.application").version(extra["agp.version"] as String)
         id("com.android.library").version(extra["agp.version"] as String)
+        id("com.android.test").version(extra["agp.version"] as String)
         id("org.jetbrains.compose").version(extra["compose.version"] as String)
         id("app.cash.sqldelight") version "2.4.0"
         id("org.jetbrains.kotlin.android")
@@ -36,3 +37,4 @@ pluginManagement {
 include(":cli")
 include(":common")
 include(":android")
+include(":android-e2e")
