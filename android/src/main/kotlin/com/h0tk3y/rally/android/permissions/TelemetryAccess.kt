@@ -87,6 +87,7 @@ class TelemetryAccessController internal constructor(
 
     private var pendingRequest: PendingRequest? = null
     private var inFlightRequest: PendingRequest? = null
+    private var coarseGrantedBeforeRequest = false
 
     private class PendingRequest(
         val source: TelemetrySource,
@@ -167,8 +168,14 @@ class TelemetryAccessController internal constructor(
         val request = inFlightRequest ?: return
         inFlightRequest = null
 
-        // Right after a request, a denied permission with no rationale suggested means that the system won't ask for it anymore
-        permanentlyDenied = permanentlyDenied + request.permissions.required.filter { !context.isGranted(it) && !shouldShowRationale(it) }
+        // Right after a request, a denied permission with no rationale suggested means that the system won't ask for it anymore.
+        // Except when the user has just picked the approximate location: Android suggests no rationale for the precise one then,
+        // but it still shows the dialog to upgrade to it. Only a declined upgrade, when the approximate one was there before, is final.
+        val justPickedApproximate = !coarseGrantedBeforeRequest && context.isGranted(Manifest.permission.ACCESS_COARSE_LOCATION)
+        permanentlyDenied = permanentlyDenied + request.permissions.required.filter {
+            !context.isGranted(it) && !shouldShowRationale(it) &&
+                    !(justPickedApproximate && it == Manifest.permission.ACCESS_FINE_LOCATION)
+        }
 
         val issue = currentIssue(request.source, request.permissions.required)
         if (issue == null || issue == TelemetryAccessIssue.LocationDisabled || issue == TelemetryAccessIssue.NoGpsHardware) {
@@ -214,6 +221,7 @@ class TelemetryAccessController internal constructor(
     private fun launch(request: PendingRequest) {
         pendingRequest = null
         inFlightRequest = request
+        coarseGrantedBeforeRequest = context.isGranted(Manifest.permission.ACCESS_COARSE_LOCATION)
         notificationsAsked = true
         launcher.launch(request.permissions.all.filterNot { context.isGranted(it) }.toTypedArray())
     }
