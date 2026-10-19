@@ -27,10 +27,12 @@ SECTIONS = {"en": dict(tc2="Leg 1 · TC2 → TC3"), "ru": dict(tc2="Этап 1 �
 CAPTIONS = {
     "en": dict(hidden="Race panel hidden: normal times", open="Race panel open: section times",
                section_timer="Section timer", regularity_timer="Regularity timer", not_started="Not started",
-               section_runs="Section timer runs", regularity_runs="Regularity timer runs", stopped="Stopped"),
+               section_runs="Section timer runs", regularity_runs="Regularity timer runs", stopped="Stopped",
+               co_driver="The co-driver's device", driver="The driver's screen"),
     "ru": dict(hidden="Панель гонки скрыта: обычное время", open="Панель гонки открыта: время секции",
                section_timer="Таймер секции", regularity_timer="Таймер ДС", not_started="Гонка не запущена",
-               section_runs="Идёт таймер секции", regularity_runs="Идёт таймер ДС", stopped="Остановка"),
+               section_runs="Идёт таймер секции", regularity_runs="Идёт таймер ДС", stopped="Остановка",
+               co_driver="Устройство штурмана", driver="Экран пилота"),
 }[ui.LOCALE]
 PER_H = re.escape(S("perHourSuffix"))
 PAD_X, PAD_Y = 10, 0  # frame padding around an element; element bounds already have some air above and below
@@ -223,6 +225,13 @@ def band(screen, top, bottom, margin=24, x0=0, x1=1080):
 
 # The pictures ----------------------------------------------------------------------------------------
 
+def hero():
+    """The picture at the top of the guide, from the tablet."""
+    s = Screen("00-hero")
+    w, h = max(n["box"].x1 for n in s.nodes), max(n["box"].y1 for n in s.nodes)
+    save(render(s, Box(0, 0, w, h), [], "hero"), "hero", 36)
+
+
 def section_list():
     s = Screen("01-section-list")
     plus, menu = s.find(desc=S("createSection"), button=True), s.find(desc=S("showMenu"), button=True)
@@ -359,9 +368,9 @@ def distance_edit():
     s = Screen("06-distance-edit")
     apply_ = s.find(desc=S("buttonApplyOdo"), button=True)
     row = s.row(apply_)
-    finished = s.find(rx=re.escape(S("finishedTimeDistancePrefix")) + ".*")
+    icon = s.find(desc=S("raceStatusSectionGoing"))  # the distance is a text field here, so no panel_parts()
     speed = s.find(rx=r"v=.*")
-    save(render_frames_only(s, band(s, finished, speed), [row], "distance"), "distance-edit", 50)
+    save(render_frames_only(s, band(s, icon, speed), [row], "distance"), "distance-edit", 50)
 
 
 def render_frames_only(s, crop, boxes, name):
@@ -482,7 +491,7 @@ def text_badges():
 
 if __name__ == "__main__":
   text_badges()
-  for f in (section_list, create_section, section_screen, row_anatomy, section_menu, timers, race_panel, race_panel_regularity,
+  for f in (hero, section_list, create_section, section_screen, row_anatomy, section_menu, timers, race_panel, race_panel_regularity,
           speed_buttons, remembered_speed, regularity_finished, distance_edit, backwards, countdown, event_log,
           landscape, error, settings_obd, driver_hud, section_times, race_states, editor):
       f()
