@@ -396,7 +396,7 @@ Below them:
 
 The flag <img src="images/badges/1.png" height="20" alt="1"> shows that the regularity timer runs, and `ṽ=` <img src="images/badges/2.png" height="20" alt="2"> is your average speed in the regularity. The row of speed fields and buttons <img src="images/badges/3.png" height="20" alt="3"> is described in [Speed buttons](#68-speed-buttons-and-the-v-button).
 
-- **Finish regularity** <img src="images/badges/4.png" height="20" alt="4"> ends the regularity timer. The panel goes back to the section timer and shows **Finished:** with the regularity time and distance, and how early or late you were at the finish, for example `+2.4` (seconds late) or `-1.3` (early).
+- **Finish regularity** <img src="images/badges/4.png" height="20" alt="4"> ends the regularity timer. The panel goes back to the section timer and shows **Finished:** with the regularity time, how early or late you were at the finish in brackets, and the distance, for example `21:25 (+1.5) / 24.852`: 1.5 seconds late. An early finish shows with `-`.
 - **Finish and start** <img src="images/badges/5.png" height="20" alt="5"> ends the regularity and immediately starts a new one from where you are. Use it for chained regularities, for example at an intermediate finish where the next regularity starts at once. You cannot undo this.
 
 The regularity timer does not end by itself, even after the last position: tap **Finish regularity**.
