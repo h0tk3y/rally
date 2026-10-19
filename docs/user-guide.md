@@ -277,7 +277,7 @@ The app has two timers. The panel shows only one of them at a time:
 - The **regularity timer** (started from the **Regularity** row) times a **regularity**, where each set average speed and each speed change counts. The panel shows a flag icon.
 
 | Section timer | Regularity timer |
-|---|---|
+|:---:|:---:|
 | <img src="images/timer-section.png" width="400" alt="Section timer"> | <img src="images/timer-regularity.png" width="400" alt="Regularity timer"> |
 
 Both timers use the **device's clock**. Before the start, set the device's time by hand from the official rally clock.
@@ -297,7 +297,7 @@ The panel looks different in each state:
 | **In another section** | **Race going in another section** | **Go to section** | |
 
 | Not started | Section timer runs |
-|---|---|
+|:---:|:---:|
 | <img src="images/race-state-not-started.png" width="400" alt="Not started"> | <img src="images/race-state-section-timer.png" width="400" alt="Section timer runs"> |
 | **Regularity timer runs** | **Stopped** |
 | <img src="images/race-state-regularity.png" width="400" alt="Regularity timer runs"> | <img src="images/race-state-stopped.png" width="400" alt="Stopped"> |
@@ -858,7 +858,7 @@ When the race panel is open and no regularity timer runs, the list shows **secti
 These are the times that the section timer uses. When a regularity timer starts, the list goes back to the normal times.
 
 | Race panel hidden: normal times | Race panel open: section times |
-|---|---|
+|:---:|:---:|
 | <img src="images/section-times-normal.png" width="400" alt="Race panel hidden: normal times"> | <img src="images/section-times-section.png" width="400" alt="Race panel open: section times"> |
 
 > [!NOTE]
@@ -897,7 +897,7 @@ You can open the editor while a timer runs in race mode. The keypad then takes t
 | Key | What it does |
 |---|---|
 | **DEL ╳** | Deletes the selected position. The next position becomes selected. |
-| **ADD** | Adds a new position at 0.0 km below the selected one. Type its distance; the row then moves to its place. Until you do, the app shows the error `<`, because 0.0 is smaller than the distance above it. |
+| **ADD** | Adds a new position below the selected one, at the same distance. Its distance is selected, so the digits you type replace it; the row then moves to its place. |
 | **ATIME** | Gives the position a time of day (00:00:00), ready for you to type. Press it again while you type in the time to remove it. A section can have only one time of day, so this removes it from the other positions. |
 | **SET** | Makes the position a `setavg`, ready for you to type the speed. Press it again while you type in the speed or the percentage to remove it. |
 | **THEN** | The same as **SET**, but for `thenavg`. |
@@ -954,7 +954,7 @@ So after a regularity inside a section, the roadmap holds an inner stretch: `set
 
 When the roadmap has an error, the app cannot calculate the times. It shows **Failed to calculate because of errors** at the top <img src="images/badges/1.png" height="20" alt="1">, and a red message on each row with an error <img src="images/badges/2.png" height="20" alt="2">.
 
-<img src="images/error.png" width="540" alt="A section with an error: a position at 0.0 after 36.8">
+<img src="images/error.png" width="540" alt="A section with an error: a position after the end of the last stretch">
 
 Race mode does not make these errors; they come from changes in the editor or from imported text.
 
