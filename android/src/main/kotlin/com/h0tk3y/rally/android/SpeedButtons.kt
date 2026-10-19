@@ -24,7 +24,7 @@ sealed interface SpeedButtonsParseResult {
     /** Nothing but separators, or no text at all */
     data object Empty : Invalid
 
-    /** A part that is not made of digits only, such as `abc`, `4O` or `٤٥` */
+    /** A part that is not made of digits only, such as `abc`, `4O`, `٤٥` or `42.5` */
     data class NotAWholeNumber(val token: String) : Invalid
 
     /** A number of 4+ digits, or zero (`0`, `000`) */
@@ -35,16 +35,24 @@ sealed interface SpeedButtonsParseResult {
 }
 
 /**
- * Any run of whitespace, punctuation or symbols separates the speeds: `20 40, 60; 80`.
- * Note that this includes `.` and `-`, so `42.5` is read as 42 and 5, and `-20` as 20.
+ * Dots and characters that look like one. They are not separators, so that `42.5`, `20.` or `.5` is reported as not a whole
+ * number instead of being read as other speeds: the full stop, its fullwidth and small forms, the one/two dot leaders, the
+ * ellipsis, the middle dot, the Arabic decimal separator, and the ideographic full stops.
  */
-private val inputSeparators = Regex("[\\s\\p{Z}\\p{P}\\p{S}]+")
+private const val DOT_LIKE = ".\uFF0E\uFE52\u2024\u2025\u2026\u00B7\u066B\u3002\uFF61"
+
+/**
+ * Any run of whitespace, punctuation or symbols other than [DOT_LIKE] separates the speeds: `20 40, 60; 80`.
+ * Note that this includes `-`, so `-20` is read as 20.
+ */
+private val inputSeparators = Regex("[[\\s\\p{Z}\\p{P}\\p{S}]&&[^$DOT_LIKE]]+")
 
 private val asciiDigits = Regex("[0-9]+")
 
 /**
  * Parses the speeds the user typed for the speed buttons.
  *
+ * * A dot is not a separator, so a fractional speed such as `42.5` is [SpeedButtonsParseResult.NotAWholeNumber].
  * * Each speed is a positive whole number of 1–3 ASCII digits; leading zeros are allowed (`05` is 5), but `0` and `000` are not positive.
  * * The order is kept as typed. A repeated speed is kept only at its first place.
  * * The first invalid part is reported, so that the user can find it.

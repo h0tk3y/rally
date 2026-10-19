@@ -155,7 +155,7 @@
     <string name="settingsSoundFeedback">Звуки при действиях в режиме гонки</string>
     <string name="settingsRaceModeTitle">Режим гонки</string>
     <string name="settingsSpeedButtons">Кнопки скорости</string>
-    <string name="settingsSpeedButtonsHint">Скорости в км/ч для кнопок на панели гонки через пробел, запятую или другой знак препинания, например: 20 40, 60; 80. Целые числа от 1 до 999.</string>
+    <string name="settingsSpeedButtonsHint">Скорости в км/ч для кнопок на панели гонки: целые числа от 1 до 999 через пробел, запятую или точку с запятой, например: 20 40, 60; 80. Дробные скорости и точки не допускаются.</string>
     <string name="settingsSpeedButtonsField">Скорости, км/ч</string>
     <string name="settingsSpeedButtonsDefault">По умолчанию</string>
     <string name="settingsSpeedButtonsPreview">Кнопки: %1$s</string>

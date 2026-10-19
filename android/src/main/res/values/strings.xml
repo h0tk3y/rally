@@ -166,7 +166,7 @@
     <string name="settingsSoundFeedback">Play sounds on race mode actions</string>
     <string name="settingsRaceModeTitle">Race mode</string>
     <string name="settingsSpeedButtons">Speed buttons</string>
-    <string name="settingsSpeedButtonsHint">Speeds in km/h for the buttons in the race panel, separated by spaces, commas or other punctuation, e.g. 20 40, 60; 80. Whole numbers from 1 to 999.</string>
+    <string name="settingsSpeedButtonsHint">Speeds in km/h for the buttons in the race panel: whole numbers from 1 to 999, separated by spaces, commas or semicolons, e.g. 20 40, 60; 80. Fractional speeds and dots are not allowed.</string>
     <string name="settingsSpeedButtonsField">Speeds, km/h</string>
     <string name="settingsSpeedButtonsDefault">Default</string>
     <string name="settingsSpeedButtonsPreview">Buttons: %1$s</string>
