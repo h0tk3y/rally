@@ -229,7 +229,9 @@ def hero():
     """The picture at the top of the guide, from the tablet."""
     s = Screen("00-hero")
     w, h = max(n["box"].x1 for n in s.nodes), max(n["box"].y1 for n in s.nodes)
-    save(render(s, Box(0, 0, w, h), [], "hero"), "hero", 36)
+    # Without the status bar: on this tablet, status bar demo mode draws the network icon twice
+    top = min(n["box"].y0 for n in s.nodes if n["box"].y0 > 0)
+    save(render(s, Box(0, top, w, h), [], "hero"), "hero", 36)
 
 
 def section_list():
@@ -418,7 +420,7 @@ def error():
     s = Screen("15-error")
     bar = s.find(text=S("failedToCalculateErrors"))
     bar = Box(0, bar.y0, 1080, bar.y1)
-    msg = s.find(rx=r"< .*")
+    msg = s.find(text=S("errOutsideIntervals"))
     save(render(s, Box(0, 75, 1080, msg.y1 + 50), [mark(1, bar), mark(2, msg, False)], "error"), "error", 50)
 
 
@@ -461,14 +463,15 @@ def race_states():
                       ("06-regularity", "race-state-regularity"), ("06-stopped", "race-state-stopped")):
         s = Screen(name)
         toolbar = s.find(desc=S("eventLog"), button=True)
-        sim = s.row(s.find(text=S("simulateSpeedPrefix")))
+        sim = [n["box"] for n in s.nodes if n["text"] == S("simulateSpeedPrefix")]  # absent in the screenshot mode
+        limit = sim[0].y0 if sim else 10 ** 6
         above = [n["box"] for n in s.nodes if (n["text"] or n["desc"] or n["click"]) and toolbar.y0 <= n["box"].y0
-                 and n["box"].y1 <= sim.y0 and n["box"].x1 - n["box"].x0 < 1000]
+                 and n["box"].y1 <= limit and n["box"].x1 - n["box"].x0 < 1000 and n["box"].y1 - n["box"].y0 < 400]
         crops.append((render(s, band(s, toolbar, union(*above)), [], out), out))
     height = max(int(subprocess.run(["magick", "identify", "-format", "%h", c], capture_output=True, text=True).stdout)
                  for c, _ in crops)
     for c, out in crops:
-        mg(c, "-background", "white", "-gravity", "south", "-extent", f"1080x{height}", c)
+        mg(c, "-background", "white", "-gravity", "north", "-extent", f"1080x{height}", c)  # pad below: all start at the top
         save(c, out, 40)
 
 
