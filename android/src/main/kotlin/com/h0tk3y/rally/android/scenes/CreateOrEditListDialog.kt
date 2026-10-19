@@ -62,6 +62,7 @@ fun CreateOrRenameSectionDialog(
 
     var isErrorEmptyName by rememberSaveable { mutableStateOf(false) }
     var itemAlreadyExists by rememberSaveable { mutableStateOf(false) }
+    var isValidStageData by rememberSaveable { mutableStateOf(true) }
 
     fun trySave(content: String? = null) {
         if (itemName.isBlank()) {
@@ -134,9 +135,12 @@ fun CreateOrRenameSectionDialog(
                 }
 
                 if (kind == DialogKind.CREATE) {
-                    EditableStageData { distance, speed, start ->
-                        importText = importTextFromData(distance, speed, start)
-                    }
+                    EditableStageData(
+                        updateData = { distance, speed, start ->
+                            importText = importTextFromData(distance, speed, start)
+                        },
+                        onValidityChange = { isValidStageData = it }
+                    )
                 }
 
                 LaunchedEffect(Unit) {
@@ -158,7 +162,7 @@ fun CreateOrRenameSectionDialog(
                     onClick = {
                         trySave(importText.takeIf { it.isNotEmpty() })
                     },
-                    enabled = itemName.isNotBlank() && !itemAlreadyExists && isValidImportText
+                    enabled = itemName.isNotBlank() && !itemAlreadyExists && isValidImportText && isValidStageData
                 ) {
                     Text(stringResource(R.string.saveButton))
                 }
@@ -176,7 +180,8 @@ private fun importTextFromData(distanceKm: DistanceKm, speedKmh: SpeedKmh, start
 
 @Composable
 private fun ColumnScope.EditableStageData(
-    updateData: (DistanceKm, SpeedKmh, TimeDayHrMinSec?) -> Unit
+    updateData: (DistanceKm, SpeedKmh, TimeDayHrMinSec?) -> Unit,
+    onValidityChange: (Boolean) -> Unit
 ) {
     val defaultDistanceText = "60.0"
     val defaultTimeText = "01:00"
@@ -227,6 +232,12 @@ private fun ColumnScope.EditableStageData(
         updateData(distanceValue(), speedValue(), startTimeValue())
     }
 
+    // The values above fall back to defaults on invalid input, so the dialog must not be saved while any field is invalid
+    val isValid = isValidStageDataInput(distanceText.value.text, timeText.value.text, speedText.value.text, startTimeText.value.text)
+    LaunchedEffect(isValid) {
+        onValidityChange(isValid)
+    }
+
     val maxLeftWidth = remember { mutableIntStateOf(0) }
 
     LeftAlignedRow(
@@ -245,7 +256,7 @@ private fun ColumnScope.EditableStageData(
                 placeholderString = defaultDistanceText,
                 stringResource(R.string.kmUnit),
                 addSuffixToPlaceholder = true,
-                isError = { distanceText.value.text.ifEmpty { "0.0" }.toDoubleOrNull() == null }
+                isError = ::isInvalidDistanceInput
             )
 
         })
@@ -265,7 +276,7 @@ private fun ColumnScope.EditableStageData(
                 },
                 placeholderString = defaultTimeText,
                 suffix = null,
-                isError = { parseTimeInput(it.ifEmpty { defaultTimeText }) == null }
+                isError = ::isInvalidTimeInput
             )
         })
 
@@ -283,7 +294,7 @@ private fun ColumnScope.EditableStageData(
             placeholderString = defaultSpeedText,
             stringResource(R.string.perHourSuffix),
             addSuffixToPlaceholder = true,
-            isError = { speedText.value.text.ifEmpty { "0.0" }.toDoubleOrNull() == null }
+            isError = ::isInvalidSpeedInput
         )
     })
     
@@ -302,7 +313,7 @@ private fun ColumnScope.EditableStageData(
             placeholderString = "",
             "",
             addSuffixToPlaceholder = false,
-            isError = { it.isNotEmpty() && parseTimeInput(it) == null }
+            isError = ::isInvalidStartTimeInput
         )
     })
 
@@ -313,7 +324,16 @@ sealed interface ItemSaveResult<out T> {
     object AlreadyExists : ItemSaveResult<Nothing>
 }
 
-private fun parseTimeInput(string: String): TimeDayHrMinSec? {
+// Empty distance, time and speed fields are valid: the dialog uses the placeholder values for them
+internal fun isInvalidDistanceInput(text: String): Boolean = text.ifEmpty { "0.0" }.toDoubleOrNull() == null
+internal fun isInvalidTimeInput(text: String): Boolean = text.isNotEmpty() && parseTimeInput(text) == null
+internal fun isInvalidSpeedInput(text: String): Boolean = text.ifEmpty { "0.0" }.toDoubleOrNull() == null
+internal fun isInvalidStartTimeInput(text: String): Boolean = text.isNotEmpty() && parseTimeInput(text) == null
+
+internal fun isValidStageDataInput(distance: String, time: String, speed: String, startTime: String): Boolean =
+    !isInvalidDistanceInput(distance) && !isInvalidTimeInput(time) && !isInvalidSpeedInput(speed) && !isInvalidStartTimeInput(startTime)
+
+internal fun parseTimeInput(string: String): TimeDayHrMinSec? {
     val parts = string.split(":", ".", "-")
     if (!parts.all { it.toIntOrNull() != null })
         return null
